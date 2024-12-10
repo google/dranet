@@ -77,7 +77,6 @@ spec:
       initContainers:
       - name: enable-nri
         image: busybox:stable
-        imagePullPolicy: Always
         volumeMounts:
         - mountPath: /etc
           name: etc
@@ -106,7 +105,6 @@ spec:
         - /dranet
         - --v=4
         image: ghcr.io/google/dranet:stable
-        imagePullPolicy: Always
         resources:
           requests:
             cpu: "100m"
