@@ -39,7 +39,7 @@ update:
 # get image name from directory we're building
 IMAGE_NAME=dranet
 # docker image registry, default to upstream
-REGISTRY?=grc.io/googlecloudplatform
+REGISTRY?=ghcr.io/google
 # tag based on date-sha
 TAG?=$(shell echo "$$(date +v%Y%m%d)-$$(git describe --always --dirty)")
 # the full image tag
@@ -52,15 +52,15 @@ image:
 	docker build . -t ${IMAGE} --load
 
 push-image: image
-	docker tag ${IMAGE} googlecloudplatform/dranet:stable
+	docker tag ${IMAGE} ghcr.io/google/dranet:stable
 	docker push ${IMAGE}
-	docker push googlecloudplatform/dranet:stable
+	docker push ghcr.io/google/dranet:stable
 
 kind-cluster:
 	kind create cluster --name dra --image kindest/node:latest --config kind.yaml
 
 kind-image: image
-	docker tag ${IMAGE} googlecloudplatform/dranet:stable
-	kind load docker-image googlecloudplatform/dranet:stable --name dra
+	docker tag ${IMAGE} ghcr.io/google/dranet:stable
+	kind load docker-image ghcr.io/google/dranet:stable --name dra
 	kubectl delete -f install.yaml || true
 	kubectl apply -f install.yaml
