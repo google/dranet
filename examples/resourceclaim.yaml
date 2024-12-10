@@ -19,11 +19,9 @@ metadata:
 spec:
   devices:
     requests:
-    - name: dummy
-      deviceClassName: dummy-interfaces
+    - name: req-dummy
+      deviceClassName: dranet.gke.io
       selectors:
-        - cel:
-            expression: device.driver == "dranet.gke.io"
         - cel:
             expression: device.attributes["dranet.gke.io"].type == "dummy"
     config:

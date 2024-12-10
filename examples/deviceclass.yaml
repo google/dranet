@@ -15,16 +15,9 @@
 apiVersion: resource.k8s.io/v1alpha3
 kind: DeviceClass
 metadata:
-  name: dummy-interfaces
-
+  name: dranet.gke.io
 spec:
   selectors:
     - cel:
         expression: device.driver == "dranet.gke.io"
-    - cel:
-        expression: device.attributes["dranet.gke.io"].type == "dummy"
-  config:
-  - opaque:
-      driver: dranet.gke.io
-      parameters:
-        ipam: "dhcp"
+

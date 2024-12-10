@@ -20,8 +20,8 @@ spec:
   spec:
     devices:
       requests:
-      - name: dummy
-        deviceClassName: dummy-interfaces
+      - name: req-dummy-template
+        deviceClassName: dranet.gke.io
 ---
 apiVersion: v1
 kind: Pod
