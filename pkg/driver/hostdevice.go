@@ -19,12 +19,11 @@ package driver
 import (
 	"fmt"
 
-	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
 
-func MoveLinkIn(hostIfName string, containerNsPAth string, ifName string) error {
+func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) error {
 	hostDev, err := netlink.LinkByName(hostIfName)
 	if err != nil {
 		return err
@@ -43,11 +42,11 @@ func MoveLinkIn(hostIfName string, containerNsPAth string, ifName string) error 
 		return fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
 	}
 
-	containerNs, err := ns.GetNS(containerNsPAth)
+	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return err
 	}
-	attrs.Namespace = containerNs.Fd()
+	attrs.Namespace = netlink.NsFd(containerNs)
 
 	dev := &netlink.Device{
 		LinkAttrs: attrs,
@@ -60,7 +59,7 @@ func MoveLinkIn(hostIfName string, containerNsPAth string, ifName string) error 
 
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
-	nhNs, err := netlink.NewHandleAt(netns.NsHandle(containerNs.Fd()))
+	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
 		return err
 	}
@@ -78,20 +77,14 @@ func MoveLinkIn(hostIfName string, containerNsPAth string, ifName string) error 
 	return nil
 }
 
-func MoveLinkOut(containerNsPAth string, devName string) error {
-	defaultNs, err := ns.GetCurrentNS()
-	if err != nil {
-		return err
-	}
-	defer defaultNs.Close()
-
-	ns, err := netns.GetFromPath(containerNsPAth)
+func nsDetachNetdev(containerNsPAth string, devName string) error {
+	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
 	}
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
-	nhNs, err := netlink.NewHandleAt(ns)
+	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
@@ -122,7 +115,7 @@ func MoveLinkOut(containerNsPAth string, devName string) error {
 	}
 	defer rootNs.Close()
 
-	attrs.Namespace = int(netlink.NsFd(rootNs))
+	attrs.Namespace = netlink.NsFd(rootNs)
 
 	dev := &netlink.Device{
 		LinkAttrs: attrs,

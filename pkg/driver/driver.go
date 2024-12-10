@@ -189,10 +189,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	ns := getNetworkNamespace(pod)
 	// host network pods are skipped
 	if ns == "" {
-		return nil
-	}
-	// host network pods are skipped
-	if ns == "" {
 		klog.V(2).Infof("RunPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
 		return nil
 	}
@@ -202,18 +198,34 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		if config.Opaque == nil {
 			continue
 		}
-		klog.V(4).Infof("podStartHook Configuration %s", config.Opaque.Parameters.String())
+		klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
 		// TODO get config options here, it can add ips or commands
 		// to add routes, run dhcp, rename the interface ... whatever
 	}
+
 	// Process the configurations of the ResourceClaim
 	for _, result := range allocation.Devices.Results {
 		if result.Driver != np.driverName {
 			continue
 		}
-		// TODO see https://github.com/containernetworking/plugins/tree/main/plugins/main
-		// for better examples of low level implementations using netlink for more complex
-		// scenarios like host-device, ipvlan, macvlan, ...
+		klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
+		// TODO signal this via DRA
+		if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+			err := nsAttachRdmadev(rdmaDev, ns)
+			if err != nil {
+				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+				continue
+			}
+		}
+
+		// TODO config options to rename the device and pass parameters
+		// use https://github.com/opencontainers/runtime-spec/pull/1271
+		err := nsAttachNetdev(result.Device, ns, result.Device)
+		if err != nil {
+			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+			return err
+		}
+
 	}
 	return nil
 }
@@ -229,8 +241,8 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
-	// host network pods are skipped
 	if ns == "" {
+		klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
 		return nil
 	}
 
@@ -238,7 +250,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		if config.Opaque == nil {
 			continue
 		}
-		klog.V(4).Infof("podStopHook Configuration %s", config.Opaque.Parameters.String())
+		klog.V(4).Infof("podStopHook Configuration %s", string(config.Opaque.Parameters.String()))
 		// TODO get config options here, it can add ips or commands
 		// to add routes, run dhcp, rename the interface ... whatever
 	}
@@ -248,8 +260,24 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 			continue
 		}
 		klog.V(4).Infof("podStopHook Device %s", result.Device)
-		// TODO get config options here, it can add ips or commands
-		// to add routes, run dhcp, rename the interface ... whatever
+		// TODO config options to rename the device and pass parameters
+		// use https://github.com/opencontainers/runtime-spec/pull/1271
+		err := nsDetachNetdev(ns, result.Device)
+		if err != nil {
+			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+			continue
+		}
+	}
+	return nil
+}
+
+func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
+	klog.V(2).Infof("RemovePodSandbox pod %s/%s: ips=%v", pod.GetNamespace(), pod.GetName(), pod.GetIps())
+	// get the pod network namespace
+	ns := getNetworkNamespace(pod)
+	if ns == "" {
+		klog.V(2).Infof("RemovePodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
+		return nil
 	}
 	return nil
 }
@@ -356,10 +384,9 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 				device.Basic.Attributes["sriov_vfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
 			}
 			resources.Devices = append(resources.Devices, device)
-
+			klog.V(4).Infof("Found following network interfaces %s", iface.Name)
 		}
 
-		klog.V(4).Infof("Found following network interfaces %#v", resources.Devices)
 		if len(resources.Devices) > 0 {
 			np.draPlugin.PublishResources(ctx, resources)
 		}
@@ -387,7 +414,7 @@ func (np *NetworkDriver) NodePrepareResources(ctx context.Context, request *drap
 	}
 
 	for _, claimReq := range request.GetClaims() {
-		klog.V(2).Infof("NodePrepareResources: Claim Request %#v", claimReq)
+		klog.V(2).Infof("NodePrepareResources: Claim Request %s/%s", claimReq.Namespace, claimReq.Name)
 		devices, err := np.nodePrepareResource(ctx, claimReq)
 		if err != nil {
 			resp.Claims[claimReq.UID] = &drapb.NodePrepareResourceResponse{
@@ -483,7 +510,6 @@ func (np *NetworkDriver) nodeUnprepareResource(ctx context.Context, claimReq *dr
 	}
 	defer np.claimAllocations.Remove(types.UID(claimReq.UID))
 	klog.Infof("claim %s/%s with allocation %#v", claimReq.Namespace, claimReq.Name, allocation)
-	// TODO do unpreparing things
 	return nil
 }
 
