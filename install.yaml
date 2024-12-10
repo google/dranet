@@ -84,7 +84,7 @@ spec:
         securityContext:
           privileged: true
         command:
-        - /bin/bash
+        - /bin/sh
         - -c
         - |
           set -o errexit
