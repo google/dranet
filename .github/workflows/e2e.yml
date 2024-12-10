@@ -106,7 +106,7 @@ jobs:
         # output_dir
         mkdir -p _artifacts
         # create cluster
-        kind create cluster --name ${{ env.KIND_CLUSTER_NAME}} --image kindest/node:${{ env.KIND_VERSION }} --config kind.yaml
+        kind create cluster --name ${{ env.KIND_CLUSTER_NAME}} --image kindest/node:${{ env.K8S_VERSION }} --config kind.yaml
         # dump the kubeconfig for later
         /usr/local/bin/kind get kubeconfig --name ${{ env.KIND_CLUSTER_NAME}} > _artifacts/kubeconfig.conf
 
