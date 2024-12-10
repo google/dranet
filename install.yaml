@@ -112,6 +112,10 @@ spec:
         securityContext:
           capabilities:
             add: ["NET_ADMIN", "SYS_ADMIN"]
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9177
         volumeMounts:
         - name: device-plugin
           mountPath: /var/lib/kubelet/plugins

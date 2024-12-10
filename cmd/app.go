@@ -20,8 +20,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 
 	"github.com/GoogleCloudPlatform/dranet/pkg/driver"
 
@@ -41,10 +43,14 @@ const (
 var (
 	hostnameOverride string
 	kubeconfig       string
+	bindAddress      string
+
+	ready atomic.Bool
 )
 
 func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
 
 	flag.Usage = func() {
@@ -60,6 +66,18 @@ func main() {
 	flag.VisitAll(func(f *flag.Flag) {
 		klog.Infof("FLAG: --%s=%q", f.Name, f.Value)
 	})
+
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if !ready.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+	go func() {
+		_ = http.ListenAndServe(bindAddress, healthMux)
+	}()
 
 	var config *rest.Config
 	var err error
@@ -106,6 +124,7 @@ func main() {
 		klog.Fatalf("driver failed to start: %v", err)
 	}
 	defer dranet.Stop()
+	ready.Store(true)
 	klog.Info("driver started")
 
 	select {
