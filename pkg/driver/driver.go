@@ -298,6 +298,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	}
 
 	gceInterfaces := getInstanceNetworkInterfaces(ctx)
+	gwInterfaces := getDefaultGwInterfaces()
 
 	for {
 		err := rateLimiter.Wait(ctx)
@@ -312,7 +313,10 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		}
 		for _, iface := range ifaces {
 			klog.V(7).InfoS("Checking network interface", "name", iface.Name)
-
+			if gwInterfaces.Has(iface.Name) {
+				klog.V(4).Infof("iface %s is an uplink interface", iface.Name)
+				continue
+			}
 			// TODO: interface names can be invalid with the object name
 			if len(validation.IsDNS1123Label(iface.Name)) > 0 {
 				klog.V(2).Infof("iface %s does not pass validation", iface.Name)
