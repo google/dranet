@@ -56,3 +56,5 @@ nodes:
 featureGates:
   # Enable the corresponding DRA feature gates
   DynamicResourceAllocation: true
+runtimeConfig:
+  api/all : true
