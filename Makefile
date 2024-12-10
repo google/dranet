@@ -57,7 +57,7 @@ push-image: image
 	docker push ghcr.io/google/dranet:stable
 
 kind-cluster:
-	kind create cluster --name dra --image kindest/node:latest --config kind.yaml
+	kind create cluster --name dra --config kind.yaml
 
 kind-image: image
 	docker tag ${IMAGE} ghcr.io/google/dranet:stable
