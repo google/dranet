@@ -76,7 +76,7 @@ spec:
       hostPID: true
       initContainers:
       - name: enable-nri
-        image: busybox:2
+        image: busybox:stable
         imagePullPolicy: Always
         volumeMounts:
         - mountPath: /etc
