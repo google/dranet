@@ -105,7 +105,7 @@ spec:
         args:
         - /dranet
         - --v=4
-        image: gcr.io/k8s-staging-networking/dranet:stable
+        image: ghcr.io/google/dranet:stable
         imagePullPolicy: Always
         resources:
           requests:
