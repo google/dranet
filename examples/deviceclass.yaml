@@ -20,11 +20,11 @@ metadata:
 spec:
   selectors:
     - cel:
-        expression: device.driver == "networking.k8s.io"
+        expression: device.driver == "dranet.gke.io"
     - cel:
-        expression: device.attributes["networking.k8s.io"].type == "dummy"
+        expression: device.attributes["dranet.gke.io"].type == "dummy"
   config:
   - opaque:
-      driver: networking.k8s.io
+      driver: dranet.gke.io
       parameters:
         ipam: "dhcp"

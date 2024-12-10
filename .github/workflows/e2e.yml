@@ -131,21 +131,13 @@ jobs:
         /usr/local/bin/kubectl wait --timeout=1m --for=condition=ready pods --namespace=kube-system -l k8s-app=kube-dns
         /usr/local/bin/kubectl wait --timeout=1m --for=condition=ready pods --namespace=kube-system -l app=dranet
 
-    - name: Run tests
+    - name: Run smoke test
       run: |
-        export KUBERNETES_CONFORMANCE_TEST='y'
-        export E2E_REPORT_DIR=${PWD}/_artifacts
-
-        # Run tests
-        /usr/local/bin/ginkgo --nodes=25                \
-          --focus="DRA"  \
-          /usr/local/bin/e2e.test                       \
-          --                                            \
-          --kubeconfig=${PWD}/_artifacts/kubeconfig.conf     \
-          --provider=local                              \
-          --dump-logs-on-failure=false                  \
-          --report-dir=${E2E_REPORT_DIR}                \
-          --disable-log-dump=true
+        cat examples/add_dummy_iface.sh | docker exec -i kind-control-plane bash
+        /usr/local/bin/kubectl apply -f examples/deviceclass.yaml
+        /usr/local/bin/kubectl apply -f examples/resourceclaim.yaml
+        /usr/local/bin/kubectl wait --timeout=2m --for=condition=ready pods -l app=pod
+        /usr/local/bin/kubectl exec -it pod1 -- ip link show dummy0
 
     - name: Upload Junit Reports
       if: always()
