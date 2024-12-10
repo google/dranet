@@ -133,7 +133,7 @@ jobs:
 
     - name: Run smoke test
       run: |
-        cat examples/add_dummy_iface.sh | docker exec -i kind-control-plane bash
+        cat examples/add_dummy_iface.sh | docker exec -i kind-worker bash
         /usr/local/bin/kubectl apply -f examples/deviceclass.yaml
         /usr/local/bin/kubectl apply -f examples/resourceclaim.yaml
         /usr/local/bin/kubectl wait --timeout=2m --for=condition=ready pods -l app=pod
