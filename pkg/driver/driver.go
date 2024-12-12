@@ -32,8 +32,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/time/rate"
 
-	resourceapi "k8s.io/api/resource/v1alpha3"
-	"k8s.io/apimachinery/pkg/api/resource"
+	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -41,7 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
-	drapb "k8s.io/kubelet/pkg/apis/dra/v1alpha4"
+	drapb "k8s.io/kubelet/pkg/apis/dra/v1beta1"
 )
 
 const (
@@ -74,7 +73,7 @@ func (s *storage) Remove(uid types.UID) {
 	delete(s.cache, uid)
 }
 
-var _ drapb.NodeServer = &NetworkDriver{}
+var _ drapb.DRAPluginServer = &NetworkDriver{}
 
 type NetworkDriver struct {
 	driverName string
@@ -117,7 +116,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		kubeletplugin.PluginSocketPath(driverPluginSocketPath),
 		kubeletplugin.KubeletPluginSocketPath(driverPluginSocketPath),
 	}
-	d, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
+	d, err := kubeletplugin.Start(ctx, []any{plugin}, kubeletOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("start kubelet plugin: %w", err)
 	}
@@ -194,20 +193,24 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	}
 
 	// Process the configurations of the ResourceClaim
-	for _, config := range allocation.Devices.Config {
-		if config.Opaque == nil {
-			continue
-		}
-		klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
-		// TODO get config options here, it can add ips or commands
-		// to add routes, run dhcp, rename the interface ... whatever
-	}
-
-	// Process the configurations of the ResourceClaim
 	for _, result := range allocation.Devices.Results {
 		if result.Driver != np.driverName {
 			continue
 		}
+
+		// Process the configurations of the ResourceClaim
+		for _, config := range allocation.Devices.Config {
+			if config.Opaque == nil {
+				continue
+			}
+			if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
+				continue
+			}
+			klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
+			// TODO get config options here, it can add ips or commands
+			// to add routes, run dhcp, rename the interface ... whatever
+		}
+
 		klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
 		// TODO signal this via DRA
 		if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
@@ -332,7 +335,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 				Name: iface.Name,
 				Basic: &resourceapi.BasicDevice{
 					Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
-					Capacity:   make(map[resourceapi.QualifiedName]resource.Quantity),
+					Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
 				},
 			}
 			device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &iface.Name}
@@ -392,7 +395,11 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		}
 
 		if len(resources.Devices) > 0 {
-			np.draPlugin.PublishResources(ctx, resources)
+			err := np.draPlugin.PublishResources(ctx, resources)
+			if err != nil {
+				klog.Error(err, "unexpected error trying to publish resources")
+				continue
+			}
 		}
 
 		select {
@@ -443,7 +450,7 @@ func (np *NetworkDriver) NodePrepareResources(ctx context.Context, request *drap
 // Filter out the allocations not required for this Pod
 func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drapb.Claim) ([]drapb.Device, error) {
 	// The plugin must retrieve the claim itself to get it in the version that it understands.
-	claim, err := np.kubeClient.ResourceV1alpha3().ResourceClaims(claimReq.Namespace).Get(ctx, claimReq.Name, metav1.GetOptions{})
+	claim, err := np.kubeClient.ResourceV1beta1().ResourceClaims(claimReq.Namespace).Get(ctx, claimReq.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("retrieve claim %s/%s: %w", claimReq.Namespace, claimReq.Name, err)
 	}

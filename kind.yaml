@@ -31,9 +31,6 @@ nodes:
     controllerManager:
         extraArgs:
           v: "5"
-    apiServer:
-        extraArgs:
-          runtime-config: "resource.k8s.io/v1alpha3=true"
   - |
     kind: InitConfiguration
     nodeRegistration:
