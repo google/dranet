@@ -35,7 +35,6 @@ import (
 	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
@@ -300,7 +299,11 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", maxInterval.String())
 	}
 
-	gceInterfaces := getInstanceNetworkInterfaces(ctx)
+	// Obtain data that will not change after the startup
+	getInstanceProperties(ctx)
+	// TODO: it is not common but may happen in edge cases that the default gateway changes
+	// revisit once we have more evidence this can be a potential problem or break some use
+	// cases.
 	gwInterfaces := getDefaultGwInterfaces()
 
 	for {
@@ -320,77 +323,20 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 				klog.V(4).Infof("iface %s is an uplink interface", iface.Name)
 				continue
 			}
-			// TODO: interface names can be invalid with the object name
-			if len(validation.IsDNS1123Label(iface.Name)) > 0 {
-				klog.V(2).Infof("iface %s does not pass validation", iface.Name)
-				continue
-			}
 
 			// skip loopback interfaces
 			if iface.Flags&net.FlagLoopback != 0 {
 				continue
 			}
-			// publish this network interface
-			device := resourceapi.Device{
-				Name: iface.Name,
-				Basic: &resourceapi.BasicDevice{
-					Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
-					Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
-				},
-			}
-			device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &iface.Name}
 
-			link, err := netlink.LinkByName(iface.Name)
+			// publish this network interface
+			device, err := netdevToDradev(iface.Name)
 			if err != nil {
-				klog.Infof("Error getting link by name %v", err)
+				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Name, err)
 				continue
 			}
-			linkType := link.Type()
-			linkAttrs := link.Attrs()
-			// TODO we can get more info from the kernel
-			// https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
-			// Ref: https://github.com/canonical/lxd/blob/main/lxd/resources/network.go
 
-			// sriov device plugin has a more detailed and better discovery
-			// https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/ed1c14dd4c313c7dd9fe4730a60358fbeffbfdd4/cmd/sriovdp/manager.go#L243
-
-			if ips, err := iface.Addrs(); err == nil && len(ips) > 0 {
-				// TODO assume only one addres by now
-				ip := ips[0].String()
-				device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: &ip}
-				mac := iface.HardwareAddr.String()
-				device.Basic.Attributes["mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
-				mtu := int64(iface.MTU)
-				device.Basic.Attributes["mtu"] = resourceapi.DeviceAttribute{IntValue: &mtu}
-			}
-
-			// check if there is GCE metadata associated
-			if len(gceInterfaces) > 0 {
-				mac := iface.HardwareAddr.String()
-				// this is bounded and small number O(N) is ok
-				for _, gceIf := range gceInterfaces {
-					if gceIf.Mac == mac {
-						device.Basic.Attributes["gceNetwork"] = resourceapi.DeviceAttribute{StringValue: &gceIf.Network}
-						break
-					}
-				}
-			}
-			device.Basic.Attributes["encapsulation"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.EncapType}
-			operState := linkAttrs.OperState.String()
-			device.Basic.Attributes["state"] = resourceapi.DeviceAttribute{StringValue: &operState}
-			device.Basic.Attributes["alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
-			device.Basic.Attributes["type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
-
-			isRDMA := rdmamap.IsRDmaDeviceForNetdevice(iface.Name)
-			device.Basic.Attributes["rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
-			// from https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/ed1c14dd4c313c7dd9fe4730a60358fbeffbfdd4/pkg/netdevice/netDeviceProvider.go#L99
-			isSRIOV := sriovTotalVFs(iface.Name) > 0
-			device.Basic.Attributes["sriov"] = resourceapi.DeviceAttribute{BoolValue: &isSRIOV}
-			if isSRIOV {
-				vfs := int64(sriovNumVFs(iface.Name))
-				device.Basic.Attributes["sriov_vfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
-			}
-			resources.Devices = append(resources.Devices, device)
+			resources.Devices = append(resources.Devices, *device)
 			klog.V(4).Infof("Found following network interfaces %s", iface.Name)
 		}
 
