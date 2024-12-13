@@ -179,13 +179,11 @@ func rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 }
 
 func addPCIAttributes(draDevice *resourceapi.BasicDevice, ifName string, syspath string) {
-	attributes := []resourceapi.DeviceAttribute{}
 	// /sys/class/net/<interface>/device/numa_node
 	numeNode, err := os.ReadFile(filepath.Join(syspath, ifName, "device/numa_node"))
 	if err == nil {
 		numa, err := strconv.ParseInt(strings.TrimSpace(string(numeNode)), 10, 32)
 		if err == nil {
-			attributes = append(attributes)
 			draDevice.Attributes["numa_node"] = resourceapi.DeviceAttribute{IntValue: &numa}
 		}
 	}
@@ -216,7 +214,7 @@ func addPCIAttributes(draDevice *resourceapi.BasicDevice, ifName string, syspath
 		if err == nil {
 			subsystemVendor, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_vendor"))
 			if err == nil {
-				subsystemDevice, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_device"))
+				subsystemDevice, _ = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_device"))
 			}
 		}
 		vendor := strings.TrimSpace(string(vendor))
