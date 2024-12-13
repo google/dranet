@@ -25,7 +25,7 @@ import (
 	"os/signal"
 	"sync/atomic"
 
-	"github.com/GoogleCloudPlatform/dranet/pkg/driver"
+	"github.com/google/dranet/pkg/driver"
 
 	"golang.org/x/sys/unix"
 
