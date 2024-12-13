@@ -330,7 +330,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			}
 
 			// publish this network interface
-			device, err := netdevToDradev(iface.Name)
+			device, err := netdevToDRAdev(iface.Name)
 			if err != nil {
 				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Name, err)
 				continue
@@ -338,6 +338,25 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 
 			resources.Devices = append(resources.Devices, *device)
 			klog.V(4).Infof("Found following network interfaces %s", iface.Name)
+		}
+
+		// List RDMA devices
+		rdmaIfaces, err := netlink.RdmaLinkList()
+		if err != nil {
+			klog.Error(err, "could not obtain the list of RDMA resources")
+		}
+
+		for _, iface := range rdmaIfaces {
+			klog.V(7).InfoS("Checking rdma interface", "name", iface.Attrs.Name)
+			// publish this RDMA interface
+			device, err := rdmaToDRAdev(iface.Attrs.Name)
+			if err != nil {
+				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs.Name, err)
+				continue
+			}
+
+			resources.Devices = append(resources.Devices, *device)
+			klog.V(4).Infof("Found following network interfaces %s", iface.Attrs.Name)
 		}
 
 		if len(resources.Devices) > 0 {

@@ -68,7 +68,7 @@ func isVirtual(ifName string) bool {
 	return ok
 }
 
-func netdevToDradev(ifName string) (*resourceapi.Device, error) {
+func netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	device := resourceapi.Device{
 		Name: ifName,
 		Basic: &resourceapi.BasicDevice{
@@ -137,5 +137,33 @@ func netdevToDradev(ifName string) (*resourceapi.Device, error) {
 			break
 		}
 	}
+	return &device, nil
+}
+
+func rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
+	device := resourceapi.Device{
+		Name: ifName,
+		Basic: &resourceapi.BasicDevice{
+			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
+			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
+		},
+	}
+	// normalize the name because interface names may contain invalid
+	// characters as object names
+	if len(validation.IsDNS1123Label(ifName)) > 0 {
+		klog.V(2).Infof("normalizing iface %s name", ifName)
+		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
+	}
+
+	device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	link, err := netlink.RdmaLinkByName(ifName)
+	if err != nil {
+		klog.Infof("Error getting link by name %v", err)
+		return nil, err
+	}
+
+	device.Basic.Attributes["firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
+	device.Basic.Attributes["nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
+
 	return &device, nil
 }
