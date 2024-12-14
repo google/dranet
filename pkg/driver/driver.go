@@ -80,7 +80,7 @@ type NetworkDriver struct {
 
 	podAllocations   storage
 	claimAllocations storage
-	netdb            inventory.DB
+	netdb            *inventory.DB
 }
 
 type Option func(*NetworkDriver)
@@ -149,9 +149,9 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	}()
 
 	// register the host network interfaces
-	netdb := inventory.New()
+	plugin.netdb = inventory.New()
 	go func() {
-		err = netdb.Run(ctx)
+		err = plugin.netdb.Run(ctx)
 		if err != nil {
 			klog.Infof("Network Device DB failed with error %v", err)
 		}
@@ -296,7 +296,11 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	klog.V(2).Infof("Publishing resources")
 	for {
 		select {
-		case resources := <-np.netdb.GetResources(ctx):
+		case devices := <-np.netdb.GetResources(ctx):
+			klog.V(4).Infof("Received %d devices", len(devices))
+			resources := kubeletplugin.Resources{
+				Devices: devices,
+			}
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
 				klog.Error(err, "unexpected error trying to publish resources")

@@ -20,6 +20,7 @@ containerdConfigPatches:
     disable = false
 nodes:
 - role: control-plane
+  image: kindest/node:v1.32.0
   kubeadmConfigPatches:
   # Enable the corresponding version of the resource.k8s.io API
   - |
@@ -37,6 +38,7 @@ nodes:
       kubeletExtraArgs:
         v: "5"
 - role: worker
+  image: kindest/node:v1.32.0
   kubeadmConfigPatches:
   - |
     kind: JoinConfiguration
@@ -44,6 +46,7 @@ nodes:
       kubeletExtraArgs:
         v: "5"
 - role: worker
+  image: kindest/node:v1.32.0
   kubeadmConfigPatches:
   - |
     kind: JoinConfiguration
@@ -54,4 +57,4 @@ featureGates:
   # Enable the corresponding DRA feature gates
   DynamicResourceAllocation: true
 runtimeConfig:
-  api/all : true
+  api/beta : true

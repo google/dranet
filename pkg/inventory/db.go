@@ -28,7 +28,6 @@ import (
 	"golang.org/x/time/rate"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -53,7 +52,7 @@ type DB struct {
 	store map[string]resourceapi.Device
 
 	rateLimiter   *rate.Limiter
-	notifications chan kubeletplugin.Resources
+	notifications chan []resourceapi.Device
 }
 
 type Device struct {
@@ -65,7 +64,7 @@ func New() *DB {
 	return &DB{
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
 		store:         map[string]resourceapi.Device{},
-		notifications: make(chan kubeletplugin.Resources),
+		notifications: make(chan []resourceapi.Device),
 	}
 }
 
@@ -93,7 +92,7 @@ func (db *DB) Run(ctx context.Context) error {
 			klog.Error(err, "unexpected rate limited error trying to get system interfaces")
 		}
 
-		resources := kubeletplugin.Resources{}
+		devices := []resourceapi.Device{}
 		ifaces, err := net.Interfaces()
 		if err != nil {
 			klog.Error(err, "unexpected error trying to get system interfaces")
@@ -117,7 +116,7 @@ func (db *DB) Run(ctx context.Context) error {
 				continue
 			}
 
-			resources.Devices = append(resources.Devices, *device)
+			devices = append(devices, *device)
 			klog.V(4).Infof("Found following network interface %s", iface.Name)
 		}
 
@@ -136,12 +135,13 @@ func (db *DB) Run(ctx context.Context) error {
 				continue
 			}
 
-			resources.Devices = append(resources.Devices, *device)
+			devices = append(devices, *device)
 			klog.V(4).Infof("Found following rdma interface %s", iface.Attrs.Name)
 		}
 
-		if len(resources.Devices) > 0 {
-			db.notifications <- resources
+		klog.V(4).Infof("Found %d devices", len(devices))
+		if len(devices) > 0 {
+			db.notifications <- devices
 		}
 		select {
 		// trigger a reconcile
@@ -157,7 +157,7 @@ func (db *DB) Run(ctx context.Context) error {
 	}
 }
 
-func (db *DB) GetResources(ctx context.Context) <-chan kubeletplugin.Resources {
+func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 	return db.notifications
 }
 
@@ -187,7 +187,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 
 	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
 		// TODO assume only one addres by now
-		ip := ips[0].String()
+		ip := ips[0].IP.String()
 		device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: &ip}
 		mac := link.Attrs().HardwareAddr.String()
 		device.Basic.Attributes["mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
