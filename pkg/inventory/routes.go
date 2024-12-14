@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package driver
+package inventory
 
 import (
-	"log"
-
 	"github.com/vishvananda/netlink"
+
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 )
 
 func getDefaultGwInterfaces() sets.Set[string] {
@@ -38,7 +38,7 @@ func getDefaultGwInterfaces() sets.Set[string] {
 			}
 			intfLink, err := netlink.LinkByIndex(r.LinkIndex)
 			if err != nil {
-				log.Printf("Failed to get interface link for route %v : %v", r, err)
+				klog.Infof("Failed to get interface link for route %v : %v", r, err)
 				continue
 			}
 			interfaces.Insert(intfLink.Attrs().Name)
@@ -50,7 +50,7 @@ func getDefaultGwInterfaces() sets.Set[string] {
 			}
 			intfLink, err := netlink.LinkByIndex(r.LinkIndex)
 			if err != nil {
-				log.Printf("Failed to get interface link for route %v : %v", r, err)
+				klog.Infof("Failed to get interface link for route %v : %v", r, err)
 				continue
 			}
 			interfaces.Insert(intfLink.Attrs().Name)

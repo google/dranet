@@ -19,7 +19,6 @@ package driver
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,8 +28,7 @@ import (
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/vishvananda/netlink"
-	"golang.org/x/time/rate"
+	"github.com/google/dranet/pkg/inventory"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,6 +80,7 @@ type NetworkDriver struct {
 
 	podAllocations   storage
 	claimAllocations storage
+	netdb            inventory.DB
 }
 
 type Option func(*NetworkDriver)
@@ -146,6 +145,15 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		err = plugin.nriPlugin.Run(ctx)
 		if err != nil {
 			klog.Infof("NRI plugin failed with error %v", err)
+		}
+	}()
+
+	// register the host network interfaces
+	netdb := inventory.New()
+	go func() {
+		err = netdb.Run(ctx)
+		if err != nil {
+			klog.Infof("Network Device DB failed with error %v", err)
 		}
 	}()
 
@@ -286,98 +294,20 @@ func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox
 
 func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	klog.V(2).Infof("Publishing resources")
-
-	minInterval := 5 * time.Second
-	maxInterval := 1 * time.Minute
-	rateLimiter := rate.NewLimiter(rate.Every(minInterval), 1)
-	// Resources are published periodically or if there is a netlink notification
-	// indicating a new interfaces was added or changed
-	nlChannel := make(chan netlink.LinkUpdate)
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-	if err := netlink.LinkSubscribe(nlChannel, doneCh); err != nil {
-		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", maxInterval.String())
-	}
-
-	// Obtain data that will not change after the startup
-	getInstanceProperties(ctx)
-	// TODO: it is not common but may happen in edge cases that the default gateway changes
-	// revisit once we have more evidence this can be a potential problem or break some use
-	// cases.
-	gwInterfaces := getDefaultGwInterfaces()
-
 	for {
-		err := rateLimiter.Wait(ctx)
-		if err != nil {
-			klog.Error(err, "unexpected rate limited error trying to get system interfaces")
-		}
-
-		resources := kubeletplugin.Resources{}
-		ifaces, err := net.Interfaces()
-		if err != nil {
-			klog.Error(err, "unexpected error trying to get system interfaces")
-		}
-		for _, iface := range ifaces {
-			klog.V(7).InfoS("Checking network interface", "name", iface.Name)
-			if gwInterfaces.Has(iface.Name) {
-				klog.V(4).Infof("iface %s is an uplink interface", iface.Name)
-				continue
-			}
-
-			// skip loopback interfaces
-			if iface.Flags&net.FlagLoopback != 0 {
-				continue
-			}
-
-			// publish this network interface
-			device, err := netdevToDRAdev(iface.Name)
-			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Name, err)
-				continue
-			}
-
-			resources.Devices = append(resources.Devices, *device)
-			klog.V(4).Infof("Found following network interfaces %s", iface.Name)
-		}
-
-		// List RDMA devices
-		rdmaIfaces, err := netlink.RdmaLinkList()
-		if err != nil {
-			klog.Error(err, "could not obtain the list of RDMA resources")
-		}
-
-		for _, iface := range rdmaIfaces {
-			klog.V(7).InfoS("Checking rdma interface", "name", iface.Attrs.Name)
-			// publish this RDMA interface
-			device, err := rdmaToDRAdev(iface.Attrs.Name)
-			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs.Name, err)
-				continue
-			}
-
-			resources.Devices = append(resources.Devices, *device)
-			klog.V(4).Infof("Found following network interfaces %s", iface.Attrs.Name)
-		}
-
-		if len(resources.Devices) > 0 {
+		select {
+		case resources := <-np.netdb.GetResources(ctx):
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
 				klog.Error(err, "unexpected error trying to publish resources")
-				continue
 			}
+		case <-ctx.Done():
+			klog.Error(ctx.Err(), "context canceled")
+			return
 		}
-
-		select {
-		// trigger a reconcile
-		case <-nlChannel:
-			// drain the channel so we only sync once
-			for len(nlChannel) > 0 {
-				<-nlChannel
-			}
-		case <-time.After(maxInterval):
-		}
+		// poor man rate limit
+		time.Sleep(3 * time.Second)
 	}
-
 }
 
 // NodePrepareResources filter the Claim requested for this driver

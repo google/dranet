@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package driver
+package inventory
 
 import (
 	"context"
@@ -28,9 +28,6 @@ import (
 )
 
 var (
-	// use global variables for the GCE instance information since should be inmutable after set
-	instance *cloudInstance
-
 	// cloud provider specific
 
 	// https://cloud.google.com/compute/docs/accelerator-optimized-machines#network-protocol
@@ -62,20 +59,24 @@ type networkInterface struct {
 
 // getInstanceProperties get the instace properties and stores them in a global variable to be used in discovery
 // TODO(aojea) support more cloud providers
-func getInstanceProperties(ctx context.Context) {
+func getInstanceProperties(ctx context.Context) *cloudInstance {
 	var err error
+	var instance *cloudInstance
 	if metadata.OnGCE() {
 		// Get google compute instance metadata for network interfaces
 		// https://cloud.google.com/compute/docs/metadata/predefined-metadata-keys
 		klog.Infof("running on GCE")
-		err = getGCEInstance(ctx)
+		instance, err = getGCEInstance(ctx)
 	}
 	if err != nil {
 		klog.Infof("could not get instance properties: %v", err)
+		return nil
 	}
+	return instance
 }
 
-func getGCEInstance(ctx context.Context) error {
+func getGCEInstance(ctx context.Context) (*cloudInstance, error) {
+	var instance *cloudInstance
 	// metadata server can not be available during startup
 	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		instanceName, err := metadata.InstanceNameWithContext(ctx)
@@ -109,7 +110,19 @@ func getGCEInstance(ctx context.Context) error {
 		return true, nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return instance, nil
+}
+
+func cloudNetwork(mac string, instance *cloudInstance) string {
+	if instance == nil {
+		return ""
+	}
+	for _, cloudInterface := range instance.Interfaces {
+		if cloudInterface.Mac == mac {
+			return cloudInterface.Network
+		}
+	}
+	return ""
 }
