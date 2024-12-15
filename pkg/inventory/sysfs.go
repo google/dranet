@@ -134,7 +134,7 @@ func bdfAddress(ifName string, path string) (*pciAddress, error) {
 	// PCI domain: 0000 Bus: 00 Device: 04 Function: 0
 	sysfsPath := realpath(ifName, path)
 	bfd := strings.Split(sysfsPath, "/")
-	if len(bfd) != 5 {
+	if len(bfd) < 4 {
 		return nil, fmt.Errorf("could not find corresponding PCI address: %v", bfd)
 	}
 
@@ -180,11 +180,12 @@ func ids(ifName string, path string) (*pcidb.Entry, error) {
 		}
 	}
 
+	// remove the 0x prefix
 	entry, err := pcidb.GetDevice(
-		strings.TrimSpace(string(vendor)),
-		strings.TrimSpace(string(device)),
-		strings.TrimSpace(string(subsystemVendor)),
-		strings.TrimSpace(string(subsystemDevice)),
+		strings.TrimPrefix(strings.TrimSpace(string(vendor)), "0x"),
+		strings.TrimPrefix(strings.TrimSpace(string(device)), "0x"),
+		strings.TrimPrefix(strings.TrimSpace(string(subsystemVendor)), "0x"),
+		strings.TrimPrefix(strings.TrimSpace(string(subsystemDevice)), "0x"),
 	)
 
 	if err != nil {
