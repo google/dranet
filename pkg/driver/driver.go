@@ -174,6 +174,13 @@ func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, 
 
 	for _, pod := range pods {
 		klog.Infof("pod %s/%s: namespace=%s ips=%v", pod.GetNamespace(), pod.GetName(), getNetworkNamespace(pod), pod.GetIps())
+		// get the pod network namespace
+		ns := getNetworkNamespace(pod)
+		// host network pods are skipped
+		if ns != "" {
+			// store the Pod metadata in the db
+			np.netdb.AddPodNetns(podKey(pod), ns)
+		}
 	}
 
 	return nil, nil
@@ -198,6 +205,8 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		klog.V(2).Infof("RunPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
 		return nil
 	}
+	// store the Pod metadata in the db
+	np.netdb.AddPodNetns(podKey(pod), ns)
 
 	// Process the configurations of the ResourceClaim
 	for _, result := range allocation.Devices.Results {
@@ -242,6 +251,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("StopPodSandbox pod %s/%s", pod.Namespace, pod.Name)
+	defer np.netdb.RemovePodNetns(podKey(pod))
 	allocation, ok := np.podAllocations.Get(types.UID(pod.Uid))
 	if !ok {
 		klog.V(2).Infof("StopPodSandbox pod %s/%s does not have allocations", pod.Namespace, pod.Name)
@@ -431,4 +441,8 @@ func getNetworkNamespace(pod *api.PodSandbox) string {
 		}
 	}
 	return ""
+}
+
+func podKey(pod *api.PodSandbox) string {
+	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }

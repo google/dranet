@@ -25,6 +25,7 @@ import (
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -48,8 +49,8 @@ var (
 type DB struct {
 	instance *cloudInstance
 
-	mu    sync.RWMutex
-	store map[string]resourceapi.Device
+	mu       sync.RWMutex
+	podStore map[int]string // key: netnsid path value: Pod namespace/name
 
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
@@ -63,9 +64,42 @@ type Device struct {
 func New() *DB {
 	return &DB{
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
-		store:         map[string]resourceapi.Device{},
+		podStore:      map[int]string{},
 		notifications: make(chan []resourceapi.Device),
 	}
+}
+
+func (db *DB) AddPodNetns(pod string, netnsPath string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	ns, err := netns.GetFromPath(netnsPath)
+	if err != nil {
+		klog.Infof("fail to get pod %s network namespace %s handle: %v", pod, netnsPath, err)
+		return
+	}
+	id, err := netlink.GetNetNsIdByFd(int(ns))
+	if err != nil {
+		klog.Infof("fail to get pod %s network namespace %s netnsid: %v", pod, netnsPath, err)
+		return
+	}
+	db.podStore[id] = pod
+}
+
+func (db *DB) RemovePodNetns(pod string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	for k, v := range db.podStore {
+		if v == pod {
+			delete(db.podStore, k)
+			return
+		}
+	}
+}
+
+func (db *DB) GetPodName(netnsid int) string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.podStore[netnsid]
 }
 
 func (db *DB) Run(ctx context.Context) error {
@@ -184,6 +218,12 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	}
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
+
+	// identify the namespace holding the link as the other end of a veth pair
+	netnsid := link.Attrs().NetNsID
+	if podName := db.GetPodName(netnsid); podName != "" {
+		device.Basic.Attributes["pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
+	}
 
 	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
 		// TODO assume only one addres by now
