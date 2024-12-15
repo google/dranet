@@ -134,18 +134,19 @@ func bdfAddress(ifName string, path string) (*pciAddress, error) {
 	// PCI domain: 0000 Bus: 00 Device: 04 Function: 0
 	sysfsPath := realpath(ifName, path)
 	bfd := strings.Split(sysfsPath, "/")
-	if len(bfd) < 4 {
+	if len(bfd) < 5 {
 		return nil, fmt.Errorf("could not find corresponding PCI address: %v", bfd)
 	}
 
-	pci := strings.Split(bfd[3], ":")
+	klog.V(4).Infof("pci address: %s", bfd[4])
+	pci := strings.Split(bfd[4], ":")
 	// Simple BDF notation
 	switch len(pci) {
 	case 2:
 		address.bus = pci[0]
 		f := strings.Split(pci[1], ".")
 		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %s", pci[1])
+			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
 		}
 		address.device = f[0]
 		address.function = f[1]
@@ -154,7 +155,7 @@ func bdfAddress(ifName string, path string) (*pciAddress, error) {
 		address.bus = pci[1]
 		f := strings.Split(pci[2], ".")
 		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %s", pci[2])
+			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
 		}
 		address.device = f[0]
 		address.function = f[1]
