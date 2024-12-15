@@ -25,14 +25,14 @@ import (
 
 func getDefaultGwInterfaces() sets.Set[string] {
 	interfaces := sets.Set[string]{}
-	routes, err := netlink.RouteList(nil, netlink.FAMILY_ALL)
+	filter := &netlink.Route{}
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_TABLE)
 	if err != nil {
 		return interfaces
 	}
 
 	for _, r := range routes {
-		// only use the default gateway
-		if r.Dst != nil {
+		if r.Family != netlink.FAMILY_V4 && r.Family != netlink.FAMILY_V6 {
 			continue
 		}
 		// no multipath
@@ -60,5 +60,6 @@ func getDefaultGwInterfaces() sets.Set[string] {
 			interfaces.Insert(intfLink.Attrs().Name)
 		}
 	}
+	klog.V(4).Infof("Found following interfaces for the default gateway: %v", interfaces.UnsortedList())
 	return interfaces
 }
