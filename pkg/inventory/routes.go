@@ -31,6 +31,10 @@ func getDefaultGwInterfaces() sets.Set[string] {
 	}
 
 	for _, r := range routes {
+		// only use the default gateway
+		if r.Dst != nil {
+			continue
+		}
 		// no multipath
 		if len(r.MultiPath) == 0 {
 			if r.Gw == nil {
