@@ -318,6 +318,8 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 		if address.function != "" {
 			device.Attributes["pci_address_function"] = resourceapi.DeviceAttribute{StringValue: &address.function}
 		}
+	} else {
+		klog.Infof("could not get pci address : %v", err)
 	}
 
 	entry, err := ids(ifName, path)
@@ -331,6 +333,8 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 		if entry.Subsystem != "" {
 			device.Attributes["pci_subsystem"] = resourceapi.DeviceAttribute{StringValue: &entry.Subsystem}
 		}
+	} else {
+		klog.Infof("could not get pci vendor information : %v", err)
 	}
 
 	numa, err := numaNode(ifName, path)
