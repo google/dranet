@@ -35,6 +35,11 @@ func getDefaultGwInterfaces() sets.Set[string] {
 		if r.Family != netlink.FAMILY_V4 && r.Family != netlink.FAMILY_V6 {
 			continue
 		}
+
+		if r.Dst != nil && !r.Dst.IP.IsUnspecified() {
+			continue
+		}
+
 		// no multipath
 		if len(r.MultiPath) == 0 {
 			if r.Gw == nil {
