@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/google/dranet/pkg/driver"
@@ -63,6 +64,7 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
+	printVersion()
 	flag.VisitAll(func(f *flag.Flag) {
 		klog.Infof("FLAG: --%s=%q", f.Name, f.Value)
 	})
@@ -133,5 +135,21 @@ func main() {
 		cancel()
 	case <-ctx.Done():
 	}
+}
 
+func printVersion() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	var vcsRevision, vcsTime string
+	for _, f := range info.Settings {
+		switch f.Key {
+		case "vcs.revision":
+			vcsRevision = f.Value
+		case "vcs.time":
+			vcsTime = f.Value
+		}
+	}
+	klog.Infof("dranet go %s build: %s time: %s", info.GoVersion, vcsRevision, vcsTime)
 }
