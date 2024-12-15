@@ -255,7 +255,6 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 		device.Basic.Attributes["virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	} else {
 		addPCIAttributes(device.Basic, ifName, sysnetPath)
-
 	}
 
 	mac := link.Attrs().HardwareAddr.String()

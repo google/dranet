@@ -61,9 +61,8 @@ func realpath(ifName string, syspath string) string {
 // /sys/devices/virtual/net/cilium_host
 func isVirtual(name string, syspath string) bool {
 	sysfsPath := realpath(name, syspath)
-	prefix := filepath.Join(sysdevPath, "virtual/*")
-	ok, _ := filepath.Match(prefix, sysfsPath)
-	return ok
+	prefix := filepath.Join(sysdevPath, "virtual")
+	return strings.HasPrefix(sysfsPath, prefix)
 }
 
 func sriovTotalVFs(name string) int {
