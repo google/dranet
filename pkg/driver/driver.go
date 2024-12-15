@@ -78,9 +78,10 @@ type NetworkDriver struct {
 	draPlugin  kubeletplugin.DRAPlugin
 	nriPlugin  stub.Stub
 
-	podAllocations   storage
-	claimAllocations storage
-	netdb            *inventory.DB
+	podAllocations   storage // claims indexed by Pod UID to run on the NRI hooks
+	claimAllocations storage // claims indexed by Claim UID to run on the Kubelet/DRA hooks
+	// contains the host interfaces
+	netdb *inventory.DB
 }
 
 type Option func(*NetworkDriver)
