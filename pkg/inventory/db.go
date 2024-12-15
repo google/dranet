@@ -173,7 +173,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	// characters as object names
 	if len(validation.IsDNS1123Label(ifName)) > 0 {
 		klog.V(2).Infof("normalizing iface %s name", ifName)
-		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
+		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
 	device.Basic.Attributes["kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(networkKind)}
 	device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
