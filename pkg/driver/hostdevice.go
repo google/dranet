@@ -20,7 +20,9 @@ import (
 	"fmt"
 
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) error {
@@ -28,13 +30,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	if err != nil {
 		return err
 	}
-	attrs := netlink.NewLinkAttrs()
-	attrs.Index = hostDev.Attrs().Index
-	attrs.MTU = hostDev.Attrs().MTU
-	attrs.HardwareAddr = hostDev.Attrs().HardwareAddr
-	attrs.Name = ifName
-	// Store the original name
-	attrs.Alias = hostIfName
 
 	// Devices can be renamed only when down
 	if err = netlink.LinkSetDown(hostDev); err != nil {
@@ -45,15 +40,46 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	if err != nil {
 		return err
 	}
-	attrs.Namespace = netlink.NsFd(containerNs)
 
-	dev := &netlink.Device{
-		LinkAttrs: attrs,
+	attrs := hostDev.Attrs()
+	// Store the original name
+	attrs.Alias = hostIfName
+
+	// copy from netlink.LinkModify(dev) using only the parts needed
+	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
+	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, flags)
+	// Get a netlink socket in current namespace
+	s, err := nl.GetNetlinkSocketAt(netns.None(), netns.None(), unix.NETLINK_ROUTE)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace handle: %w", err)
+	}
+	req.Sockets = map[int]*nl.SocketHandle{
+		unix.NETLINK_ROUTE: {Socket: s},
 	}
 
-	err = netlink.LinkModify(dev)
+	msg := nl.NewIfInfomsg(unix.AF_UNSPEC)
+	msg.Index = int32(attrs.Index)
+	req.AddData(msg)
+
+	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(attrs.Name))
+	req.AddData(nameData)
+
+	alias := nl.NewRtAttr(unix.IFLA_IFALIAS, []byte(attrs.Alias))
+	req.AddData(alias)
+
+	mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(uint32(attrs.MTU)))
+	req.AddData(mtu)
+
+	val := nl.Uint32Attr(uint32(containerNs))
+	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)
+	req.AddData(attr)
+
+	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
+	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nil)
+
+	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil {
-		return fmt.Errorf("could not modify network device %s : %w", hostIfName, err)
+		return err
 	}
 
 	// to avoid golang problem with goroutines we create the socket in the
@@ -63,9 +89,9 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 		return err
 	}
 
-	nsLink, err := nhNs.LinkByName(dev.Name)
+	nsLink, err := nhNs.LinkByName(attrs.Name)
 	if err != nil {
-		return fmt.Errorf("link not found for interface %s on namespace %s: %w", dev.Name, containerNsPAth, err)
+		return fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
 	}
 
 	err = nhNs.LinkSetUp(nsLink)
@@ -100,9 +126,7 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 		return err
 	}
 
-	attrs := netlink.NewLinkAttrs()
-	attrs.Index = nsLink.Attrs().Index
-	attrs.Name = devName
+	attrs := nsLink.Attrs()
 	// restore the original name if it was renamed
 	if nsLink.Attrs().Alias != "" {
 		attrs.Name = nsLink.Attrs().Alias
@@ -114,15 +138,40 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	}
 	defer rootNs.Close()
 
-	attrs.Namespace = netlink.NsFd(rootNs)
-
-	dev := &netlink.Device{
-		LinkAttrs: attrs,
-	}
-
-	err = netlink.LinkModify(dev)
+	s, err := nl.GetNetlinkSocketAt(containerNs, rootNs, unix.NETLINK_ROUTE)
 	if err != nil {
-		return fmt.Errorf("could not modify network device %s : %w", devName, err)
+		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
+	// copy from netlink.LinkModify(dev) using only the parts needed
+	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
+	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, flags)
+	req.Sockets = map[int]*nl.SocketHandle{
+		unix.NETLINK_ROUTE: {Socket: s},
+	}
+	msg := nl.NewIfInfomsg(unix.AF_UNSPEC)
+	msg.Index = int32(attrs.Index)
+	req.AddData(msg)
+
+	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(attrs.Name))
+	req.AddData(nameData)
+
+	alias := nl.NewRtAttr(unix.IFLA_IFALIAS, []byte(attrs.Alias))
+	req.AddData(alias)
+
+	mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(uint32(attrs.MTU)))
+	req.AddData(mtu)
+
+	val := nl.Uint32Attr(uint32(rootNs))
+	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)
+	req.AddData(attr)
+
+	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
+	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nil)
+
+	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
