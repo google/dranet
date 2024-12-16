@@ -3,7 +3,7 @@ module github.com/google/dranet
 go 1.23.0
 
 require (
-	cloud.google.com/go/compute/metadata v0.5.2
+	cloud.google.com/go/compute/metadata v0.6.0
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/containerd/nri v0.8.0
 	github.com/vishvananda/netlink v1.3.0
@@ -17,6 +17,7 @@ require (
 	k8s.io/dynamic-resource-allocation v0.32.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubelet v0.32.0
+	k8s.io/utils v0.0.0-20241210054802-24370beab758
 )
 
 require (
@@ -60,7 +61,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/cri-api v0.32.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20241212045625-5ad02ce6640f // indirect
-	k8s.io/utils v0.0.0-20241210054802-24370beab758 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
