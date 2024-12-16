@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/Mellanox/rdmamap"
@@ -30,11 +29,12 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/google/dranet/pkg/inventory"
 
-	resourceapi "k8s.io/api/resource/v1beta1"
+	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 	drapb "k8s.io/kubelet/pkg/apis/dra/v1beta1"
@@ -45,29 +45,26 @@ const (
 	kubeletPluginPath         = "/var/lib/kubelet/plugins"
 )
 
-// storage allows to
-type storage struct {
-	mu    sync.RWMutex
-	cache map[types.UID]resourceapi.AllocationResult
-}
+const (
+	// podUIDIndex is the lookup name for the most common index function, which is to index by the pod UID field.
+	podUIDIndex string = "podUID"
+)
 
-func (s *storage) Add(uid types.UID, allocation resourceapi.AllocationResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cache[uid] = allocation
-}
+// podUIDIndexFunc is a default index function that indexes based on an pod UID
+func podUIDIndexFunc(obj interface{}) ([]string, error) {
+	claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+	if !ok {
+		return []string{}, nil
+	}
 
-func (s *storage) Get(uid types.UID) (resourceapi.AllocationResult, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	allocation, ok := s.cache[uid]
-	return allocation, ok
-}
-
-func (s *storage) Remove(uid types.UID) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.cache, uid)
+	result := []string{}
+	for _, reserved := range claim.Status.ReservedFor {
+		if reserved.Resource != "pods" || reserved.APIGroup != "" {
+			continue
+		}
+		result = append(result, string(reserved.UID))
+	}
+	return result, nil
 }
 
 var _ drapb.DRAPluginServer = &NetworkDriver{}
@@ -78,8 +75,7 @@ type NetworkDriver struct {
 	draPlugin  kubeletplugin.DRAPlugin
 	nriPlugin  stub.Stub
 
-	podAllocations   storage // claims indexed by Pod UID to run on the NRI hooks
-	claimAllocations storage // claims indexed by Claim UID to run on the Kubelet/DRA hooks
+	claimAllocations cache.Indexer // claims indexed by Claim UID to run on the Kubelet/DRA hooks
 	// contains the host interfaces
 	netdb *inventory.DB
 }
@@ -87,11 +83,16 @@ type NetworkDriver struct {
 type Option func(*NetworkDriver)
 
 func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interface, nodeName string, opts ...Option) (*NetworkDriver, error) {
+	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc,
+		cache.Indexers{
+			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+			podUIDIndex:          podUIDIndexFunc,
+		})
+
 	plugin := &NetworkDriver{
 		driverName:       driverName,
 		kubeClient:       kubeClient,
-		podAllocations:   storage{cache: make(map[types.UID]resourceapi.AllocationResult)},
-		claimAllocations: storage{cache: make(map[types.UID]resourceapi.AllocationResult)},
+		claimAllocations: store,
 	}
 
 	for _, o := range opts {
@@ -193,9 +194,9 @@ func (np *NetworkDriver) Shutdown(_ context.Context) {
 
 func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
-	allocation, ok := np.podAllocations.Get(types.UID(pod.Uid))
-	if !ok {
-		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated claims", pod.Namespace, pod.Name)
+	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
+	if err != nil || len(objs) == 0 {
+		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated ResourceClaim", pod.Namespace, pod.Name)
 		return nil
 	}
 
@@ -210,42 +211,51 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	np.netdb.AddPodNetns(podKey(pod), ns)
 
 	// Process the configurations of the ResourceClaim
-	for _, result := range allocation.Devices.Results {
-		if result.Driver != np.driverName {
+	for _, obj := range objs {
+		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		if !ok {
 			continue
 		}
 
-		// Process the configurations of the ResourceClaim
-		for _, config := range allocation.Devices.Config {
-			if config.Opaque == nil {
-				continue
-			}
-			if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
-				continue
-			}
-			klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
-			// TODO get config options here, it can add ips or commands
-			// to add routes, run dhcp, rename the interface ... whatever
+		if claim.Status.Allocation == nil {
+			continue
 		}
+		for _, result := range claim.Status.Allocation.Devices.Results {
+			if result.Driver != np.driverName {
+				continue
+			}
 
-		klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
-		// TODO signal this via DRA
-		if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
-			err := nsAttachRdmadev(rdmaDev, ns)
+			// Process the configurations of the ResourceClaim
+			for _, config := range claim.Status.Allocation.Devices.Config {
+				if config.Opaque == nil {
+					continue
+				}
+				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
+					continue
+				}
+				klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
+				// TODO get config options here, it can add ips or commands
+				// to add routes, run dhcp, rename the interface ... whatever
+			}
+
+			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
+			// TODO signal this via DRA
+			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+				err := nsAttachRdmadev(rdmaDev, ns)
+				if err != nil {
+					klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+					continue
+				}
+			}
+
+			// TODO config options to rename the device and pass parameters
+			// use https://github.com/opencontainers/runtime-spec/pull/1271
+			err := nsAttachNetdev(result.Device, ns, result.Device)
 			if err != nil {
-				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
-				continue
+				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+				return err
 			}
 		}
-
-		// TODO config options to rename the device and pass parameters
-		// use https://github.com/opencontainers/runtime-spec/pull/1271
-		err := nsAttachNetdev(result.Device, ns, result.Device)
-		if err != nil {
-			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-			return err
-		}
-
 	}
 	return nil
 }
@@ -253,12 +263,12 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("StopPodSandbox pod %s/%s", pod.Namespace, pod.Name)
 	defer np.netdb.RemovePodNetns(podKey(pod))
-	allocation, ok := np.podAllocations.Get(types.UID(pod.Uid))
-	if !ok {
+
+	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
+	if err != nil || len(objs) == 0 {
 		klog.V(2).Infof("StopPodSandbox pod %s/%s does not have allocations", pod.Namespace, pod.Name)
 		return nil
 	}
-	defer np.podAllocations.Remove(types.UID(pod.Uid))
 
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
@@ -266,27 +276,39 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
 		return nil
 	}
-
-	for _, config := range allocation.Devices.Config {
-		if config.Opaque == nil {
-			continue
-		}
-		klog.V(4).Infof("podStopHook Configuration %s", string(config.Opaque.Parameters.String()))
-		// TODO get config options here, it can add ips or commands
-		// to add routes, run dhcp, rename the interface ... whatever
-	}
 	// Process the configurations of the ResourceClaim
-	for _, result := range allocation.Devices.Results {
-		if result.Driver != np.driverName {
+	for _, obj := range objs {
+		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		if !ok {
 			continue
 		}
-		klog.V(4).Infof("podStopHook Device %s", result.Device)
-		// TODO config options to rename the device and pass parameters
-		// use https://github.com/opencontainers/runtime-spec/pull/1271
-		err := nsDetachNetdev(ns, result.Device)
-		if err != nil {
-			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+
+		if claim.Status.Allocation == nil {
 			continue
+		}
+
+		for _, result := range claim.Status.Allocation.Devices.Results {
+			if result.Driver != np.driverName {
+				continue
+			}
+
+			for _, config := range claim.Status.Allocation.Devices.Config {
+				if config.Opaque == nil {
+					continue
+				}
+				klog.V(4).Infof("podStopHook Configuration %s", string(config.Opaque.Parameters.String()))
+				// TODO get config options here, it can add ips or commands
+				// to add routes, run dhcp, rename the interface ... whatever
+			}
+
+			klog.V(4).Infof("podStopHook Device %s", result.Device)
+			// TODO config options to rename the device and pass parameters
+			// use https://github.com/opencontainers/runtime-spec/pull/1271
+			err := nsDetachNetdev(ns, result.Device)
+			if err != nil {
+				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+				continue
+			}
 		}
 	}
 	return nil
@@ -370,15 +392,16 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 	if claim.UID != types.UID(claim.UID) {
 		return nil, fmt.Errorf("claim %s/%s got replaced", claimReq.Namespace, claimReq.Name)
 	}
-	np.claimAllocations.Add(claim.UID, *claim.Status.Allocation)
+	err = np.claimAllocations.Add(claim)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add claim %s/%s to local cache: %w", claimReq.Namespace, claimReq.Name, err)
+	}
 
 	for _, reserved := range claim.Status.ReservedFor {
 		if reserved.Resource != "pods" || reserved.APIGroup != "" {
 			klog.Infof("Driver only supports Pods, unsupported reference %#v", reserved)
 			continue
 		}
-		// TODO define better what is passed at the podStartHook
-		np.podAllocations.Add(reserved.UID, *claim.Status.Allocation)
 	}
 
 	var devices []drapb.Device
@@ -424,13 +447,45 @@ func (np *NetworkDriver) NodeUnprepareResources(ctx context.Context, request *dr
 }
 
 func (np *NetworkDriver) nodeUnprepareResource(ctx context.Context, claimReq *drapb.Claim) error {
-	allocation, ok := np.claimAllocations.Get(types.UID(claimReq.UID))
-	if !ok {
-		klog.Infof("claim request does not exist %s/%s %s", claimReq.Namespace, claimReq.Name, claimReq.UID)
+	objs, err := np.claimAllocations.ByIndex(cache.NamespaceIndex, fmt.Sprintf("%s/%s", claimReq.Namespace, claimReq.Name))
+	if err != nil || len(objs) == 0 {
+		klog.Infof("Claim %s/%s does not have an associated cached ResourceClaim: %v", claimReq.Namespace, claimReq.Name, err)
 		return nil
 	}
-	defer np.claimAllocations.Remove(types.UID(claimReq.UID))
-	klog.Infof("claim %s/%s with allocation %#v", claimReq.Namespace, claimReq.Name, allocation)
+
+	for _, obj := range objs {
+		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		if !ok {
+			continue
+		}
+		defer func() {
+			err := np.claimAllocations.Delete(obj)
+			if err != nil {
+				klog.Infof("Claim %s/%s can not be deleted from cache: %v", claimReq.Namespace, claimReq.Name, err)
+			}
+		}()
+
+		if claim.Status.Allocation == nil {
+			continue
+		}
+
+		for _, result := range claim.Status.Allocation.Devices.Results {
+			if result.Driver != np.driverName {
+				continue
+			}
+
+			for _, config := range claim.Status.Allocation.Devices.Config {
+				if config.Opaque == nil {
+					continue
+				}
+				klog.V(4).Infof("nodeUnprepareResource Configuration %s", string(config.Opaque.Parameters.String()))
+				// TODO get config options here, it can add ips or commands
+				// to add routes, run dhcp, rename the interface ... whatever
+			}
+			klog.Infof("nodeUnprepareResource claim %s/%s with allocation result %#v", claimReq.Namespace, claimReq.Name, result)
+
+		}
+	}
 	return nil
 }
 
