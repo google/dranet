@@ -30,7 +30,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	}
 	attrs := netlink.NewLinkAttrs()
 	attrs.Index = hostDev.Attrs().Index
-	attrs.Flags = hostDev.Attrs().Flags
 	attrs.MTU = hostDev.Attrs().MTU
 	attrs.HardwareAddr = hostDev.Attrs().HardwareAddr
 	attrs.Name = ifName
