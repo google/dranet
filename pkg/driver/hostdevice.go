@@ -74,9 +74,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)
 	req.AddData(attr)
 
-	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
-	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nil)
-
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil {
 		return err
@@ -164,9 +161,6 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	val := nl.Uint32Attr(uint32(rootNs))
 	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)
 	req.AddData(attr)
-
-	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
-	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nil)
 
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil {
