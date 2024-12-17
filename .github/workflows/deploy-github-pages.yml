@@ -20,12 +20,14 @@ on:
       - main 
     paths: 
       - 'site/**'
+      - '.github/workflows/deploy-github-pages.yml'
   pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-github-pages.yml'
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
@@ -55,3 +57,4 @@ jobs:
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site/public
