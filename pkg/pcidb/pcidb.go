@@ -24,14 +24,12 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/google/dranet/third_party"
 )
 
-// file obtained on Dec 13 2024
-
-//go:embed pci.ids.gz
-var pciids []byte
-
 var (
+	pcidb = third_party.PCIDBGZ
 	// Vendor entries start with a 4-digit hexadecimal vendor ID,
 	// followed by one or more spaces, and the name of the vendor
 	// extending to the end of the line.
@@ -89,7 +87,7 @@ func GetDevice(vendor, device, subvendor, subdevice string) (*Entry, error) {
 		return nil, fmt.Errorf("subdevice ID must be 4-digit hexadecimal")
 	}
 
-	gzReader, err := gzip.NewReader(bytes.NewReader(pciids))
+	gzReader, err := gzip.NewReader(bytes.NewReader(pcidb))
 	if err != nil {
 		return nil, err
 	}
