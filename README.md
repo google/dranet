@@ -27,3 +27,9 @@ The DRA driver, once the Pod network namespaces has been created, will receive a
 - [Kubernetes Network Drivers, Antonio Ojea, Presentation](https://docs.google.com/presentation/d/1Vdr7BhbYXeWjwmLjGmqnUkvJr_eOUdU0x-JxfXWxUT8/edit?usp=sharing)
 - [The Future of Kubernetes Networking - Antonio Ojea, Googe & Dan Winship, Red Hat - Kubernetes Contributor Summit EU 2024](https://sched.co/1aOqO)
 - [Better Together! GPU, TPU and NIC Topological Alignment with DRA - John Belamaric, Google & Patrick Ohly, Intel - Kubecon US 2024](https://sched.co/1i7pv)
+
+## Disclaimer
+
+This is not an officially supported Google product. This project is not
+eligible for the [Google Open Source Software Vulnerability Rewards
+Program](https://bughunters.google.com/open-source-security).
