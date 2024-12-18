@@ -1,0 +1,71 @@
+title = "dranet"
+baseURL = "https://google.github.io/dranet"
+languageCode = "en-us"
+
+# we use this to disable indexing for the non-production build
+enableRobotsTXT = true
+
+# this allows us to show the source commit in the footer
+enableGitInfo = true
+
+# we don't use these currently
+disableKinds = ["taxonomy", "taxonomyTerm"]
+
+# syntax highlighting options
+[markup]
+[markup.highlight]
+codeFences = true
+hl_Lines = ""
+lineNoStart = 1
+lineNos = false
+lineNumbersInTable = true
+noClasses = true
+style = "vs"
+tabWidth = 4
+
+# allow html in markdown
+[markup.goldmark.renderer]
+unsafe = true
+
+# enable hugo's menu system for the site, name the primary menu
+sectionPagesMenu = "main"
+# menu entries
+[menu]
+[[menu.main]]
+identifier = "home"
+name = "Home"
+title = "Home"
+url = "/"
+weight = 1
+[[menu.main]]
+identifier = "user"
+name = "User Guide"
+title = "User Guide"
+weight = 2
+[[menu.main]]
+identifier = "design"
+name = "Design"
+title = "Design"
+weight = 5
+[[menu.main]]
+identifier = "contributing"
+name = "Contributing"
+title = "contributing"
+weight = 6
+
+
+[outputs]
+home = ["HTML"]
+
+[params]
+stable = "v0.25.0"
+
+# privacy settings
+[privacy]
+[privacy.youtube]
+# enable the cookie-less youtube in built-in hugo shortcode
+privacyEnhanced = true
+
+[module]
+[[module.imports]]
+path = 'github.com/thingsym/hugo-theme-techdoc'

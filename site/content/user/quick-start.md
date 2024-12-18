@@ -1,13 +1,11 @@
 ---
 title: "Quick Start"
 date: 2024-12-17T14:47:05Z
-draft: true
 ---
 
 DRANET depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in v1.32).
 
 In order to enable DRA you need to enable both the [feature gates and the API groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation).
-
 
 ## Create a Kubernetes Cluster
 
