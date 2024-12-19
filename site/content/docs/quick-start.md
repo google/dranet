@@ -1,13 +1,14 @@
 ---
 title: "Quick Start"
 date: 2024-12-17T14:47:05Z
+weight: 1
 ---
 
 DRANET depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in v1.32).
 
 In order to enable DRA you need to enable both the [feature gates and the API groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation).
 
-## Create a Kubernetes Cluster
+## Kubernetes cluster with DRA
 
 ### KIND
 
@@ -88,7 +89,7 @@ kubectl get --raw /metrics | grep kubernetes_feature_enabled | grep DynamicResou
 kubernetes_feature_enabled{name="DynamicResourceAllocation",stage="BETA"} 1
 ```
 
-## Install DRANET
+### Installation
 
 You can install the latest stable version using the provided manifest:
 
@@ -96,7 +97,7 @@ You can install the latest stable version using the provided manifest:
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
 ```
 
-## How to use it
+### How to use it
 
 Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers:
 
@@ -297,7 +298,7 @@ spec:
     resourceClaimName: cloud-network-dra-net-3
 ```
 
-Kubernets schedules the `Pod` to the corresponding `Node` and attach the network interface to the `Pod`:
+Kubernetes schedules the `Pod` to the corresponding `Node` and attach the network interface to the `Pod`:
 
 ```sh
 kubectl get pods -o wide
