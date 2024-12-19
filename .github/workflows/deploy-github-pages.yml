@@ -49,6 +49,13 @@ jobs:
           hugo-version: '0.125.5'
           extended: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+          check-latest: true
+
+      - run: npm install --save-dev autoprefixer postcss-cli
+
       - run: hugo --baseURL https://${REPO_OWNER}.github.io/${REPO_NAME} --minify
         working-directory: ./site
 
