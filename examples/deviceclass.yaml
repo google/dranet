@@ -15,9 +15,9 @@
 apiVersion: resource.k8s.io/v1beta1
 kind: DeviceClass
 metadata:
-  name: dranet.gke.io
+  name: dra.net
 spec:
   selectors:
     - cel:
-        expression: device.driver == "dranet.gke.io"
+        expression: device.driver == "dra.net"
 

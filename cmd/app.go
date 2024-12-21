@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	driverName = "dranet.gke.io"
+	driverName = "dra.net"
 )
 
 var (

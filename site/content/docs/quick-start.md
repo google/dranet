@@ -106,9 +106,9 @@ apiVersion: resource.k8s.io/v1beta1
 kind: ResourceSlice
 metadata:
   creationTimestamp: "2024-12-15T23:41:51Z"
-  generateName: gke-aojea-dra-multi-nic-985b8c20-jg5l-dranet.gke.io-
+  generateName: gke-aojea-dra-multi-nic-985b8c20-jg5l-dra.net-
   generation: 1
-  name: gke-aojea-dra-multi-nic-985b8c20-jg5l-dranet.gke.io-8nq9c
+  name: gke-aojea-dra-multi-nic-985b8c20-jg5l-dra.net-8nq9c
   ownerReferences:
   - apiVersion: v1
     controller: true
@@ -257,12 +257,12 @@ metadata:
 spec:
   selectors:
     - cel:
-        expression: device.driver == "dranet.gke.io"
+        expression: device.driver == "dra.net"
     - cel:
-        expression: has(device.attributes["dranet.gke.io"].cloud_network) 
+        expression: has(device.attributes["dra.net"].cloud_network) 
   config:
   - opaque:
-      driver: dranet.gke.io
+      driver: dra.net
       parameters:
         nccl: "true"
 ```
@@ -281,7 +281,7 @@ spec:
       deviceClassName: dranet-cloud
       selectors:
         - cel:
-            expression: device.attributes["dranet.gke.io"].cloud_network == "projects/961828715260/networks/aojea-dra-net-3"
+            expression: device.attributes["dra.net"].cloud_network == "projects/961828715260/networks/aojea-dra-net-3"
 ---
 apiVersion: v1
 kind: Pod

@@ -20,13 +20,13 @@ spec:
   devices:
     requests:
     - name: req-dummy
-      deviceClassName: dranet.gke.io
+      deviceClassName: dra.net
       selectors:
         - cel:
-            expression: device.attributes["dranet.gke.io"].type == "dummy"
+            expression: device.attributes["dra.net"].type == "dummy"
     config:
     - opaque:
-        driver: dranet.gke.io
+        driver: dra.net
         parameters:
           newName: "eth99"
           address: "192.168.2.2"
