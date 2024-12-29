@@ -226,9 +226,25 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	}
 
 	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
-		// TODO assume only one addres by now
-		ip := ips[0].IP.String()
-		device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: &ip}
+		// TODO assume only one address by now but prefer the global ones
+		var v6found, v4found bool
+		for _, address := range ips {
+			if v4found && v6found {
+				break
+			}
+			if !address.IP.IsGlobalUnicast() {
+				continue
+			}
+
+			if address.IP.To4() == nil && !v6found {
+				device.Basic.Attributes["ipv6"] = resourceapi.DeviceAttribute{StringValue: ptr.To(address.IP.String())}
+			} else if !v4found {
+				device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: ptr.To(address.IP.String())}
+			}
+		}
+		if !v4found {
+			device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: ptr.To(ips[0].String())}
+		}
 		mac := link.Attrs().HardwareAddr.String()
 		device.Basic.Attributes["mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
 		mtu := int64(link.Attrs().MTU)
