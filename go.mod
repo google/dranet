@@ -12,8 +12,8 @@ require (
 	golang.org/x/time v0.8.0
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
-	k8s.io/client-go v0.32.1
-	k8s.io/component-helpers v0.32.1
+	k8s.io/client-go v0.32.2
+	k8s.io/component-helpers v0.32.2
 	k8s.io/dynamic-resource-allocation v0.32.1
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubelet v0.32.1
