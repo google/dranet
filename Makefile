@@ -14,14 +14,18 @@
 
 REPO_ROOT:=${CURDIR}
 OUT_DIR=$(REPO_ROOT)/bin
-BINARY_NAME?=dranet
 
 # disable CGO by default for static binaries
 CGO_ENABLED=0
 export GOROOT GO111MODULE CGO_ENABLED
 
-build:
-	go build -v -o "$(OUT_DIR)/$(BINARY_NAME)" ./cmd/dranet
+build: build-dranet build-dranetctl
+
+build-dranet:
+	go build -v -o "$(OUT_DIR)/dranet" ./cmd/dranet
+
+build-dranetctl:
+	go build -v -o "$(OUT_DIR)/dranetctl" ./cmd/dranetctl
 
 clean:
 	rm -rf "$(OUT_DIR)/"

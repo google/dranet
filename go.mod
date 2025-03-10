@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.6.0
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/containerd/nri v0.9.0
+	github.com/spf13/cobra v1.8.1
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/sys v0.30.0
@@ -37,6 +38,7 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/knqyf263/go-plugin v0.8.1-0.20240827022226-114c6257e441 // indirect
