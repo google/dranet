@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/Mellanox/rdmamap"
+	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
@@ -47,7 +48,7 @@ var (
 )
 
 type DB struct {
-	instance *cloudInstance
+	instance *cloudprovider.CloudInstance
 
 	mu       sync.RWMutex
 	podStore map[int]string // key: netnsid path value: Pod namespace/name
