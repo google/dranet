@@ -9,7 +9,7 @@ require (
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/sys v0.30.0
-	golang.org/x/time v0.10.0
+	golang.org/x/time v0.11.0
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2
