@@ -14,14 +14,18 @@
 
 REPO_ROOT:=${CURDIR}
 OUT_DIR=$(REPO_ROOT)/bin
-BINARY_NAME?=dranet
 
 # disable CGO by default for static binaries
 CGO_ENABLED=0
 export GOROOT GO111MODULE CGO_ENABLED
 
-build:
-	go build -v -o "$(OUT_DIR)/$(BINARY_NAME)" ./cmd
+build: build-dranet build-dranetctl
+
+build-dranet:
+	go build -v -o "$(OUT_DIR)/dranet" ./cmd/dranet
+
+build-dranetctl:
+	go build -v -o "$(OUT_DIR)/dranetctl" ./cmd/dranetctl
 
 clean:
 	rm -rf "$(OUT_DIR)/"
@@ -44,12 +48,18 @@ REGISTRY?=ghcr.io/google
 TAG?=$(shell echo "$$(date +v%Y%m%d)-$$(git describe --always --dirty)")
 # the full image tag
 IMAGE?=$(REGISTRY)/$(IMAGE_NAME):$(TAG)
+PLATFORMS?=linux/amd64,linux/arm64
 
 # required to enable buildx
 export DOCKER_CLI_EXPERIMENTAL=enabled
 image:
 # docker buildx build --platform=${PLATFORMS} $(OUTPUT) --progress=$(PROGRESS) -t ${IMAGE} --pull $(EXTRA_BUILD_OPT) .
 	docker build . -t ${IMAGE} --load
+
+image-build:
+	docker buildx build . \
+		--platform="${PLATFORMS}" \
+		--tag="${IMAGE}"
 
 push-image: image
 	docker tag ${IMAGE} ghcr.io/google/dranet:stable

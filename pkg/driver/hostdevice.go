@@ -36,6 +36,12 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 		return fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
 	}
 
+	// get the existing IP addresses
+	addresses, err := netlink.AddrList(hostDev, netlink.FAMILY_ALL)
+	if err != nil {
+		return fmt.Errorf("fail to get ip addresses: %w", err)
+	}
+
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return err
@@ -91,6 +97,15 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 		return fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
 	}
 
+	for _, address := range addresses {
+		// remove the interface attribute of the original address
+		// to avoid issues when the interface is renamed.
+		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address.IPNet})
+		if err != nil {
+			return fmt.Errorf("fail to set up address %s on namespace %s: %w", address.String(), containerNsPAth, err)
+		}
+	}
+
 	err = nhNs.LinkSetUp(nsLink)
 	if err != nil {
 		return fmt.Errorf("failt to set up interface %s on namespace %s: %w", nsLink.Attrs().Name, containerNsPAth, err)
@@ -121,6 +136,12 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	err = nhNs.LinkSetDown(nsLink)
 	if err != nil {
 		return err
+	}
+
+	// get the existing IP addresses
+	addresses, err := nhNs.AddrList(nsLink, netlink.FAMILY_ALL)
+	if err != nil {
+		return fmt.Errorf("fail to get ip addresses: %w", err)
 	}
 
 	attrs := nsLink.Attrs()
@@ -165,6 +186,24 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil {
 		return err
+	}
+
+	link, err := netlink.LinkByName(devName)
+	if err != nil {
+		return fmt.Errorf("link not found for interface %s on runtime namespace: %w", devName, err)
+	}
+
+	// set the interface down
+	err = netlink.LinkSetDown(link)
+	if err != nil {
+		return fmt.Errorf("fail to set link down: %w", err)
+	}
+
+	for _, address := range addresses {
+		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address.IPNet})
+		if err != nil {
+			return fmt.Errorf("fail to set up address %s on runtime namespace: %w", address.String(), err)
+		}
 	}
 
 	return nil
