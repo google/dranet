@@ -426,6 +426,11 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 				len(config.Requests) > 0 && !slices.Contains(config.Requests, requestName) {
 				continue
 			}
+			netconf, err := ValidateConfig(&config.Opaque.Parameters)
+			if err != nil {
+				return nil, err
+			}
+			klog.V(4).Infof("podStartHook Configuration %#v", netconf)
 		}
 		device := drapb.Device{
 			PoolName:   result.Pool,
