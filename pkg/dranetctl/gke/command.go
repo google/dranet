@@ -17,56 +17,60 @@ limitations under the License.
 package gke
 
 import (
+	"context"
+
+	"github.com/google/dranet/pkg/cloudprovider/gce"
 	"github.com/spf13/cobra"
+
+	compute "cloud.google.com/go/compute/apiv1"
+	container "cloud.google.com/go/container/apiv1"
+	"google.golang.org/api/option"
 )
 
 var GkeCmd = &cobra.Command{
 	Use:   "gke",
 	Short: "Manage resources on Google Kubernetes Engine (GKE)",
 	Long:  `This command allows you to manage resources on GKE.`,
-}
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// This function runs before any subcommand of gke
+		authFile, err := cmd.Flags().GetString("auth-file")
+		if err != nil {
+			return err
+		}
+		ctx := context.Background()
 
-// nodepoolCmd represents the nodepool command
-var nodepoolCmd = &cobra.Command{
-	Use:   "nodepool",
-	Short: "Manage nodepools on GKE",
-	Long:  `Allows creating, validating, and managing nodepools on GKE.`,
-}
+		opts := []option.ClientOption{}
+		if authFile != "" {
+			opts = append(opts, option.WithCredentialsFile(authFile))
+		}
 
-// ... (createnodepoolCmd and validatenodepoolCmd remain largely the same, but adapt the package)
-var createnodepoolCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a new nodepool",
-	Run: func(cmd *cobra.Command, args []string) {
-		// ... (rest of the code)
-	},
-}
+		containerClient, err := container.NewClusterManagerClient(ctx, opts...)
+		if err != nil {
+			return err
+		}
 
-var validatenodepoolCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "Validate an existing nodepool",
-	Run: func(cmd *cobra.Command, args []string) {
-		// ... (rest of the code)
+		gce.ContainersClient = containerClient
+
+		networksClient, err := compute.NewNetworksClient(ctx, opts...)
+		if err != nil {
+			return err
+		}
+
+		gce.NetworksClient = networksClient
+
+		subnetworksClient, err := compute.NewSubnetworksClient(ctx, opts...)
+		if err != nil {
+			return err
+		}
+
+		gce.SubnetworksClient = subnetworksClient
+
+		return nil
 	},
 }
 
 func init() {
 	GkeCmd.AddCommand(nodepoolCmd)
-
-	nodepoolCmd.AddCommand(createnodepoolCmd)
-	nodepoolCmd.AddCommand(validatenodepoolCmd)
-
-	createnodepoolCmd.Flags().String("project", "", "GCP project ID")
-	createnodepoolCmd.Flags().String("location", "", "GCP location (e.g., us-central1)")
-	createnodepoolCmd.Flags().String("cluster", "", "GKE cluster name")
-	createnodepoolCmd.Flags().String("nodepool", "", "Nodepool name")
-	createnodepoolCmd.Flags().String("machine-type", "", "Machine type for nodes")
-	createnodepoolCmd.Flags().Int64("node-count", 0, "Number of nodes")
-	createnodepoolCmd.Flags().Bool("run-nccl", false, "Run nccl tests after dranet installation")
-
-	validatenodepoolCmd.Flags().String("project", "", "GCP project ID")
-	validatenodepoolCmd.Flags().String("location", "", "GCP location (e.g., us-central1)")
-	validatenodepoolCmd.Flags().String("cluster", "", "GKE cluster name")
-	validatenodepoolCmd.Flags().String("nodepool", "", "Nodepool name")
+	GkeCmd.PersistentFlags().String("auth-file", "", "Path to the Google Cloud service account JSON file")
 
 }

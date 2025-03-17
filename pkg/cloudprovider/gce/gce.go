@@ -21,7 +21,9 @@ import (
 	"encoding/json"
 	"time"
 
+	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/metadata"
+	container "cloud.google.com/go/container/apiv1"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
@@ -30,16 +32,26 @@ import (
 )
 
 var (
+	// Populated by the command line
+	ContainersClient  *container.ClusterManagerClient // handle GKE Clusters
+	NetworksClient    *compute.NetworksClient         // handle GCE Networks
+	SubnetworksClient *compute.SubnetworksClient      // handle GCE Subnets
+
 	// https://cloud.google.com/compute/docs/accelerator-optimized-machines#network-protocol
 	// machine types have a one to one mapping to a network protocol in google cloud
 	NetworkProtocolMap = map[string]string{
-		"a3-highgpu-1g": "GPUDirect-TCPX",
-		"a3-highgpu-2g": "GPUDirect-TCPX",
-		"a3-highgpu-4g": "GPUDirect-TCPX",
-		"a3-highgpu-8g": "GPUDirect-TCPX",
-		"a3-edgegpu-8g": "GPUDirect-TCPX",
-		"a3-megagpu-8g": "GPUDirect-TCPXO",
+		"a3-highgpu-1g":  "GPUDirect-TCPX",  // 8 GPU 4 accelerator NICs
+		"a3-highgpu-2g":  "GPUDirect-TCPX",  // "
+		"a3-highgpu-4g":  "GPUDirect-TCPX",  // "
+		"a3-highgpu-8g":  "GPUDirect-TCPX",  // "
+		"a3-edgegpu-8g":  "GPUDirect-TCPX",  // "
+		"a3-megagpu-8g":  "GPUDirect-TCPXO", // 8 GPUs 8 NICs
+		"a3-ultragpu-8g": "RDMA",            // 8 GPUs 8 NICs
 	}
+	// Network Technology
+	// GPUDirect-TCPX: one VPCs for GPU NICs, one subnet per VPC 8244MTU
+	// GPUDirect-TCPXO: one VPCs for GPU NICs, one subnet per VPC 8244MTU
+	// RDMA: one HPC VPC, one subnet per NIC, 8896MTU
 )
 
 func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
