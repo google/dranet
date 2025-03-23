@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package driver
+package apis
 
 import (
 	"errors"
@@ -24,19 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 )
-
-// TODO Generate code and keep in sync golang types on schema
-type NetworkConfig struct {
-	Name   string   `json:"name"`
-	IPs    []string `json:"ips"`
-	Routes []Route  `json:"routes"`
-	MTU    int      `json:"mtu"`
-}
-
-type Route struct {
-	Destination string `json:"destination"`
-	Gateway     string `json:"gateway"`
-}
 
 // ValidateConfig validates the data in a runtime.RawExtension against the OpenAPI schema.
 func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
@@ -51,6 +38,23 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 	var config NetworkConfig
 	if err := yaml.Unmarshal(raw.Raw, &config, yaml.DisallowUnknownFields); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal YAML data: %w", err)
+	}
+
+	switch config.Mode {
+	case ModeVLAN:
+		if config.VLAN == nil {
+			return nil, fmt.Errorf("vlan config is missing")
+		}
+	case ModeMacvlan:
+		if config.Macvlan == nil {
+			errorsList = append(errorsList, fmt.Errorf("macvlan config is missing"))
+		}
+	case ModeIPvlan:
+		if config.IPvlan == nil {
+			errorsList = append(errorsList, fmt.Errorf("ipvlan config is missing"))
+		}
+	default:
+		// No mode specified
 	}
 
 	for _, ip := range config.IPs {

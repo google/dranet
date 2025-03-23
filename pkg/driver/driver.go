@@ -31,6 +31,8 @@ import (
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
+	"github.com/google/dranet/pkg/apis"
+	"github.com/google/dranet/pkg/inventory"
 
 	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -426,7 +428,7 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 				len(config.Requests) > 0 && !slices.Contains(config.Requests, requestName) {
 				continue
 			}
-			netconf, err := ValidateConfig(&config.Opaque.Parameters)
+			netconf, err := apis.ValidateConfig(&config.Opaque.Parameters)
 			if err != nil {
 				return nil, err
 			}
