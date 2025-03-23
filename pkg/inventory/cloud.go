@@ -27,6 +27,38 @@ import (
 	"github.com/google/dranet/pkg/cloudprovider/gce"
 )
 
+var (
+	// cloud provider specific
+
+	// https://cloud.google.com/compute/docs/accelerator-optimized-machines#network-protocol
+	// machine types have a one to one mapping to a network protocol in google cloud
+	gceNetworkProtocolMap = map[string]string{
+		"a3-highgpu-1g":  "GPUDirect-TCPX",
+		"a3-highgpu-2g":  "GPUDirect-TCPX",
+		"a3-highgpu-4g":  "GPUDirect-TCPX",
+		"a3-highgpu-8g":  "GPUDirect-TCPX",
+		"a3-edgegpu-8g":  "GPUDirect-TCPX",
+		"a3-megagpu-8g":  "GPUDirect-TCPXO",
+		"a3-ultragpu-8g": "GPUDirect-RDMA",
+		"a4-highgpu-8g":  "GPUDirect-RDMA",
+	}
+)
+
+type cloudInstance struct {
+	Name                string
+	Type                string
+	AcceleratorProtocol string
+	Interfaces          []networkInterface
+}
+
+type networkInterface struct {
+	IPv4    string   `json:"ip,omitempty"`
+	IPv6    []string `json:"ipv6,omitempty"`
+	Mac     string   `json:"mac,omitempty"`
+	MTU     int      `json:"mtu,omitempty"`
+	Network string   `json:"network,omitempty"`
+}
+
 // getInstanceProperties get the instace properties and stores them in a global variable to be used in discovery
 // TODO(aojea) support more cloud providers
 func getInstanceProperties(ctx context.Context) *cloudprovider.CloudInstance {
