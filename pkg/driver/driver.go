@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/google/dranet/pkg/inventory"
+	"github.com/vishvananda/netns"
 
 	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -270,11 +271,22 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		return nil
 	}
 
+	var containerNs netns.NsHandle
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
 	if ns == "" {
-		klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		return nil
+		// Try to get the namespace from the cache until
+		// https://github.com/containerd/containerd/pull/11331
+		containerNs = netns.NsHandle(np.netdb.GetPodNetNs(podKey(pod)))
+		if containerNs == -1 {
+			klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
+			return nil
+		}
+	} else {
+		containerNs, err = netns.GetFromPath(ns)
+		if err != nil {
+			return fmt.Errorf("could not get network namespace from fd %d : %w", containerNs, err)
+		}
 	}
 	// Process the configurations of the ResourceClaim
 	for _, obj := range objs {
@@ -304,7 +316,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 			klog.V(4).Infof("podStopHook Device %s", result.Device)
 			// TODO config options to rename the device and pass parameters
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			err := nsDetachNetdev(ns, result.Device)
+			err := nsDetachNetdev(containerNs, result.Device)
 			if err != nil {
 				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
 				continue

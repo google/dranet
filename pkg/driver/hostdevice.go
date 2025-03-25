@@ -99,11 +99,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	return nil
 }
 
-func nsDetachNetdev(containerNsPAth string, devName string) error {
-	containerNs, err := netns.GetFromPath(containerNsPAth)
-	if err != nil {
-		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
-	}
+func nsDetachNetdev(containerNs netns.NsHandle, devName string) error {
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
 	nhNs, err := netlink.NewHandleAt(containerNs)
@@ -113,7 +109,7 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 
 	nsLink, err := nhNs.LinkByName(devName)
 	if err != nil {
-		return fmt.Errorf("link not found for interface %s on namespace %s: %w", devName, containerNsPAth, err)
+		return fmt.Errorf("link not found for interface %s on namespace %s: %w", devName, containerNs, err)
 	}
 
 	// set the device down to avoid network conflicts
