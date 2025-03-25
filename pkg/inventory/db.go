@@ -102,6 +102,17 @@ func (db *DB) GetPodName(netnsid int) string {
 	return db.podStore[netnsid]
 }
 
+func (db *DB) GetPodNetNs(pod string) int {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	for k, v := range db.podStore {
+		if v == pod {
+			return k
+		}
+	}
+	return -1
+}
+
 func (db *DB) Run(ctx context.Context) error {
 	defer close(db.notifications)
 	// Resources are published periodically or if there is a netlink notification
