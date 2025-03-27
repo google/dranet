@@ -46,12 +46,13 @@ var (
 		"a3-highgpu-8g":  "GPUDirect-TCPX",  // "
 		"a3-edgegpu-8g":  "GPUDirect-TCPX",  // "
 		"a3-megagpu-8g":  "GPUDirect-TCPXO", // 8 GPUs 8 NICs
-		"a3-ultragpu-8g": "RDMA",            // 8 GPUs 8 NICs
+		"a3-ultragpu-8g": "GPUDirect-RDMA",  // 8 GPUs 8 NICs
+		"a4-highgpu-8g":  "GPUDirect-RDMA",  // 8 GPUs 8 NICs
 	}
 	// Network Technology
 	// GPUDirect-TCPX: one VPCs for GPU NICs, one subnet per VPC 8244MTU
 	// GPUDirect-TCPXO: one VPCs for GPU NICs, one subnet per VPC 8244MTU
-	// RDMA: one HPC VPC, one subnet per NIC, 8896MTU
+	// GPUDirect-RDMA: one HPC VPC, one subnet per NIC, 8896MTU
 )
 
 func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
