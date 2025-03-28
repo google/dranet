@@ -18,14 +18,32 @@ package gke
 
 import (
 	"context"
-
-	"github.com/google/dranet/pkg/cloudprovider/gce"
-	"github.com/spf13/cobra"
+	"fmt"
+	"os"
 
 	compute "cloud.google.com/go/compute/apiv1"
 	container "cloud.google.com/go/container/apiv1"
+	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 )
+
+var (
+	ContainersClient  *container.ClusterManagerClient // handle GKE Clusters
+	NetworksClient    *compute.NetworksClient         // handle GCE Networks
+	SubnetworksClient *compute.SubnetworksClient      // handle GCE Subnets
+
+	projectID   string
+	location    string
+	clusterName string
+)
+
+func init() {
+	GkeCmd.AddCommand(acceleratorpodCmd)
+	GkeCmd.PersistentFlags().String("auth-file", "", "Path to the Google Cloud service account JSON file")
+	GkeCmd.PersistentFlags().StringVar(&projectID, "project", "", "Google Cloud Project ID")
+	GkeCmd.PersistentFlags().StringVar(&location, "location", "-", "Google Cloud region or zone to operate in")
+	GkeCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "The name of the target GKE cluster")
+}
 
 var GkeCmd = &cobra.Command{
 	Use:   "gke",
@@ -33,6 +51,13 @@ var GkeCmd = &cobra.Command{
 	Long:  `This command allows you to manage resources on GKE.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// This function runs before any subcommand of gke
+		if projectID == "" {
+			projectID = os.Getenv("GCP_PROJECT_ID")
+			if projectID == "" {
+				return fmt.Errorf("missing project")
+			}
+		}
+
 		authFile, err := cmd.Flags().GetString("auth-file")
 		if err != nil {
 			return err
@@ -48,29 +73,30 @@ var GkeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		ContainersClient = containerClient
 
-		gce.ContainersClient = containerClient
-
-		networksClient, err := compute.NewNetworksClient(ctx, opts...)
+		networksClient, err := compute.NewNetworksRESTClient(ctx, opts...)
 		if err != nil {
 			return err
 		}
+		NetworksClient = networksClient
 
-		gce.NetworksClient = networksClient
-
-		subnetworksClient, err := compute.NewSubnetworksClient(ctx, opts...)
+		subnetworksClient, err := compute.NewSubnetworksRESTClient(ctx, opts...)
 		if err != nil {
 			return err
 		}
-
-		gce.SubnetworksClient = subnetworksClient
-
+		SubnetworksClient = subnetworksClient
 		return nil
 	},
-}
-
-func init() {
-	GkeCmd.AddCommand(nodepoolCmd)
-	GkeCmd.PersistentFlags().String("auth-file", "", "Path to the Google Cloud service account JSON file")
-
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if ContainersClient != nil {
+			ContainersClient.Close()
+		}
+		if NetworksClient != nil {
+			NetworksClient.Close()
+		}
+		if SubnetworksClient != nil {
+			SubnetworksClient.Close()
+		}
+	},
 }

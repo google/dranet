@@ -17,8 +17,11 @@ limitations under the License.
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/google/dranet/pkg/dranetctl/gke"
 	"github.com/spf13/cobra"
@@ -31,22 +34,25 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigChan
+		log.Printf("\nReceived signal: %v. Shutting down...\n", sig)
+		cancel()
+	}()
+
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		log.Println(err)
 		os.Exit(1)
 	}
 }
 
-// CloudProviderCmd represents the cloud-provider command
-var cloudProviderCmd = &cobra.Command{
-	Use:   "cloud-provider",
-	Short: "Manage resources for specific cloud providers",
-	Long:  `This command allows you to select a specific cloud provider to manage resources.`,
-}
-
 func init() {
-	// Add cloud-provider subcommand
-	rootCmd.AddCommand(cloudProviderCmd)
-	// GKE specific
-	cloudProviderCmd.AddCommand(gke.GkeCmd)
+	// TODO(aojea) add other cloud providers
+	// GKE subcommand
+	rootCmd.AddCommand(gke.GkeCmd)
 }
