@@ -306,7 +306,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
 			err := nsDetachNetdev(ns, result.Device)
 			if err != nil {
-				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+				klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
 				continue
 			}
 		}

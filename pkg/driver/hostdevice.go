@@ -59,6 +59,8 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	if err != nil {
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
+	defer s.Close()
+
 	req.Sockets = map[int]*nl.SocketHandle{
 		unix.NETLINK_ROUTE: {Socket: s},
 	}
@@ -160,6 +162,8 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	if err != nil {
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
+	defer s.Close()
+
 	// copy from netlink.LinkModify(dev) using only the parts needed
 	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
 	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, flags)
