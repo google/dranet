@@ -31,10 +31,12 @@ var (
 	ContainersClient  *container.ClusterManagerClient // handle GKE Clusters
 	NetworksClient    *compute.NetworksClient         // handle GCE Networks
 	SubnetworksClient *compute.SubnetworksClient      // handle GCE Subnets
+	FirewallsClient   *compute.FirewallsClient        // handle GCE Firewalls
 
 	projectID   string
 	location    string
 	clusterName string
+	dryRun      bool
 )
 
 func init() {
@@ -43,6 +45,7 @@ func init() {
 	GkeCmd.PersistentFlags().StringVar(&projectID, "project", "", "Google Cloud Project ID")
 	GkeCmd.PersistentFlags().StringVar(&location, "location", "-", "Google Cloud region or zone to operate in")
 	GkeCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "The name of the target GKE cluster")
+	GkeCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "The command will print the write actions without executing them")
 }
 
 var GkeCmd = &cobra.Command{
@@ -86,6 +89,13 @@ var GkeCmd = &cobra.Command{
 			return err
 		}
 		SubnetworksClient = subnetworksClient
+
+		firewallsClient, err := compute.NewFirewallsRESTClient(ctx, opts...)
+		if err != nil {
+			return fmt.Errorf("NewFirewallsClient: %w", err)
+		}
+		FirewallsClient = firewallsClient
+
 		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -97,6 +107,9 @@ var GkeCmd = &cobra.Command{
 		}
 		if SubnetworksClient != nil {
 			SubnetworksClient.Close()
+		}
+		if FirewallsClient != nil {
+			FirewallsClient.Close()
 		}
 	},
 }

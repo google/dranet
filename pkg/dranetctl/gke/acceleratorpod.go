@@ -18,9 +18,17 @@ package gke
 
 import (
 	"fmt"
+	"strings"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/spf13/cobra"
+	"k8s.io/klog/v2"
+)
+
+const (
+	// assume total ownership of these networks by dranet
+	wellKnownPrefix = "dranet-"
 )
 
 // acceleratorpodCmd represents the acceleratorpod command
@@ -199,14 +207,102 @@ specify the cluster if the accelerator pod name is not unique across clusters
 (though it's recommended to have unique naming).`,
 	Args: cobra.ExactArgs(1), // Expects the acceleratorpod name as an argument
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		acceleratorpodName := args[0]
+		if clusterName == "" {
+			return fmt.Errorf("Cluster name not explicitly provided.")
+		}
+		// Try to get the nodepool from the cluster
+		if location == "-" {
+			return fmt.Errorf("location for accelerator pod %s not specified", acceleratorpodName)
+		}
+
 		fmt.Printf("Deleting acceleratorpod '%s'...\n", acceleratorpodName)
 		fmt.Printf("  Project: %s\n", projectID)
-		if clusterName == "" {
-			return fmt.Errorf("Warning: Cluster name not explicitly provided.")
-
-		}
 		fmt.Printf("  Target Cluster: %s\n", clusterName)
+
+		var nodePool *containerpb.NodePool
+
+		req := &containerpb.GetNodePoolRequest{
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, acceleratorpodName),
+		}
+		np, err := ContainersClient.GetNodePool(ctx, req)
+		if err != nil {
+			return fmt.Errorf("erro trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
+		}
+		nodePool = np
+
+		if dryRun {
+			fmt.Printf("Deleting AcceleratorPod %s", nodePool.String())
+			return nil
+		}
+
+		// Cleanup the networks if those were created by us
+		for _, networkConfig := range nodePool.NetworkConfig.AdditionalNodeNetworkConfigs {
+			if !strings.HasPrefix(networkConfig.Network, wellKnownPrefix) {
+				klog.V(2).Infof("Skipping network %s", networkConfig.Network)
+			}
+			reqNet := &computepb.GetNetworkRequest{
+				Project: projectID,
+				Network: networkConfig.Network,
+			}
+
+			klog.V(2).InfoS("get network %s", networkConfig.Network)
+			network, err := NetworksClient.Get(ctx, reqNet)
+			if err != nil {
+				return fmt.Errorf("getting network '%s': %w", networkConfig.Network, err)
+			}
+
+			klog.V(2).InfoS("get firewalls associated", "network", network)
+			reqFw := &computepb.GetEffectiveFirewallsNetworkRequest{
+				Project: projectID,
+				Network: networkConfig.Network,
+			}
+
+			respFw, err := NetworksClient.GetEffectiveFirewalls(ctx, reqFw)
+			if err != nil {
+				return fmt.Errorf("getting firewalls for network %s: %w", networkConfig.Network, err)
+			}
+			klog.V(2).InfoS("get firewall", "network", respFw)
+			for _, firewall := range respFw.GetFirewalls() {
+				req := &computepb.DeleteFirewallRequest{
+					Project:  projectID,
+					Firewall: firewall.GetName(),
+				}
+
+				if dryRun {
+					klog.Infof("dry-run: deleting firewall %s", firewall.GetName())
+					continue
+				}
+				op, err := FirewallsClient.Delete(ctx, req)
+				if err != nil {
+					return fmt.Errorf("Delete Firewall: %w", err)
+				}
+
+				err = op.Wait(ctx)
+				if err != nil {
+					return fmt.Errorf("Delete Firewall Wait: %w", err)
+				}
+			}
+			if dryRun {
+				klog.Infof("dry-run: deleting network %s", networkConfig.Network)
+				continue
+			}
+			// once firewalls are deleted we can delete the network
+			reqNetDel := &computepb.DeleteNetworkRequest{
+				Project: projectID,
+				Network: networkConfig.Network,
+			}
+			op, err := NetworksClient.Delete(ctx, reqNetDel)
+			if err != nil {
+				return fmt.Errorf("deleting network '%s': %w", networkConfig.Network, err)
+			}
+			err = op.Wait(ctx)
+			if err != nil {
+				return fmt.Errorf("Delete netowkr Wait: %w", err)
+			}
+		}
+
 		return nil
 	},
 }

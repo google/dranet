@@ -18,13 +18,16 @@ package main
 
 import (
 	"context"
-	"log"
+	"flag"
+
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/google/dranet/pkg/dranetctl/gke"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/klog/v2"
 )
 
 var rootCmd = &cobra.Command{
@@ -35,23 +38,29 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		sig := <-sigChan
-		log.Printf("\nReceived signal: %v. Shutting down...\n", sig)
+		klog.Infof("\nReceived signal: %v. Shutting down...\n", sig)
 		cancel()
 	}()
 
+	// enable klog flags
+	klog.InitFlags(nil)
+	pflag.CommandLine.AddGoFlag(flag.CommandLine.Lookup("v"))
+	pflag.CommandLine.AddGoFlag(flag.CommandLine.Lookup("logtostderr"))
+	pflag.CommandLine.Set("logtostderr", "true")
+
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		log.Println(err)
+		klog.Info(err)
 		os.Exit(1)
 	}
 }
 
 func init() {
+
 	// TODO(aojea) add other cloud providers
 	// GKE subcommand
 	rootCmd.AddCommand(gke.GkeCmd)
