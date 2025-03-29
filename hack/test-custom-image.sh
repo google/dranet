@@ -30,4 +30,5 @@ echo "Using IMAGE: ${IMAGE}"
 docker build . -t "${IMAGE}" --push
 kubectl set image ds/dranet dranet="${IMAGE}" -n kube-system
 kubectl rollout status ds/dranet -n kube-system
+kubectl rollout restart ds dranet -n kube-system
 kubectl get pods -l k8s-app=dranet -n kube-system
