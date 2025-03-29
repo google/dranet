@@ -42,9 +42,10 @@ const (
 )
 
 var (
-	hostnameOverride string
-	kubeconfig       string
-	bindAddress      string
+	hostnameOverride     string
+	kubeconfig           string
+	bindAddress          string
+	ignorePodsInterfaces bool
 
 	ready atomic.Bool
 )
@@ -53,6 +54,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
+	flag.BoolVar(&ignorePodsInterfaces, "ignore-pod-interfaces", true, "Ignore the network interfaces associated to Pods.")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: dranet [options]\n\n")
@@ -121,7 +123,11 @@ func main() {
 	}()
 	signal.Notify(signalCh, os.Interrupt, unix.SIGINT)
 
-	dranet, err := driver.Start(ctx, driverName, clientset, nodeName)
+	opts := []driver.Option{}
+	if ignorePodsInterfaces {
+		opts = append(opts, driver.IgnorePodsInterfaces())
+	}
+	dranet, err := driver.Start(ctx, driverName, clientset, nodeName, opts...)
 	if err != nil {
 		klog.Fatalf("driver failed to start: %v", err)
 	}
