@@ -44,6 +44,14 @@ var (
 	reSubnets = regexp.MustCompile(`/regions/([^/]+)/subnetworks/([^/]+)$`)
 )
 
+func getRegion(locationStr string) string {
+	parts := strings.Split(locationStr, "-")
+	if len(parts) == 3 {
+		return strings.Join(parts[:2], "-")
+	}
+	return locationStr
+}
+
 func createAcceleratorNetworks(ctx context.Context, acceleratorpodName string, networkInterfaces int) ([]*containerpb.AdditionalNodeNetworkConfig, error) {
 	klog.Infof("Creating %d additional networks and subnetworks...\n", additionalNetworkInterfaces)
 	additionalNetworkConfigs := make([]*containerpb.AdditionalNodeNetworkConfig, 0, networkInterfaces)
@@ -51,7 +59,7 @@ func createAcceleratorNetworks(ctx context.Context, acceleratorpodName string, n
 		// networkName has to be unique
 		networkName := fmt.Sprintf("%s-net-%s-%d", wellKnownPrefix, obtainHexHash(acceleratorpodName), i)
 		subnetworkName := fmt.Sprintf("%s-subnet-%s-%d", wellKnownPrefix, obtainHexHash(acceleratorpodName), i)
-		subnetRegion := location // subnets are in the same region as the cluster
+		subnetRegion := getRegion(location) // subnets are in the same region as the cluster
 
 		// Create Network
 		insertNetworkReq := &computepb.InsertNetworkRequest{
@@ -164,7 +172,7 @@ func createHPCAcceleratorNetwork(ctx context.Context, acceleratorpodName string,
 
 	for i := 1; i <= networkInterfaces; i++ {
 		subnetworkName := fmt.Sprintf("%s-subnet-%s-%d", wellKnownPrefix, obtainHexHash(acceleratorpodName), i)
-		subnetRegion := location // subnets are in the same region as the cluster
+		subnetRegion := getRegion(location) // subnets are in the same region as the cluster
 		// Create Subnetwork
 		// get a non overllaping range from the Class E
 		// TODO: this needs to be handled better
@@ -263,7 +271,7 @@ func deleteNetwork(ctx context.Context, networkName string) error {
 			continue
 		}
 
-		region := match[1]
+		region := getRegion(match[1])
 		subnetName := match[2]
 
 		req := &computepb.DeleteSubnetworkRequest{
