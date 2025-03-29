@@ -41,6 +41,8 @@ var (
 
 func init() {
 	GkeCmd.AddCommand(acceleratorpodCmd)
+	GkeCmd.AddCommand(networksCmd)
+
 	GkeCmd.PersistentFlags().String("auth-file", "", "Path to the Google Cloud service account JSON file")
 	GkeCmd.PersistentFlags().StringVar(&projectID, "project", "", "Google Cloud Project ID")
 	GkeCmd.PersistentFlags().StringVar(&location, "location", "-", "Google Cloud region or zone to operate in")

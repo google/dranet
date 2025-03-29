@@ -17,18 +17,16 @@ limitations under the License.
 package gke
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/container/apiv1/containerpb"
+	"github.com/google/dranet/pkg/cloudprovider/gce"
 	"github.com/spf13/cobra"
-	"k8s.io/klog/v2"
-)
 
-const (
-	// assume total ownership of these networks by dranet
-	wellKnownPrefix = "dranet-"
+	"k8s.io/klog/v2"
 )
 
 // acceleratorpodCmd represents the acceleratorpod command
@@ -47,28 +45,8 @@ func init() {
 
 var (
 	machineType                 string
-	nodeCount                   int32
-	additionalNetworkInterfaces int32
-	networkName                 string
-	subnetName                  string
-	createNetwork               bool
-	newNetworkName              string
-	newNetworkIPRange           string
-	createSubnet                bool
-	newSubnetName               string
-	newSubnetRegion             string
-	newSubnetIPRange            string
-	placementPolicy             string
-	placementPolicyCreate       bool
-	newPlacementPolicyName      string
-	placementPolicyScope        string
-	placementPolicyType         string
-	nodePoolName                string
-	labels                      []string
-	nodeTaints                  []string
-	diskSizeGB                  int32
-	diskType                    string
-	imageType                   string
+	nodeCount                   int
+	additionalNetworkInterfaces int
 )
 
 // acceleratorpodCreateCmd represents the create subcommand for acceleratorpod
@@ -79,64 +57,110 @@ var acceleratorpodCreateCmd = &cobra.Command{
 creating necessary network and subnet resources and configuring
 network-aware placement. This group of machines is referred to as an accelerator pod.`,
 	Args: cobra.ExactArgs(1), // Expects the acceleratorpod name as an argument
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		acceleratorpodName := args[0]
-		fmt.Printf("Creating acceleratorpod '%s'...\n", acceleratorpodName)
-		fmt.Printf("  Project: %s\n", projectID)
-		fmt.Printf("  Location: %s\n", location)
-		fmt.Printf("  Cluster: %s\n", clusterName)
-		fmt.Printf("  Machine Type: %s\n", machineType)
-		fmt.Printf("  Node Count: %d\n", nodeCount)
-		fmt.Printf("  Network: %s (create: %t, new name: %s, new range: %s)\n", networkName, createNetwork, newNetworkName, newNetworkIPRange)
-		fmt.Printf("  Subnet: %s (create: %t, new name: %s, new region: %s, new range: %s)\n", subnetName, createSubnet, newSubnetName, newSubnetRegion, newSubnetIPRange)
-		fmt.Printf("  Placement Policy: %s (create: %t, new name: %s, scope: %s, type: %s)\n", placementPolicy, placementPolicyCreate, newPlacementPolicyName, placementPolicyScope, placementPolicyType)
-		fmt.Printf("  Node Pool Name: %s\n", nodePoolName)
-		fmt.Printf("  Labels: %v\n", labels)
-		fmt.Printf("  Taints: %v\n", nodeTaints)
-		fmt.Printf("  Disk Size: %dGB, Type: %s\n", diskSizeGB, diskType)
-		fmt.Printf("  Image Type: %s\n", imageType)
+		if clusterName == "" {
+			return fmt.Errorf("Cluster name not explicitly provided.")
+		}
+		// Try to get the nodepool from the cluster
+		if location == "-" {
+			return fmt.Errorf("location for accelerator pod %s not specified", acceleratorpodName)
+		}
+		parts := strings.Split(location, "-")
+		if len(parts) < 2 {
+			return fmt.Errorf("onle zonal node pools allowed")
+		}
 
-		// TODO: Implement the actual logic to create the network, subnet,
-		// placement policy, and GKE node pool here.
+		protocol, ok := gce.NetworkProtocolMap[machineType]
+		// if is not an accelerator machine type it requires multiple networks to use dranet
+		if !ok && additionalNetworkInterfaces == 0 {
+			return fmt.Errorf("dranet require multiple interfaces to worker")
+		}
+
+		var additionalNetworkConfigs []*containerpb.AdditionalNodeNetworkConfig
+		var err error
+		switch protocol {
+		case gce.GPUDirectTCPX:
+			additionalNetworkConfigs, err = createAcceleratorNetworks(ctx, acceleratorpodName, 4)
+		case gce.GPUDirectTCPXO:
+			additionalNetworkConfigs, err = createAcceleratorNetworks(ctx, acceleratorpodName, 8)
+		case gce.GPUDirectRDMA:
+			additionalNetworkConfigs, err = createHPCAcceleratorNetwork(ctx, acceleratorpodName, 8) //
+		default:
+			additionalNetworkConfigs, err = createAcceleratorNetworks(ctx, acceleratorpodName, additionalNetworkInterfaces)
+		}
+		if err != nil {
+			return fmt.Errorf("fail to create networks %v", err)
+		}
+
+		klog.Infof("Creating acceleratorpod '%s'...\n", acceleratorpodName)
+		klog.Infof("  Project: %s\n", projectID)
+		klog.Infof("  Location: %s\n", location)
+		klog.Infof("  Cluster: %s\n", clusterName)
+		klog.Infof("  Machine Type: %s\n", machineType)
+		klog.Infof("  Node Count: %d\n", nodeCount)
+		klog.Infof("  Node Pool Name: %s\n", acceleratorpodName)
+
+		nodePool := &containerpb.NodePool{
+			Name:             acceleratorpodName,
+			InitialNodeCount: int32(nodeCount),
+			Locations:        []string{location},
+			Config: &containerpb.NodeConfig{
+				MachineType: machineType,
+				// TODO allow to set labels and taints
+				Labels: map[string]string{"dra.net/acceleratorpod": "true"}},
+			NetworkConfig: &containerpb.NodeNetworkConfig{
+				AdditionalNodeNetworkConfigs: additionalNetworkConfigs,
+			},
+			PlacementPolicy: &containerpb.NodePool_PlacementPolicy{
+				Type: compactPlacement(machineType),
+			},
+		}
+
+		createReq := &containerpb.CreateNodePoolRequest{
+			Parent:   fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, location, clusterName),
+			NodePool: nodePool,
+		}
+
+		klog.Infof("Creating node pool '%s' in cluster '%s'...\n", acceleratorpodName, clusterName)
+		op, err := ContainersClient.CreateNodePool(ctx, createReq)
+		if err != nil {
+			return fmt.Errorf("failed to create node pool: %w", err)
+		}
+
+		if err := waitForOperation(ctx, op.GetLocation(), op.GetName()); err != nil {
+			return fmt.Errorf("waiting for node pool creation: %w", err)
+		}
+
+		klog.Infof("Node pool '%s' created successfully.\n", acceleratorpodName)
+		// TODO Installing dranet and required components
+		return nil
 	},
+}
+
+func compactPlacement(machineType string) containerpb.NodePool_PlacementPolicy_Type {
+	// https://cloud.google.com/kubernetes-engine/docs/how-to/compact-placement
+	// Available only on A2, A3, A4, C2, C2D, C3, C3D, C4, G2, H3, N2, and N2D machine types
+	for _, prefix := range []string{"a2", "a3", "a4", "c2", "c2d", "c3", "c3d", "c4", "g2", "h3", "n2", "n2d"} {
+		if strings.HasPrefix(prefix+"-", machineType) {
+			return containerpb.NodePool_PlacementPolicy_COMPACT
+		}
+	}
+	return containerpb.NodePool_PlacementPolicy_TYPE_UNSPECIFIED
 }
 
 func init() {
 	// Flags for the 'acceleratorpod create' command
 	acceleratorpodCreateCmd.Flags().StringVar(&machineType, "machine-type", "", "The Google Compute Engine machine type for the nodes (required)")
-	acceleratorpodCreateCmd.Flags().Int32Var(&nodeCount, "node-count", 0, "The number of VMs (nodes) to create in the node pool (required)")
-	acceleratorpodCreateCmd.Flags().Int32Var(&additionalNetworkInterfaces, "additional-network-interfaces", 0, "The number of additional network interfaces for each node (optional)")
+	acceleratorpodCreateCmd.Flags().IntVar(&nodeCount, "node-count", 0, "The number of VMs (nodes) to create in the node pool (required)")
+	acceleratorpodCreateCmd.Flags().IntVar(&additionalNetworkInterfaces, "additional-network-interfaces", 0, "The number of additional network interfaces for each node (optional)")
 
-	// Network Configuration Flags
-	acceleratorpodCreateCmd.Flags().StringVar(&networkName, "network", "", "The name of an existing Google Cloud network to use")
-	acceleratorpodCreateCmd.Flags().StringVar(&subnetName, "subnet", "", "The name of an existing subnet to use within the specified network")
-	acceleratorpodCreateCmd.Flags().BoolVar(&createNetwork, "create-network", false, "If specified, the tool will create a new network")
-	acceleratorpodCreateCmd.Flags().StringVar(&newNetworkName, "new-network-name", "", "The name to use if --create-network is specified")
-	acceleratorpodCreateCmd.Flags().StringVar(&newNetworkIPRange, "new-network-ip-range", "", "The IP range for the new network if --create-network is used (e.g., 10.10.0.0/20)")
-	acceleratorpodCreateCmd.Flags().BoolVar(&createSubnet, "create-subnet", false, "If specified, the tool will create a new subnet")
-	acceleratorpodCreateCmd.Flags().StringVar(&newSubnetName, "new-subnet-name", "", "The name to use if --create-subnet is specified")
-	acceleratorpodCreateCmd.Flags().StringVar(&newSubnetRegion, "new-subnet-region", "", "The region for the new subnet if --create-subnet is used (defaults to --region)")
-	acceleratorpodCreateCmd.Flags().StringVar(&newSubnetIPRange, "new-subnet-ip-range", "", "The IP range for the new subnet if --create-subnet is used (e.g., 10.10.0.0/24)")
-
-	// Placement Configuration Flags
-	acceleratorpodCreateCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "The name of an existing Compute Engine placement policy to use")
-	acceleratorpodCreateCmd.Flags().BoolVar(&placementPolicyCreate, "placement-policy-create", false, "If specified, the tool will attempt to create a placement policy")
-	acceleratorpodCreateCmd.Flags().StringVar(&newPlacementPolicyName, "new-placement-policy-name", "", "The name to use if --placement-policy-create is specified")
-	acceleratorpodCreateCmd.Flags().StringVar(&placementPolicyScope, "placement-policy-scope", "region", "The scope of the placement policy (region, zone)")
-	acceleratorpodCreateCmd.Flags().StringVar(&placementPolicyType, "placement-policy-type", "COLLOCATED", "The type of placement policy to create (COLLOCATED)")
-
-	// Nodepool Specific Options
-	acceleratorpodCreateCmd.Flags().StringVar(&nodePoolName, "node-pool-name", "", "A custom name for the GKE node pool")
-	acceleratorpodCreateCmd.Flags().StringSliceVar(&labels, "labels", []string{}, "Labels to apply to the nodes in the node pool (key=value,...)")
-	acceleratorpodCreateCmd.Flags().StringSliceVar(&nodeTaints, "node-taints", []string{}, "Taints to apply to the nodes in the node pool (key=value:EFFECT,...)")
-	acceleratorpodCreateCmd.Flags().Int32Var(&diskSizeGB, "disk-size", 100, "The size of the boot disk for the nodes in GB")
-	acceleratorpodCreateCmd.Flags().StringVar(&diskType, "disk-type", "pd-standard", "The type of the boot disk (pd-standard, pd-ssd)")
-	acceleratorpodCreateCmd.Flags().StringVar(&imageType, "image-type", "COS_CONTAINERD", "The OS image type for the nodes")
-
+	// TODO Placement and Nodepool Flags
 	// Mark required flags for the create command
-	acceleratorpodCreateCmd.MarkFlagRequired("cluster")
 	acceleratorpodCreateCmd.MarkFlagRequired("machine-type")
 	acceleratorpodCreateCmd.MarkFlagRequired("node-count")
+	acceleratorpodCreateCmd.MarkFlagRequired("additional-network-interfaces")
 }
 
 // acceleratorpodGetCmd represents the get subcommand for acceleratorpod
@@ -217,23 +241,21 @@ specify the cluster if the accelerator pod name is not unique across clusters
 			return fmt.Errorf("location for accelerator pod %s not specified", acceleratorpodName)
 		}
 
-		fmt.Printf("Deleting acceleratorpod '%s'...\n", acceleratorpodName)
-		fmt.Printf("  Project: %s\n", projectID)
-		fmt.Printf("  Target Cluster: %s\n", clusterName)
-
-		var nodePool *containerpb.NodePool
+		klog.Infof("Deleting acceleratorpod '%s'...\n", acceleratorpodName)
+		klog.Infof("  Project: %s\n", projectID)
+		klog.Infof("  Target Cluster: %s\n", clusterName)
 
 		req := &containerpb.GetNodePoolRequest{
 			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, acceleratorpodName),
 		}
-		np, err := ContainersClient.GetNodePool(ctx, req)
+
+		nodePool, err := ContainersClient.GetNodePool(ctx, req)
 		if err != nil {
 			return fmt.Errorf("erro trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
 		}
-		nodePool = np
 
 		if dryRun {
-			fmt.Printf("Deleting AcceleratorPod %s", nodePool.String())
+			klog.Infof("Deleting AcceleratorPod %s", nodePool.String())
 			return nil
 		}
 
@@ -241,68 +263,44 @@ specify the cluster if the accelerator pod name is not unique across clusters
 		for _, networkConfig := range nodePool.NetworkConfig.AdditionalNodeNetworkConfigs {
 			if !strings.HasPrefix(networkConfig.Network, wellKnownPrefix) {
 				klog.V(2).Infof("Skipping network %s", networkConfig.Network)
-			}
-			reqNet := &computepb.GetNetworkRequest{
-				Project: projectID,
-				Network: networkConfig.Network,
-			}
-
-			klog.V(2).InfoS("get network %s", networkConfig.Network)
-			network, err := NetworksClient.Get(ctx, reqNet)
-			if err != nil {
-				return fmt.Errorf("getting network '%s': %w", networkConfig.Network, err)
-			}
-
-			klog.V(2).InfoS("get firewalls associated", "network", network)
-			reqFw := &computepb.GetEffectiveFirewallsNetworkRequest{
-				Project: projectID,
-				Network: networkConfig.Network,
-			}
-
-			respFw, err := NetworksClient.GetEffectiveFirewalls(ctx, reqFw)
-			if err != nil {
-				return fmt.Errorf("getting firewalls for network %s: %w", networkConfig.Network, err)
-			}
-			klog.V(2).InfoS("get firewall", "network", respFw)
-			for _, firewall := range respFw.GetFirewalls() {
-				req := &computepb.DeleteFirewallRequest{
-					Project:  projectID,
-					Firewall: firewall.GetName(),
-				}
-
-				if dryRun {
-					klog.Infof("dry-run: deleting firewall %s", firewall.GetName())
-					continue
-				}
-				op, err := FirewallsClient.Delete(ctx, req)
-				if err != nil {
-					return fmt.Errorf("Delete Firewall: %w", err)
-				}
-
-				err = op.Wait(ctx)
-				if err != nil {
-					return fmt.Errorf("Delete Firewall Wait: %w", err)
-				}
-			}
-			if dryRun {
-				klog.Infof("dry-run: deleting network %s", networkConfig.Network)
 				continue
 			}
-			// once firewalls are deleted we can delete the network
-			reqNetDel := &computepb.DeleteNetworkRequest{
-				Project: projectID,
-				Network: networkConfig.Network,
-			}
-			op, err := NetworksClient.Delete(ctx, reqNetDel)
+
+			err := deleteNetwork(ctx, networkConfig.Network)
 			if err != nil {
-				return fmt.Errorf("deleting network '%s': %w", networkConfig.Network, err)
-			}
-			err = op.Wait(ctx)
-			if err != nil {
-				return fmt.Errorf("Delete netowkr Wait: %w", err)
+				return err
 			}
 		}
 
 		return nil
 	},
+}
+
+func waitForOperation(ctx context.Context, operationLocation, operationName string) error {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	klog.V(2).Infof("Waiting for operation to complete: %s\n", operationName)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for operation %s: %w", operationName, ctx.Err())
+		case <-ticker.C:
+			o, err := ContainersClient.GetOperation(ctx, &containerpb.GetOperationRequest{
+				Name: fmt.Sprintf("projects/%s/locations/%s/operations/%s", projectID, operationLocation, operationName),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get operation %s: %w", operationName, err)
+			}
+			if o.GetStatus() == containerpb.Operation_DONE {
+				klog.V(2).Info("Operation complete!")
+				if status := o.GetError(); status != nil {
+					return fmt.Errorf("operation %s failed: code = %d, message = %s", operationName, status.GetCode(), status.GetMessage())
+				}
+				return nil
+			}
+			klog.V(2).Infof("Operation not complete yet, status: %v\n", o.GetStatus())
+		}
+	}
 }
