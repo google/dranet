@@ -29,19 +29,27 @@ import (
 	"github.com/google/dranet/pkg/cloudprovider"
 )
 
-var (
+// GPUDirectSupport represents the type of GPUDirect support for a given machine type.
+type GPUDirectSupport string
 
+const (
+	GPUDirectTCPX  GPUDirectSupport = "GPUDirect-TCPX"
+	GPUDirectTCPXO GPUDirectSupport = "GPUDirect-TCPXO"
+	GPUDirectRDMA  GPUDirectSupport = "GPUDirect-RDMA"
+)
+
+var (
 	// https://cloud.google.com/compute/docs/accelerator-optimized-machines#network-protocol
 	// machine types have a one to one mapping to a network protocol in google cloud
-	NetworkProtocolMap = map[string]string{
-		"a3-highgpu-1g":  "GPUDirect-TCPX",  // 8 GPU 4 accelerator NICs
-		"a3-highgpu-2g":  "GPUDirect-TCPX",  // "
-		"a3-highgpu-4g":  "GPUDirect-TCPX",  // "
-		"a3-highgpu-8g":  "GPUDirect-TCPX",  // "
-		"a3-edgegpu-8g":  "GPUDirect-TCPX",  // "
-		"a3-megagpu-8g":  "GPUDirect-TCPXO", // 8 GPUs 8 NICs
-		"a3-ultragpu-8g": "GPUDirect-RDMA",  // 8 GPUs 8 NICs
-		"a4-highgpu-8g":  "GPUDirect-RDMA",  // 8 GPUs 8 NICs
+	NetworkProtocolMap = map[string]GPUDirectSupport{
+		"a3-highgpu-1g":  GPUDirectTCPX,  // 8 GPU 4 accelerator NICs
+		"a3-highgpu-2g":  GPUDirectTCPX,  // "
+		"a3-highgpu-4g":  GPUDirectTCPX,  // "
+		"a3-highgpu-8g":  GPUDirectTCPX,  // "
+		"a3-edgegpu-8g":  GPUDirectTCPX,  // "
+		"a3-megagpu-8g":  GPUDirectTCPXO, // 8 GPUs 8 NICs
+		"a3-ultragpu-8g": GPUDirectRDMA,  // 8 GPUs 8 NICs
+		"a4-highgpu-8g":  GPUDirectRDMA,  // 8 GPUs 8 NICs
 	}
 	// Network Technology
 	// GPUDirect-TCPX: one VPCs for GPU NICs, one subnet per VPC 8244MTU
@@ -72,10 +80,11 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 			klog.Infof("could not get network interfaces on GCE ... retrying: %v", err)
 			return false, nil
 		}
+		protocol := NetworkProtocolMap[instanceType]
 		instance = &cloudprovider.CloudInstance{
 			Name:                instanceName,
 			Type:                instanceType,
-			AcceleratorProtocol: NetworkProtocolMap[instanceType],
+			AcceleratorProtocol: string(protocol),
 		}
 		if err = json.Unmarshal([]byte(gceInterfacesRaw), &instance.Interfaces); err != nil {
 			klog.Infof("could not get network interfaces on GCE ... retrying: %v", err)
