@@ -51,8 +51,10 @@ func main() {
 	klog.InitFlags(nil)
 	pflag.CommandLine.AddGoFlag(flag.CommandLine.Lookup("v"))
 	pflag.CommandLine.AddGoFlag(flag.CommandLine.Lookup("logtostderr"))
-	pflag.CommandLine.Set("logtostderr", "true")
-
+	err := pflag.CommandLine.Set("logtostderr", "true")
+	if err != nil {
+		klog.Fatal(err)
+	}
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		klog.Info(err)
 		os.Exit(1)

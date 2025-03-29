@@ -184,7 +184,7 @@ spec:
 ---
 `
 
-func getClusterClient(ctx context.Context, projectId, location, clusterID string) (kubernetes.Interface, error) {
+func getClusterClient(ctx context.Context, projectID, location, clusterID string) (kubernetes.Interface, error) {
 	c, err := container.NewClusterManagerClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Cluster Manager client: %v", err)
@@ -212,7 +212,7 @@ func getClusterClient(ctx context.Context, projectId, location, clusterID string
 		Contexts:   map[string]*api.Context{},  // Contexts is a map of referencable names to context configs
 	}
 
-	name := fmt.Sprintf("gke_%s_%s_%s", projectId, location, clusterID)
+	name := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterID)
 	cert, err := base64.StdEncoding.DecodeString(resp.MasterAuth.ClusterCaCertificate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode cluster CA certificate: %v", err)

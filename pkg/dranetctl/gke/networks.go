@@ -251,12 +251,12 @@ func deleteNetwork(ctx context.Context, networkName string) error {
 		}
 		op, err := FirewallsClient.Delete(ctx, req)
 		if err != nil {
-			return fmt.Errorf("Delete Firewall: %w", err)
+			return fmt.Errorf("delete Firewall: %w", err)
 		}
 
 		err = op.Wait(ctx)
 		if err != nil {
-			return fmt.Errorf("Delete Firewall Wait: %w", err)
+			return fmt.Errorf("delete Firewall Wait: %w", err)
 		}
 	}
 

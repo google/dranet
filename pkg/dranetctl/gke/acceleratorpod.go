@@ -158,9 +158,9 @@ func init() {
 
 	// TODO Placement and Nodepool Flags
 	// Mark required flags for the create command
-	acceleratorpodCreateCmd.MarkFlagRequired("machine-type")
-	acceleratorpodCreateCmd.MarkFlagRequired("node-count")
-	acceleratorpodCreateCmd.MarkFlagRequired("additional-network-interfaces")
+	_ = acceleratorpodCreateCmd.MarkFlagRequired("machine-type")
+	_ = acceleratorpodCreateCmd.MarkFlagRequired("node-count")
+	_ = acceleratorpodCreateCmd.MarkFlagRequired("additional-network-interfaces")
 }
 
 // acceleratorpodGetCmd represents the get subcommand for acceleratorpod
@@ -205,12 +205,12 @@ optionally specify the cluster if needed.`,
 				fmt.Printf("      Machine Type: %s\n", nodepool.Config.MachineType)
 				fmt.Printf("      Additional Networks: %d\n", len(nodepool.NetworkConfig.AdditionalNodeNetworkConfigs))
 				if nodepool.PlacementPolicy != nil {
-					fmt.Printf("      Placement Policy Type: %s\n", *&nodepool.PlacementPolicy.Type)
+					fmt.Printf("      Placement Policy Type: %s\n", nodepool.PlacementPolicy.Type)
 					if nodepool.PlacementPolicy.TpuTopology != "" {
-						fmt.Printf("      Placement TPU Topology: %s\n", *&nodepool.PlacementPolicy.TpuTopology)
+						fmt.Printf("      Placement TPU Topology: %s\n", nodepool.PlacementPolicy.TpuTopology)
 					}
 					if nodepool.PlacementPolicy.PolicyName != "" {
-						fmt.Printf("      Placement Policy Name: %s\n", *&nodepool.PlacementPolicy.PolicyName)
+						fmt.Printf("      Placement Policy Name: %s\n", nodepool.PlacementPolicy.PolicyName)
 					}
 				}
 				fmt.Println("      ---")
