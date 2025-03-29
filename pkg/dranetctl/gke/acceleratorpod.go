@@ -129,7 +129,7 @@ network-aware placement. This group of machines is referred to as an accelerator
 			return fmt.Errorf("failed to create node pool: %w", err)
 		}
 
-		if err := waitForOperation(ctx, op.GetLocation(), op.GetName()); err != nil {
+		if err := waitForOperation(ctx, location, op.GetName()); err != nil {
 			return fmt.Errorf("waiting for node pool creation: %w", err)
 		}
 
@@ -257,6 +257,19 @@ specify the cluster if the accelerator pod name is not unique across clusters
 		if dryRun {
 			klog.Infof("Deleting AcceleratorPod %s", nodePool.String())
 			return nil
+		}
+
+		reqNodePoolDel := &containerpb.DeleteNodePoolRequest{
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, acceleratorpodName),
+		}
+		op, err := ContainersClient.DeleteNodePool(ctx, reqNodePoolDel)
+		if err != nil {
+			return fmt.Errorf("erro trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
+		}
+
+		err = waitForOperation(ctx, location, op.Name)
+		if err != nil {
+			return fmt.Errorf("Delete Nodepool Wait: %w", err)
 		}
 
 		// Cleanup the networks if those were created by us
