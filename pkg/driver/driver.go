@@ -67,6 +67,13 @@ func podUIDIndexFunc(obj interface{}) ([]string, error) {
 	return result, nil
 }
 
+// IgnorePodsInterfaces tells the plugin to ignore the Pod network interfaces
+func IgnorePodsInterfaces() Option {
+	return func(o *NetworkDriver) {
+		o.ignorePodsInterfaces = true
+	}
+}
+
 var _ drapb.DRAPluginServer = &NetworkDriver{}
 
 type NetworkDriver struct {
@@ -78,6 +85,8 @@ type NetworkDriver struct {
 	claimAllocations cache.Indexer // claims indexed by Claim UID to run on the Kubelet/DRA hooks
 	// contains the host interfaces
 	netdb *inventory.DB
+	// options
+	ignorePodsInterfaces bool
 }
 
 type Option func(*NetworkDriver)
@@ -306,7 +315,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
 			err := nsDetachNetdev(ns, result.Device)
 			if err != nil {
-				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+				klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
 				continue
 			}
 		}
@@ -331,6 +340,18 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		select {
 		case devices := <-np.netdb.GetResources(ctx):
 			klog.V(4).Infof("Received %d devices", len(devices))
+			if np.ignorePodsInterfaces {
+				// filter in place
+				n := 0
+				for _, dev := range devices {
+					if _, ok := dev.Basic.Attributes["pod"]; !ok {
+						devices[n] = dev
+						n++
+					}
+				}
+				devices = devices[:n]
+			}
+			klog.V(4).Infof("%d devices after filter", len(devices))
 			resources := kubeletplugin.Resources{
 				Devices: devices,
 			}

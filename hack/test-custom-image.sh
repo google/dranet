@@ -1,4 +1,6 @@
-# Copyright 2024 Google LLC
+#!/bin/bash
+
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GOARCH="amd64"
+REPO_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 
-FROM golang:1.23 AS builder
-# golang envs
-ARG GOARCH="amd64"
-ARG GOOS=linux
-ENV CGO_ENABLED=0
+cd $REPO_ROOT
 
-WORKDIR /go/src/app
-COPY . .
-RUN go mod download
-RUN CGO_ENABLED=0 go build -o /go/bin/dranet ./cmd/dranet
+IMAGE="$1"
 
-FROM gcr.io/distroless/base-debian12
-COPY --from=builder --chown=root:root /go/bin/dranet /dranet
-CMD ["/dranet"]
+if [ -z "${IMAGE}" ]; then
+  echo "Error: The IMAGE environment variable is not set."
+  exit 1
+fi
+
+echo "Using IMAGE: ${IMAGE}"
+
+docker build . -t "${IMAGE}" --push
+kubectl set image ds/dranet dranet="${IMAGE}" -n kube-system
+kubectl rollout status ds/dranet -n kube-system
+kubectl rollout restart ds dranet -n kube-system
+kubectl get pods -l k8s-app=dranet -n kube-system
