@@ -23,13 +23,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime/debug"
 	"sync/atomic"
 
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
 
 	"golang.org/x/sys/unix"
 
+	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -42,10 +46,10 @@ const (
 )
 
 var (
-	hostnameOverride     string
-	kubeconfig           string
-	bindAddress          string
-	ignorePodsInterfaces bool
+	hostnameOverride string
+	kubeconfig       string
+	bindAddress      string
+	celExpression    string
 
 	ready atomic.Bool
 )
@@ -54,7 +58,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
-	flag.BoolVar(&ignorePodsInterfaces, "ignore-pod-interfaces", true, "Ignore the network interfaces associated to Pods.")
+	flag.StringVar(&celExpression, "filter", `attributes["type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1beta1.DeviceAttribute).")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: dranet [options]\n\n")
@@ -124,8 +128,25 @@ func main() {
 	signal.Notify(signalCh, os.Interrupt, unix.SIGINT)
 
 	opts := []driver.Option{}
-	if ignorePodsInterfaces {
-		opts = append(opts, driver.IgnorePodsInterfaces())
+	if celExpression != "" {
+		env, err := cel.NewEnv(
+			ext.NativeTypes(
+				reflect.ValueOf(resourcev1beta1.DeviceAttribute{}),
+			),
+			cel.Variable("attributes", cel.MapType(cel.StringType, cel.ObjectType("v1beta1.DeviceAttribute"))),
+		)
+		if err != nil {
+			klog.Fatalf("error creating CEL environment: %v", err)
+		}
+		ast, issues := env.Compile(celExpression)
+		if issues != nil && issues.Err() != nil {
+			klog.Fatalf("type-check error: %s", issues.Err())
+		}
+		prg, err := env.Program(ast)
+		if err != nil {
+			klog.Fatalf("program construction error: %s", err)
+		}
+		opts = append(opts, driver.WithFilter(prg))
 	}
 	dranet, err := driver.Start(ctx, driverName, clientset, nodeName, opts...)
 	if err != nil {

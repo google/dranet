@@ -24,10 +24,13 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/cel-go/cel"
+	"github.com/google/dranet/pkg/filter"
+	"github.com/google/dranet/pkg/inventory"
+
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/google/dranet/pkg/inventory"
 
 	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,10 +70,10 @@ func podUIDIndexFunc(obj interface{}) ([]string, error) {
 	return result, nil
 }
 
-// IgnorePodsInterfaces tells the plugin to ignore the Pod network interfaces
-func IgnorePodsInterfaces() Option {
+// WithFilter
+func WithFilter(filter cel.Program) Option {
 	return func(o *NetworkDriver) {
-		o.ignorePodsInterfaces = true
+		o.celProgram = filter
 	}
 }
 
@@ -86,7 +89,7 @@ type NetworkDriver struct {
 	// contains the host interfaces
 	netdb *inventory.DB
 	// options
-	ignorePodsInterfaces bool
+	celProgram cel.Program
 }
 
 type Option func(*NetworkDriver)
@@ -340,18 +343,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		select {
 		case devices := <-np.netdb.GetResources(ctx):
 			klog.V(4).Infof("Received %d devices", len(devices))
-			if np.ignorePodsInterfaces {
-				// filter in place
-				n := 0
-				for _, dev := range devices {
-					if _, ok := dev.Basic.Attributes["pod"]; !ok {
-						devices[n] = dev
-						n++
-					}
-				}
-				devices = devices[:n]
-			}
-			klog.V(4).Infof("%d devices after filter", len(devices))
+			devices = filter.FilterDevices(np.celProgram, devices)
 			resources := kubeletplugin.Resources{
 				Devices: devices,
 			}
