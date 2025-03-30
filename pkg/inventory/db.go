@@ -20,6 +20,7 @@ import (
 	"context"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
 	resourceapi "k8s.io/api/resource/v1beta1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
@@ -210,8 +212,8 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 		klog.V(2).Infof("normalizing iface %s name", ifName)
 		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
-	device.Basic.Attributes["kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(networkKind)}
-	device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(networkKind)}
+	device.Basic.Attributes["dra.net/name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
 		klog.Infof("Error getting link by name %v", err)
@@ -223,53 +225,53 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	// identify the namespace holding the link as the other end of a veth pair
 	netnsid := link.Attrs().NetNsID
 	if podName := db.GetPodName(netnsid); podName != "" {
-		device.Basic.Attributes["pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
+		device.Basic.Attributes["dra.net/pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
 	}
 
+	v4 := sets.Set[string]{}
+	v6 := sets.Set[string]{}
 	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
-		// TODO assume only one address by now but prefer the global ones
-		var v6found, v4found bool
 		for _, address := range ips {
-			if v4found && v6found {
-				break
-			}
 			if !address.IP.IsGlobalUnicast() {
 				continue
 			}
 
-			if address.IP.To4() == nil && !v6found {
-				device.Basic.Attributes["ipv6"] = resourceapi.DeviceAttribute{StringValue: ptr.To(address.IP.String())}
-			} else if !v4found {
-				device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: ptr.To(address.IP.String())}
+			if address.IP.To4() == nil && address.IP.To16() != nil {
+				v6.Insert(address.IP.String())
+			} else if address.IP.To4() != nil {
+				v4.Insert(address.IP.String())
 			}
 		}
-		if !v4found {
-			device.Basic.Attributes["ip"] = resourceapi.DeviceAttribute{StringValue: ptr.To(ips[0].String())}
+		if v4.Len() > 0 {
+			device.Basic.Attributes["dra.net/ipv4"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v4.UnsortedList(), ","))}
+		}
+		if v6.Len() > 0 {
+			device.Basic.Attributes["dra.net/ipv6"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v6.UnsortedList(), ","))}
 		}
 		mac := link.Attrs().HardwareAddr.String()
-		device.Basic.Attributes["mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
+		device.Basic.Attributes["dra.net/mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
 		mtu := int64(link.Attrs().MTU)
-		device.Basic.Attributes["mtu"] = resourceapi.DeviceAttribute{IntValue: &mtu}
+		device.Basic.Attributes["dra.net/mtu"] = resourceapi.DeviceAttribute{IntValue: &mtu}
 	}
 
-	device.Basic.Attributes["encapsulation"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.EncapType}
+	device.Basic.Attributes["dra.net/encapsulation"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.EncapType}
 	operState := linkAttrs.OperState.String()
-	device.Basic.Attributes["state"] = resourceapi.DeviceAttribute{StringValue: &operState}
-	device.Basic.Attributes["alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
-	device.Basic.Attributes["type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
+	device.Basic.Attributes["dra.net/state"] = resourceapi.DeviceAttribute{StringValue: &operState}
+	device.Basic.Attributes["dra.net/alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
+	device.Basic.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
 
 	isRDMA := rdmamap.IsRDmaDeviceForNetdevice(ifName)
-	device.Basic.Attributes["rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
+	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
 	// from https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/ed1c14dd4c313c7dd9fe4730a60358fbeffbfdd4/pkg/netdevice/netDeviceProvider.go#L99
 	isSRIOV := sriovTotalVFs(ifName) > 0
-	device.Basic.Attributes["sriov"] = resourceapi.DeviceAttribute{BoolValue: &isSRIOV}
+	device.Basic.Attributes["dra.net/sriov"] = resourceapi.DeviceAttribute{BoolValue: &isSRIOV}
 	if isSRIOV {
 		vfs := int64(sriovNumVFs(ifName))
-		device.Basic.Attributes["sriov_vfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
+		device.Basic.Attributes["dra.net/sriovVfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
 	}
 
 	if isVirtual(ifName, sysnetPath) {
-		device.Basic.Attributes["virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
+		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	} else {
 		addPCIAttributes(device.Basic, ifName, sysnetPath)
 	}
@@ -277,7 +279,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	mac := link.Attrs().HardwareAddr.String()
 	// this is bounded and small number O(N) is ok
 	if network := cloudNetwork(mac, db.instance); network != "" {
-		device.Basic.Attributes["cloud_network"] = resourceapi.DeviceAttribute{StringValue: &network}
+		device.Basic.Attributes["dra.net/cloudNetwork"] = resourceapi.DeviceAttribute{StringValue: &network}
 	}
 
 	return &device, nil
@@ -298,20 +300,20 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
 
-	device.Basic.Attributes["kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(rdmaKind)}
-	device.Basic.Attributes["name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
-	device.Basic.Attributes["rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
+	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(rdmaKind)}
+	device.Basic.Attributes["dra.net/name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	link, err := netlink.RdmaLinkByName(ifName)
 	if err != nil {
 		klog.Infof("Error getting link by name %v", err)
 		return nil, err
 	}
 
-	device.Basic.Attributes["firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
-	device.Basic.Attributes["nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
+	device.Basic.Attributes["dra.net/firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
+	device.Basic.Attributes["dra.net/nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
 
 	if isVirtual(ifName, sysrdmaPath) {
-		device.Basic.Attributes["virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
+		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	} else {
 		addPCIAttributes(device.Basic, ifName, sysrdmaPath)
 	}
@@ -319,21 +321,21 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 }
 
 func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path string) {
-	device.Attributes["virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(false)}
+	device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(false)}
 
 	address, err := bdfAddress(ifName, path)
 	if err == nil {
 		if address.domain != "" {
-			device.Attributes["pci_address_domain"] = resourceapi.DeviceAttribute{StringValue: &address.domain}
+			device.Attributes["dra.net/pciAddressDomain"] = resourceapi.DeviceAttribute{StringValue: &address.domain}
 		}
 		if address.bus != "" {
-			device.Attributes["pci_address_bus"] = resourceapi.DeviceAttribute{StringValue: &address.bus}
+			device.Attributes["dra.net/pciAddressBus"] = resourceapi.DeviceAttribute{StringValue: &address.bus}
 		}
 		if address.device != "" {
-			device.Attributes["pci_address_device"] = resourceapi.DeviceAttribute{StringValue: &address.device}
+			device.Attributes["dra.net/pciAddressDevice"] = resourceapi.DeviceAttribute{StringValue: &address.device}
 		}
 		if address.function != "" {
-			device.Attributes["pci_address_function"] = resourceapi.DeviceAttribute{StringValue: &address.function}
+			device.Attributes["dra.net/pciAddressFunction"] = resourceapi.DeviceAttribute{StringValue: &address.function}
 		}
 	} else {
 		klog.Infof("could not get pci address : %v", err)
@@ -342,13 +344,13 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 	entry, err := ids(ifName, path)
 	if err == nil {
 		if entry.Vendor != "" {
-			device.Attributes["pci_vendor"] = resourceapi.DeviceAttribute{StringValue: &entry.Vendor}
+			device.Attributes["dra.net/pciVendor"] = resourceapi.DeviceAttribute{StringValue: &entry.Vendor}
 		}
 		if entry.Device != "" {
-			device.Attributes["pci_device"] = resourceapi.DeviceAttribute{StringValue: &entry.Device}
+			device.Attributes["dra.net/pciDevice"] = resourceapi.DeviceAttribute{StringValue: &entry.Device}
 		}
 		if entry.Subsystem != "" {
-			device.Attributes["pci_subsystem"] = resourceapi.DeviceAttribute{StringValue: &entry.Subsystem}
+			device.Attributes["dra.net/pciSubsystem"] = resourceapi.DeviceAttribute{StringValue: &entry.Subsystem}
 		}
 	} else {
 		klog.Infof("could not get pci vendor information : %v", err)
@@ -356,6 +358,6 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 
 	numa, err := numaNode(ifName, path)
 	if err == nil {
-		device.Attributes["numa_node"] = resourceapi.DeviceAttribute{IntValue: &numa}
+		device.Attributes["dra.net/numaNode"] = resourceapi.DeviceAttribute{IntValue: &numa}
 	}
 }
