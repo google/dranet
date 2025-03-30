@@ -285,7 +285,7 @@ func deleteNetwork(ctx context.Context, networkName string) error {
 		}
 		err = op.Wait(ctx)
 		if err != nil {
-			return fmt.Errorf("Delete Subnet Wait: %w", err)
+			return fmt.Errorf("delete Subnet Wait: %w", err)
 		}
 	}
 
@@ -304,7 +304,7 @@ func deleteNetwork(ctx context.Context, networkName string) error {
 	}
 	err = op.Wait(ctx)
 	if err != nil {
-		return fmt.Errorf("Delete network Wait: %w", err)
+		return fmt.Errorf("delete network Wait: %w", err)
 	}
 	return nil
 }

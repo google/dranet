@@ -61,7 +61,7 @@ network-aware placement. This group of machines is referred to as an accelerator
 		ctx := cmd.Context()
 		acceleratorpodName := args[0]
 		if clusterName == "" {
-			return fmt.Errorf("Cluster name not explicitly provided.")
+			return fmt.Errorf("cluster name not explicitly provided")
 		}
 		// Try to get the nodepool from the cluster
 		if location == "-" {
@@ -234,7 +234,7 @@ specify the cluster if the accelerator pod name is not unique across clusters
 		ctx := cmd.Context()
 		acceleratorpodName := args[0]
 		if clusterName == "" {
-			return fmt.Errorf("Cluster name not explicitly provided.")
+			return fmt.Errorf("cluster name not explicitly provided")
 		}
 		// Try to get the nodepool from the cluster
 		if location == "-" {
@@ -251,7 +251,7 @@ specify the cluster if the accelerator pod name is not unique across clusters
 
 		nodePool, err := ContainersClient.GetNodePool(ctx, req)
 		if err != nil {
-			return fmt.Errorf("erro trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
+			return fmt.Errorf("error trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
 		}
 
 		if dryRun {
@@ -264,12 +264,12 @@ specify the cluster if the accelerator pod name is not unique across clusters
 		}
 		op, err := ContainersClient.DeleteNodePool(ctx, reqNodePoolDel)
 		if err != nil {
-			return fmt.Errorf("erro trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
+			return fmt.Errorf("error trying to get AcceleratorPod %s: %w", acceleratorpodName, err)
 		}
 
 		err = waitForOperation(ctx, location, op.Name)
 		if err != nil {
-			return fmt.Errorf("Delete Nodepool Wait: %w", err)
+			return fmt.Errorf("delete Nodepool Wait: %w", err)
 		}
 
 		// Cleanup the networks if those were created by us
