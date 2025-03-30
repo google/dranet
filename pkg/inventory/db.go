@@ -80,6 +80,7 @@ func (db *DB) AddPodNetns(pod string, netnsPath string) {
 		klog.Infof("fail to get pod %s network namespace %s handle: %v", pod, netnsPath, err)
 		return
 	}
+	defer ns.Close()
 	id, err := netlink.GetNetNsIdByFd(int(ns))
 	if err != nil {
 		klog.Infof("fail to get pod %s network namespace %s netnsid: %v", pod, netnsPath, err)

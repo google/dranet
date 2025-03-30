@@ -46,6 +46,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	if err != nil {
 		return err
 	}
+	defer containerNs.Close()
 
 	attrs := hostDev.Attrs()
 	// Store the original name
@@ -93,6 +94,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	if err != nil {
 		return err
 	}
+	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(attrs.Name)
 	if err != nil {
@@ -121,12 +123,14 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
 	}
+	defer containerNs.Close()
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
 	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
+	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(devName)
 	if err != nil {
