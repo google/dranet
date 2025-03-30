@@ -44,12 +44,23 @@ var (
 	reSubnets = regexp.MustCompile(`/regions/([^/]+)/subnetworks/([^/]+)$`)
 )
 
+// getRegion get the region part from a location
 func getRegion(locationStr string) string {
 	parts := strings.Split(locationStr, "-")
 	if len(parts) == 3 {
 		return strings.Join(parts[:2], "-")
 	}
 	return locationStr
+}
+
+// obtainHexHash to get an unique string
+func obtainHexHash(input string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(input))
+	hashBytes := hasher.Sum(nil)
+	hexHash := hex.EncodeToString(hashBytes)
+
+	return hexHash[:16]
 }
 
 func createAcceleratorNetworks(ctx context.Context, acceleratorpodName string, networkInterfaces int) ([]*containerpb.AdditionalNodeNetworkConfig, error) {
@@ -204,16 +215,6 @@ func createHPCAcceleratorNetwork(ctx context.Context, acceleratorpodName string,
 
 	}
 	return additionalNetworkConfigs, nil
-}
-
-// obtainHexHash to get an unique string
-func obtainHexHash(input string) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(input))
-	hashBytes := hasher.Sum(nil)
-	hexHash := hex.EncodeToString(hashBytes)
-
-	return hexHash[:16]
 }
 
 func deleteNetwork(ctx context.Context, networkName string) error {
