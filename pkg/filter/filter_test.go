@@ -115,6 +115,35 @@ func Test_filterDevices(t *testing.T) {
 			expectedLength: 0,
 		},
 		{
+			name:       "not virtual",
+			celProgram: mustCompileCEL(t, `attributes["virtual"].BoolValue`),
+			devices: []resourcev1beta1.Device{
+				{
+					Name: "dev1",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"kind":    {StringValue: ptr.To("network")},
+							"name":    {StringValue: ptr.To("eth0")},
+							"type":    {StringValue: ptr.To("veth")},
+							"virtual": {BoolValue: ptr.To(true)},
+						},
+					},
+				},
+				{
+					Name: "dev2",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"kind":    {StringValue: ptr.To("rdma")},
+							"name":    {StringValue: ptr.To("eth1")},
+							"type":    {StringValue: ptr.To("veth")},
+							"virtual": {BoolValue: ptr.To(true)},
+						},
+					},
+				},
+			},
+			expectedLength: 2,
+		},
+		{
 			name:           "empty devices",
 			celProgram:     mustCompileCEL(t, `attributes["kind"].StringValue == "network"`),
 			devices:        []resourcev1beta1.Device{},
