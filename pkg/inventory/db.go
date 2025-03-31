@@ -52,8 +52,9 @@ var (
 type DB struct {
 	instance *cloudprovider.CloudInstance
 
-	mu       sync.RWMutex
-	podStore map[int]string // key: netnsid path value: Pod namespace/name
+	mu         sync.RWMutex
+	podStore   map[int]string    // key: netnsid path value: Pod namespace/name
+	podNsStore map[string]string // key: Pod namespace/name path value: network namespace path
 
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
@@ -68,6 +69,7 @@ func New() *DB {
 	return &DB{
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
 		podStore:      map[int]string{},
+		podNsStore:    map[string]string{}, // cache the netns path https://github.com/google/dranet/issues/33
 		notifications: make(chan []resourceapi.Device),
 	}
 }
@@ -75,6 +77,8 @@ func New() *DB {
 func (db *DB) AddPodNetns(pod string, netnsPath string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	db.podNsStore[pod] = netnsPath
 	ns, err := netns.GetFromPath(netnsPath)
 	if err != nil {
 		klog.Infof("fail to get pod %s network namespace %s handle: %v", pod, netnsPath, err)
@@ -92,6 +96,7 @@ func (db *DB) AddPodNetns(pod string, netnsPath string) {
 func (db *DB) RemovePodNetns(pod string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	delete(db.podNsStore, pod)
 	for k, v := range db.podStore {
 		if v == pod {
 			delete(db.podStore, k)
@@ -104,6 +109,12 @@ func (db *DB) GetPodName(netnsid int) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.podStore[netnsid]
+}
+
+func (db *DB) GetPodNetNs(pod string) string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.podNsStore[pod]
 }
 
 func (db *DB) Run(ctx context.Context) error {
