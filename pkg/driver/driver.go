@@ -24,15 +24,15 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/cel-go/cel"
+	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
 	"github.com/google/dranet/pkg/inventory"
+
+	"github.com/google/cel-go/cel"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/google/dranet/pkg/apis"
-	"github.com/google/dranet/pkg/inventory"
 
 	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
