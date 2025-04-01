@@ -240,6 +240,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			}
 
 			// Process the configurations of the ResourceClaim
+			var netconf *apis.NetworkConfig
 			for _, config := range claim.Status.Allocation.Devices.Config {
 				if config.Opaque == nil {
 					continue
@@ -247,27 +248,39 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
 					continue
 				}
-				klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
-				// TODO get config options here, it can add ips or commands
-				// to add routes, run dhcp, rename the interface ... whatever
-			}
-
-			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
-			// TODO signal this via DRA
-			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
-				err := nsAttachRdmadev(rdmaDev, ns)
+				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
+				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
 				if err != nil {
-					klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
-					continue
+					return err
+				}
+				if netconf != nil {
+					klog.V(4).Infof("Configuration %#v", netconf)
+					break
 				}
 			}
 
-			// TODO config options to rename the device and pass parameters
-			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			err := nsAttachNetdev(result.Device, ns, result.Device)
-			if err != nil {
-				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				return err
+			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
+			if netconf == nil || netconf.Mode == apis.ModeDedicated {
+				// TODO signal this via DRA
+				if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+					err := nsAttachRdmadev(rdmaDev, ns)
+					if err != nil {
+						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+						continue
+					}
+				}
+
+				// TODO config options to rename the device and pass parameters
+				// use https://github.com/opencontainers/runtime-spec/pull/1271
+				err := nsAttachNetdev(result.Device, ns, result.Device)
+				if err != nil {
+					klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+					return err
+				}
+			} else if netconf.Mode == apis.ModeMacvlan {
+			} else if netconf.Mode == apis.ModeMacvtap {
+			} else if netconf.Mode == apis.ModeIPvlan {
+
 			}
 		}
 	}
@@ -306,22 +319,32 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 				continue
 			}
 
+			// Process the configurations of the ResourceClaim
+			var netconf *apis.NetworkConfig
 			for _, config := range claim.Status.Allocation.Devices.Config {
 				if config.Opaque == nil {
 					continue
 				}
-				klog.V(4).Infof("podStopHook Configuration %s", string(config.Opaque.Parameters.String()))
-				// TODO get config options here, it can add ips or commands
-				// to add routes, run dhcp, rename the interface ... whatever
+				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
+					continue
+				}
+				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
+				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
+				if err != nil {
+					return err
+				}
+				if netconf != nil {
+					klog.V(4).Infof("Configuration %#v", netconf)
+					break
+				}
 			}
-
 			klog.V(4).Infof("podStopHook Device %s", result.Device)
-			// TODO config options to rename the device and pass parameters
-			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			err := nsDetachNetdev(ns, result.Device)
-			if err != nil {
-				klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				continue
+			if netconf == nil || netconf.Mode == apis.ModeDedicated {
+				err := nsDetachNetdev(ns, result.Device)
+				if err != nil {
+					klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+					continue
+				}
 			}
 		}
 	}
@@ -330,6 +353,8 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RemovePodSandbox pod %s/%s: ips=%v", pod.GetNamespace(), pod.GetName(), pod.GetIps())
+	defer np.netdb.RemovePodNetns(podKey(pod))
+
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
 	if ns == "" {
@@ -428,11 +453,10 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 				len(config.Requests) > 0 && !slices.Contains(config.Requests, requestName) {
 				continue
 			}
-			netconf, err := apis.ValidateConfig(&config.Opaque.Parameters)
+			_, err := apis.ValidateConfig(&config.Opaque.Parameters)
 			if err != nil {
 				return nil, err
 			}
-			klog.V(4).Infof("podStartHook Configuration %#v", netconf)
 		}
 		device := drapb.Device{
 			PoolName:   result.Pool,

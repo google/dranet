@@ -19,30 +19,126 @@ package driver
 import (
 	"fmt"
 
+	"github.com/google/dranet/pkg/apis"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
 
-func addMacVlan(containerNsPAth string, devName string) error {
+var (
+	macvlanModeMap = map[apis.MacvlanMode]netlink.MacvlanMode{
+		MacvlanModeBridge:  netlink.MACVLAN_MODE_BRIDGE,
+		MacvlanModePrivate: netlink.MACVLAN_MODE_PRIVATE,
+		MacvlanModeVepa:    netlink.MACVLAN_MODE_VEPA,
+	}
+
+	macvtapModeMap = map[apis.MacvtapMode]netlink.MacvtapMode{
+		MacvlanModeBridge:  netlink.MACVLAN_MODE_BRIDGE,
+		MacvlanModePrivate: netlink.MACVLAN_MODE_PRIVATE,
+		MacvlanModeVepa:    netlink.MACVLAN_MODE_VEPA,
+	}
+)
+
+func addMacVlan(containerNsPAth string, devName string, cfg apis.NetworkConfig) error {
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
 	}
+	defer containerNs.Close()
+
 	parentLink, err := netlink.LinkByName(devName)
 	if err != nil {
 		return fmt.Errorf("could not find parent interface %s : %w", devName, err)
 	}
+	newName := cfg.Name
+	if newName == "" {
+		newName = devName
+	}
+
+	mode, ok := macvlanModeMap[cfg.Macvlan.Mode]
+	if !ok {
+		return fmt.Errorf("unknown mode")
+	}
+
 	macvlan := &netlink.Macvlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:        "knet-" + devName,
+			Name:        newName,
 			ParentIndex: parentLink.Attrs().Index,
 			NetNsID:     int(containerNs),
 		},
-		Mode: netlink.MACVLAN_MODE_BRIDGE,
+		Mode: mode,
 	}
 	if err := netlink.LinkAdd(macvlan); err != nil {
 		// If a user creates a macvlan and ipvlan on same parent, only one slave iface can be active at a time.
 		return fmt.Errorf("failed to create the %s macvlan interface: %v", macvlan.Name, err)
+	}
+
+	return nil
+}
+
+func addMacVtap(containerNsPAth string, devName string, cfg apis.NetworkConfig) error {
+	containerNs, err := netns.GetFromPath(containerNsPAth)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
+	}
+	defer containerNs.Close()
+
+	parentLink, err := netlink.LinkByName(devName)
+	if err != nil {
+		return fmt.Errorf("could not find parent interface %s : %w", devName, err)
+	}
+
+	newName := cfg.Name
+	if newName == "" {
+		newName = devName
+	}
+
+	mode, ok := macvlanModeMap[cfg.Macvlan.Mode]
+	if !ok {
+		return fmt.Errorf("unknown mode")
+	}
+
+	macvtap := &netlink.Macvtap{
+		Macvlan: netlink.Macvlan{
+			LinkAttrs: netlink.LinkAttrs{
+				Name:        "dranet-" + devName,
+				ParentIndex: parentLink.Attrs().Index,
+				NetNsID:     int(containerNs),
+			},
+			Mode: mode,
+		},
+	}
+	if err := netlink.LinkAdd(macvtap); err != nil {
+		// If a user creates a macvlan and ipvlan on same parent, only one slave iface can be active at a time.
+		return fmt.Errorf("failed to create the %s macvtap interface: %v", macvtap.Name, err)
+	}
+
+	return nil
+}
+
+func addIPVlan(containerNsPAth string, devName string, cfg apis.NetworkConfig) error {
+	containerNs, err := netns.GetFromPath(containerNsPAth)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
+	}
+	defer containerNs.Close()
+
+	parentLink, err := netlink.LinkByName(devName)
+	if err != nil {
+		return fmt.Errorf("could not find parent interface %s : %w", devName, err)
+	}
+
+	ipvlan := &netlink.IPVlan{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        "dranet-" + devName,
+			ParentIndex: parentLink.Attrs().Index,
+			NetNsID:     int(containerNs),
+		},
+		Mode: mode,
+	}
+
+	if err := netlink.LinkAdd(ipvlan); err != nil {
+		// If a user creates a macvlan and ipvlan on same parent, only one slave iface can be active at a time.
+		return fmt.Errorf("failed to create the %s ipvlan interface: %v", ipvlan.Name, err)
 	}
 
 	return nil

@@ -18,13 +18,13 @@ package apis
 
 // TODO Generate code and keep in sync golang types on schema
 type NetworkConfig struct {
-	Name    string         `json:"name"`
+	Name    string         `json:"name"` // new name inside the namespace
 	IPs     []string       `json:"ips"`
 	Routes  []Route        `json:"routes"`
 	MTU     int            `json:"mtu"`
 	Mode    Mode           `json:"mode"`
-	VLAN    *VLANConfig    `json:"vlan,omitempty"`
 	Macvlan *MacvlanConfig `json:"macvlan,omitempty"`
+	Macvtap *MacvlanConfig `json:"macvtap,omitempty"`
 	IPvlan  *IPvlanConfig  `json:"ipvlan,omitempty"`
 }
 
@@ -39,15 +39,11 @@ type Mode string
 
 // Enumerated Mode values.
 const (
-	ModeVLAN    Mode = "vlan"
-	ModeMacvlan Mode = "macvlan"
-	ModeIPvlan  Mode = "ipvlan"
+	ModeMacvlan   Mode = "macvlan"
+	ModeMacvtap   Mode = "macvtap"
+	ModeIPvlan    Mode = "ipvlan"
+	ModeDedicated Mode = "dedicated"
 )
-
-// VLANConfig represents the VLAN configuration.
-type VLANConfig struct {
-	VLANID int `json:"vlanId"`
-}
 
 // MacvlanConfig represents the Macvlan configuration.
 type MacvlanConfig struct {

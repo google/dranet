@@ -41,8 +41,8 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 	}
 
 	switch config.Mode {
-	case ModeVLAN:
-		if config.VLAN == nil {
+	case ModeMacvtap:
+		if config.Macvtap == nil {
 			return nil, fmt.Errorf("vlan config is missing")
 		}
 	case ModeMacvlan:
@@ -54,7 +54,7 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 			errorsList = append(errorsList, fmt.Errorf("ipvlan config is missing"))
 		}
 	default:
-		// No mode specified
+		// No mode specified or ModeDedicated
 	}
 
 	for _, ip := range config.IPs {
