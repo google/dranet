@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GOARCH="amd64"
+# setup cross-compile env
+FROM --platform=$BUILDPLATFORM golang:1.24 AS builder
+ARG TARGETARCH
+ARG GOARCH=${TARGETARCH} CGO_ENABLED=0
 
-FROM golang:1.24 AS builder
-# golang envs
-ARG GOARCH="amd64"
-ARG GOOS=linux
-ENV CGO_ENABLED=0
-
+# cache go modules
 WORKDIR /go/src/app
-COPY . .
+COPY go.mod go.sum .
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o /go/bin/dranet ./cmd/dranet
 
+# build
+COPY . .
+RUN go build -o /go/bin/dranet ./cmd/dranet
+
+# copy binary onto base image
 FROM gcr.io/distroless/base-debian12
 COPY --from=builder --chown=root:root /go/bin/dranet /dranet
 CMD ["/dranet"]
