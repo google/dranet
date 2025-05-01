@@ -3,7 +3,7 @@ module github.com/google/dranet
 go 1.24.0
 
 require (
-	cloud.google.com/go/compute v1.36.0
+	cloud.google.com/go/compute v1.37.0
 	cloud.google.com/go/compute/metadata v0.6.0
 	cloud.google.com/go/container v1.42.3
 	github.com/Mellanox/rdmamap v1.1.0
@@ -82,7 +82,7 @@ require (
 	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto v0.0.0-20250324211829-b45e905df463 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250324211829-b45e905df463 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250414145226-207652e42e2e // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e // indirect
 	google.golang.org/grpc v1.72.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
