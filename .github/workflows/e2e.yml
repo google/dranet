@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.24"
   K8S_VERSION: "v1.32.0"
-  KIND_VERSION: "v0.25.0"
+  KIND_VERSION: "v0.27.0"
   IMAGE_NAME: ghcr.io/google/dranet
   KIND_CLUSTER_NAME: kind
 
@@ -149,7 +149,7 @@ jobs:
     - name: Export logs
       if: always()
       run: |
-        /usr/local/bin/kind export logs --name ${KIND_CLUSTER_NAME} --loglevel=debug ./_artifacts/logs
+        /usr/local/bin/kind export logs --name ${KIND_CLUSTER_NAME} ./_artifacts/logs
 
     - name: Upload logs
       if: always()
