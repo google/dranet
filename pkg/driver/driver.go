@@ -32,15 +32,14 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
 
-	resourcev1beta1 "k8s.io/api/resource/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
+	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
-	drapb "k8s.io/kubelet/pkg/apis/dra/v1beta1"
 )
 
 const (
@@ -55,7 +54,7 @@ const (
 
 // podUIDIndexFunc is a default index function that indexes based on an pod UID
 func podUIDIndexFunc(obj interface{}) ([]string, error) {
-	claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+	claim, ok := obj.(*resourceapi.ResourceClaim)
 	if !ok {
 		return []string{}, nil
 	}
@@ -77,12 +76,11 @@ func WithFilter(filter cel.Program) Option {
 	}
 }
 
-var _ drapb.DRAPluginServer = &NetworkDriver{}
-
 type NetworkDriver struct {
 	driverName string
+	nodeName   string
 	kubeClient kubernetes.Interface
-	draPlugin  kubeletplugin.DRAPlugin
+	draPlugin  *kubeletplugin.Helper
 	nriPlugin  stub.Stub
 
 	claimAllocations cache.Indexer // claims indexed by Claim UID to run on the Kubelet/DRA hooks
@@ -103,6 +101,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 
 	plugin := &NetworkDriver{
 		driverName:       driverName,
+		nodeName:         nodeName,
 		kubeClient:       kubeClient,
 		claimAllocations: store,
 	}
@@ -111,24 +110,18 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		o(plugin)
 	}
 
-	// register the DRA driver
-	pluginRegistrationPath := filepath.Join(kubeletPluginRegistryPath, driverName+".sock")
 	driverPluginPath := filepath.Join(kubeletPluginPath, driverName)
 	err := os.MkdirAll(driverPluginPath, 0750)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin path %s: %v", driverPluginPath, err)
 	}
-	driverPluginSocketPath := filepath.Join(driverPluginPath, "/plugin.sock")
 
 	kubeletOpts := []kubeletplugin.Option{
 		kubeletplugin.DriverName(driverName),
 		kubeletplugin.NodeName(nodeName),
 		kubeletplugin.KubeClient(kubeClient),
-		kubeletplugin.RegistrarSocketPath(pluginRegistrationPath),
-		kubeletplugin.PluginSocketPath(driverPluginSocketPath),
-		kubeletplugin.KubeletPluginSocketPath(driverPluginSocketPath),
 	}
-	d, err := kubeletplugin.Start(ctx, []any{plugin}, kubeletOpts...)
+	d, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("start kubelet plugin: %w", err)
 	}
@@ -224,7 +217,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 	// Process the configurations of the ResourceClaim
 	for _, obj := range objs {
-		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
 			continue
 		}
@@ -290,7 +283,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	}
 	// Process the configurations of the ResourceClaim
 	for _, obj := range objs {
-		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
 			continue
 		}
@@ -344,8 +337,16 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		case devices := <-np.netdb.GetResources(ctx):
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
-			resources := kubeletplugin.Resources{
-				Devices: devices,
+			resources := resourceslice.DriverResources{
+				Pools: map[string]resourceslice.Pool{
+					np.nodeName: {
+						Slices: []resourceslice.Slice{
+							{
+								Devices: devices,
+							},
+						},
+					},
+				},
 			}
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
@@ -360,54 +361,28 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	}
 }
 
-// NodePrepareResources filter the Claim requested for this driver
-func (np *NetworkDriver) NodePrepareResources(ctx context.Context, request *drapb.NodePrepareResourcesRequest) (*drapb.NodePrepareResourcesResponse, error) {
-	if request == nil {
+func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
+	klog.V(2).Infof("PrepareResourceClaims is called: number of claims: %d", len(claims))
+	if len(claims) == 0 {
 		return nil, nil
 	}
-	resp := &drapb.NodePrepareResourcesResponse{
-		Claims: make(map[string]*drapb.NodePrepareResourceResponse),
-	}
+	result := make(map[types.UID]kubeletplugin.PrepareResult)
 
-	for _, claimReq := range request.GetClaims() {
-		klog.V(2).Infof("NodePrepareResources: Claim Request %s/%s", claimReq.Namespace, claimReq.Name)
-		devices, err := np.nodePrepareResource(ctx, claimReq)
-		if err != nil {
-			resp.Claims[claimReq.UID] = &drapb.NodePrepareResourceResponse{
-				Error: err.Error(),
-			}
-		} else {
-			r := &drapb.NodePrepareResourceResponse{}
-			for _, device := range devices {
-				pbDevice := &drapb.Device{
-					PoolName:   device.PoolName,
-					DeviceName: device.DeviceName,
-				}
-				r.Devices = append(r.Devices, pbDevice)
-			}
-			resp.Claims[claimReq.UID] = r
-		}
+	for _, claim := range claims {
+		klog.V(2).Infof("NodePrepareResources: Claim Request %s/%s", claim.Namespace, claim.Name)
+		result[claim.UID] = np.prepareResourceClaim(ctx, claim)
 	}
-	return resp, nil
+	return result, nil
 }
 
 // TODO define better what is passed at the podStartHook
 // Filter out the allocations not required for this Pod
-func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drapb.Claim) ([]drapb.Device, error) {
-	// The plugin must retrieve the claim itself to get it in the version that it understands.
-	claim, err := np.kubeClient.ResourceV1beta1().ResourceClaims(claimReq.Namespace).Get(ctx, claimReq.Name, metav1.GetOptions{})
+func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+	err := np.claimAllocations.Add(claim)
 	if err != nil {
-		return nil, fmt.Errorf("retrieve claim %s/%s: %w", claimReq.Namespace, claimReq.Name, err)
-	}
-	if claim.Status.Allocation == nil {
-		return nil, fmt.Errorf("claim %s/%s not allocated", claimReq.Namespace, claimReq.Name)
-	}
-	if claim.UID != types.UID(claim.UID) {
-		return nil, fmt.Errorf("claim %s/%s got replaced", claimReq.Namespace, claimReq.Name)
-	}
-	err = np.claimAllocations.Add(claim)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add claim %s/%s to local cache: %w", claimReq.Namespace, claimReq.Name, err)
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("failed to add claim %s to local cache:: %w", claim.UID, err),
+		}
 	}
 
 	for _, reserved := range claim.Status.ReservedFor {
@@ -417,7 +392,7 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 		}
 	}
 
-	var devices []drapb.Device
+	var devices []kubeletplugin.Device
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		requestName := result.Request
 		for _, config := range claim.Status.Allocation.Devices.Config {
@@ -427,54 +402,51 @@ func (np *NetworkDriver) nodePrepareResource(ctx context.Context, claimReq *drap
 				continue
 			}
 		}
-		device := drapb.Device{
+		device := kubeletplugin.Device{
+			Requests:   []string{result.Request},
 			PoolName:   result.Pool,
 			DeviceName: result.Device,
 		}
 		devices = append(devices, device)
 	}
 
-	return devices, nil
+	return kubeletplugin.PrepareResult{Devices: devices}
 }
 
-func (np *NetworkDriver) NodeUnprepareResources(ctx context.Context, request *drapb.NodeUnprepareResourcesRequest) (*drapb.NodeUnprepareResourcesResponse, error) {
-	if request == nil {
+func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
+	klog.V(2).Infof("UnprepareResourceClaims is called: number of claims: %d", len(claims))
+	if len(claims) == 0 {
 		return nil, nil
 	}
-	resp := &drapb.NodeUnprepareResourcesResponse{
-		Claims: make(map[string]*drapb.NodeUnprepareResourceResponse),
-	}
 
-	for _, claimReq := range request.Claims {
-		err := np.nodeUnprepareResource(ctx, claimReq)
+	result := make(map[types.UID]error)
+
+	for _, claim := range claims {
+		err := np.unprepareResourceClaim(ctx, claim)
+		result[claim.UID] = err
 		if err != nil {
-			klog.Infof("error unpreparing ressources for claim %s/%s : %v", claimReq.Namespace, claimReq.Name, err)
-			resp.Claims[claimReq.UID] = &drapb.NodeUnprepareResourceResponse{
-				Error: err.Error(),
-			}
-		} else {
-			resp.Claims[claimReq.UID] = &drapb.NodeUnprepareResourceResponse{}
+			klog.Infof("error unpreparing ressources for claim %s/%s : %v", claim.Namespace, claim.Name, err)
 		}
 	}
-	return resp, nil
+	return result, nil
 }
 
-func (np *NetworkDriver) nodeUnprepareResource(ctx context.Context, claimReq *drapb.Claim) error {
-	objs, err := np.claimAllocations.ByIndex(cache.NamespaceIndex, fmt.Sprintf("%s/%s", claimReq.Namespace, claimReq.Name))
+func (np *NetworkDriver) unprepareResourceClaim(_ context.Context, claim kubeletplugin.NamespacedObject) error {
+	objs, err := np.claimAllocations.ByIndex(cache.NamespaceIndex, fmt.Sprintf("%s/%s", claim.Namespace, claim.Name))
 	if err != nil || len(objs) == 0 {
-		klog.Infof("Claim %s/%s does not have an associated cached ResourceClaim: %v", claimReq.Namespace, claimReq.Name, err)
+		klog.Infof("Claim %s/%s does not have an associated cached ResourceClaim: %v", claim.Namespace, claim.Name, err)
 		return nil
 	}
 
 	for _, obj := range objs {
-		claim, ok := obj.(*resourcev1beta1.ResourceClaim)
+		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
 			continue
 		}
 		defer func() {
 			err := np.claimAllocations.Delete(obj)
 			if err != nil {
-				klog.Infof("Claim %s/%s can not be deleted from cache: %v", claimReq.Namespace, claimReq.Name, err)
+				klog.Infof("Claim %s/%s can not be deleted from cache: %v", claim.Namespace, claim.Name, err)
 			}
 		}()
 
@@ -495,7 +467,7 @@ func (np *NetworkDriver) nodeUnprepareResource(ctx context.Context, claimReq *dr
 				// TODO get config options here, it can add ips or commands
 				// to add routes, run dhcp, rename the interface ... whatever
 			}
-			klog.Infof("nodeUnprepareResource claim %s/%s with allocation result %#v", claimReq.Namespace, claimReq.Name, result)
+			klog.Infof("nodeUnprepareResource claim %s/%s with allocation result %#v", claim.Namespace, claim.Name, result)
 
 		}
 	}
