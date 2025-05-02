@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	cloud.google.com/go/compute v1.37.0
 	cloud.google.com/go/compute/metadata v0.6.0
-	cloud.google.com/go/container v1.42.3
+	cloud.google.com/go/container v1.42.4
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/containerd/nri v0.9.0
 	github.com/google/cel-go v0.24.1

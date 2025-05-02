@@ -10,8 +10,8 @@ cloud.google.com/go/compute v1.37.0 h1:XxtZlXYkZXub3LNaLu90TTemcFqIU1yZ4E4q9VlR3
 cloud.google.com/go/compute v1.37.0/go.mod h1:AsK4VqrSyXBo4SMbRtfAO1VfaMjUEjEwv1UB/AwVp5Q=
 cloud.google.com/go/compute/metadata v0.6.0 h1:A6hENjEsCDtC1k8byVsgwvVcioamEHvZ4j01OwKxG9I=
 cloud.google.com/go/compute/metadata v0.6.0/go.mod h1:FjyFAW1MW0C203CEOMDTu3Dk1FlqW3Rga40jzHL4hfg=
-cloud.google.com/go/container v1.42.3 h1:i+T/AwNLqTICxgTXJEOJ4IXUtYesehGhC7IGqtytbZ0=
-cloud.google.com/go/container v1.42.3/go.mod h1:8ZT9RBJXjWXqRMM/sEW8dxolZUofxKJUaO9mMXSkDz0=
+cloud.google.com/go/container v1.42.4 h1:N8I+GiImhrSMUcKSOYTd8D6wBWyWSgPa4IJkSdlR2jk=
+cloud.google.com/go/container v1.42.4/go.mod h1:wf9lKc3ayWVbbV/IxKIDzT7E+1KQgzkzdxEJpj1pebE=
 github.com/Mellanox/rdmamap v1.1.0 h1:A/W1wAXw+6vm58f3VklrIylgV+eDJlPVIMaIKuxgUT4=
 github.com/Mellanox/rdmamap v1.1.0/go.mod h1:fN+/V9lf10ABnDCwTaXRjeeWijLt2iVLETnK+sx/LY8=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
