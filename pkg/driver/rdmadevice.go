@@ -21,12 +21,39 @@ import (
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"k8s.io/klog/v2"
+)
+
+const (
+	// rdmaNetnsModeShared and rdmaNetnsModeExclusive define the RDMA subsystem
+	// network namespace mode. An RDMA device can only be assigned to a network
+	// namespace when the RDMA subsystem is set to an "exclusive" network
+	// namespace mode. When the subsystem is set to "shared" mode, an attempt to
+	// assign an RDMA device to a network namespace will result in failure.
+	// Additionally, "If there are active network namespaces and if one or more
+	// RDMA devices exist, changing mode from shared to exclusive returns error
+	// code EBUSY."
+	//
+	// Ref. https://man7.org/linux/man-pages/man8/rdma-system.8.html
+	rdmaNetnsModeShared    = "shared"
+	rdmaNetnsModeExclusive = "exclusive"
 )
 
 // Based on existing RDMA CNI plugin
 // https://github.com/k8snetworkplumbingwg/rdma-cni
 
 func nsAttachRdmadev(hostIfName string, containerNsPAth string) error {
+	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
+	if err != nil {
+		return fmt.Errorf("failed to determine the RDMA subsystem's network namespace mode: %w", err)
+	}
+	if rdmaNetnsMode == rdmaNetnsModeShared {
+		// TODO: Potentially move this check to the function invokers side for
+		// improved visiblity and expectation of what this function does.
+		klog.Info("Skipping setting network namespace for RDMA device since RDMA sybsystem is currently configured for shared mode.")
+		return nil
+	}
+
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, hostIfName, err)
