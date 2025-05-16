@@ -17,6 +17,7 @@ limitations under the License.
 package driver
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/vishvananda/netlink"
@@ -27,7 +28,8 @@ import (
 
 func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) error {
 	hostDev, err := netlink.LinkByName(hostIfName)
-	if err != nil {
+	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
 		return err
 	}
 
@@ -38,7 +40,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 
 	// get the existing IP addresses
 	addresses, err := netlink.AddrList(hostDev, netlink.FAMILY_ALL)
-	if err != nil {
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
 		return fmt.Errorf("fail to get ip addresses: %w", err)
 	}
 
@@ -84,7 +86,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	req.AddData(attr)
 
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
-	if err != nil {
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
 		return err
 	}
 
@@ -97,7 +99,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(attrs.Name)
-	if err != nil {
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
 		return fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
 	}
 
