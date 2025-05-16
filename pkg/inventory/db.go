@@ -302,7 +302,7 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 	}
 
 	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(rdmaKind)}
-	device.Basic.Attributes["dra.net/name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	device.Basic.Attributes["dra.net/rdmaDevName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	link, err := netlink.RdmaLinkByName(ifName)
 	if err != nil {
