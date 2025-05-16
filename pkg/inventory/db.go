@@ -214,7 +214,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
 	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(networkKind)}
-	device.Basic.Attributes["dra.net/name"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
 		klog.Infof("Error getting link by name %v", err)
