@@ -146,12 +146,6 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 		return err
 	}
 
-	// get the existing IP addresses
-	addresses, err := nhNs.AddrList(nsLink, netlink.FAMILY_ALL)
-	if err != nil {
-		return fmt.Errorf("fail to get ip addresses: %w", err)
-	}
-
 	attrs := nsLink.Attrs()
 	// restore the original name if it was renamed
 	if nsLink.Attrs().Alias != "" {
@@ -196,24 +190,6 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil {
 		return err
-	}
-
-	link, err := netlink.LinkByName(devName)
-	if err != nil {
-		return fmt.Errorf("link not found for interface %s on runtime namespace: %w", devName, err)
-	}
-
-	// set the interface down
-	err = netlink.LinkSetDown(link)
-	if err != nil {
-		return fmt.Errorf("fail to set link down: %w", err)
-	}
-
-	for _, address := range addresses {
-		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address.IPNet})
-		if err != nil {
-			return fmt.Errorf("fail to set up address %s on runtime namespace: %w", address.String(), err)
-		}
 	}
 
 	return nil
