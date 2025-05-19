@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
 	"github.com/google/dranet/pkg/inventory"
 
@@ -230,7 +231,9 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		if claim.Status.Allocation == nil {
 			continue
 		}
+		// final resourceClaim Status
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
+		var netconf *apis.NetworkConfig
 		for _, result := range claim.Status.Allocation.Devices.Results {
 			if result.Driver != np.driverName {
 				continue
@@ -243,10 +246,24 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
 					continue
 				}
-				klog.V(4).Infof("podStartHook Configuration %s", string(config.Opaque.Parameters.String()))
-				// TODO get config options here, it can add ips or commands
-				// to add routes, run dhcp, rename the interface ... whatever
+				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
+				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
+				if err != nil {
+					return err
+				}
+				if netconf != nil {
+					klog.V(4).Infof("Configuration %#v", netconf)
+					break
+				}
+				klog.V(4).Infof("podStartHook Configuration %+v", netconf)
 			}
+
+			// resourceClaim status for this specific device
+			resourceClaimStatusDevice := resourceapply.
+				AllocatedDeviceStatus().
+				WithDevice(result.Device).
+				WithDriver(result.Driver).
+				WithPool(result.Pool)
 
 			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
 			// TODO signal this via DRA
@@ -258,42 +275,57 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				}
 			}
 
-			// TODO config options to rename the device and pass parameters
-			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			networkData, err := nsAttachNetdev(result.Device, ns, result.Device)
+			// configure routes
+			err = netnsRouting(ns, netconf.Routes)
 			if err != nil {
-				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				resourceClaimStatus = resourceClaimStatus.WithDevices(
-					resourceapply.AllocatedDeviceStatus().
-						WithDevice(result.Device).WithDriver(result.Driver).WithPool(result.Pool).
-						WithConditions(
-							metav1apply.Condition().
-								WithType("Ready").
-								WithStatus(metav1.ConditionFalse).
-								WithReason("NetworkDeviceError").
-								WithMessage(err.Error()).
-								WithLastTransitionTime(metav1.Now()),
-						),
+				klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", result.Device, ns, err)
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("NetworkReady").
+						WithStatus(metav1.ConditionFalse).
+						WithReason("NetworkReadyError").
+						WithMessage(err.Error()).
+						WithLastTransitionTime(metav1.Now()),
 				)
 				errorList = append(errorList, err)
 			} else {
-				resourceClaimStatus = resourceClaimStatus.WithDevices(
-					resourceapply.AllocatedDeviceStatus().
-						WithDevice(result.Device).WithDriver(result.Driver).WithPool(result.Pool).
-						WithConditions(
-							metav1apply.Condition().
-								WithType("Ready").
-								WithReason("NetworkDeviceReady").
-								WithStatus(metav1.ConditionTrue).
-								WithLastTransitionTime(metav1.Now()),
-						).
-						WithNetworkData(resourceapply.NetworkDeviceData().
-							WithInterfaceName(networkData.InterfaceName).
-							WithHardwareAddress(networkData.HardwareAddress).
-							WithIPs(networkData.IPs...),
-						),
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("NetworkReady").
+						WithStatus(metav1.ConditionTrue).
+						WithReason("NetworkReady").
+						WithLastTransitionTime(metav1.Now()),
 				)
 			}
+
+			// TODO config options to rename the device and pass parameters
+			// use https://github.com/opencontainers/runtime-spec/pull/1271
+			networkData, err := nsAttachNetdev(result.Device, ns, netconf.Interface)
+			if err != nil {
+				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("Ready").
+						WithStatus(metav1.ConditionFalse).
+						WithReason("NetworkDeviceError").
+						WithMessage(err.Error()).
+						WithLastTransitionTime(metav1.Now()),
+				)
+				errorList = append(errorList, err)
+			} else {
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("Ready").
+						WithReason("NetworkDeviceReady").
+						WithStatus(metav1.ConditionTrue).
+						WithLastTransitionTime(metav1.Now()),
+				).WithNetworkData(resourceapply.NetworkDeviceData().
+					WithInterfaceName(networkData.InterfaceName).
+					WithHardwareAddress(networkData.HardwareAddress).
+					WithIPs(networkData.IPs...),
+				)
+			}
+			resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
 		}
 		resourceClaimApply := resourceapply.ResourceClaim(claim.Name, claim.Namespace).WithStatus(resourceClaimStatus)
 		_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(claim.Namespace).ApplyStatus(ctx,
@@ -365,6 +397,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 }
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
+	defer np.netdb.RemovePodNetns(podKey(pod))
 	klog.V(2).Infof("RemovePodSandbox pod %s/%s: ips=%v", pod.GetNamespace(), pod.GetName(), pod.GetIps())
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
