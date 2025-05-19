@@ -33,6 +33,6 @@ type InterfaceConfig struct {
 // RouteConfig represents a network route configuration.
 type RouteConfig struct {
 	Destination string `json:"destination,omitempty"` // e.g., "0.0.0.0/0" for default, "10.0.0.0/8"
-	Gateway     string `json:"gateway,omitempty`      // The "via" address, e.g., "192.168.1.1"
+	Gateway     string `json:"gateway,omitempty"`     // The "gateway" address, e.g., "192.168.1.1"
 	Source      string `json:"source,omitempty"`      // Optional source address for policy routing
 }
