@@ -18,6 +18,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,8 +34,11 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
+	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
@@ -216,6 +220,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	np.netdb.AddPodNetns(podKey(pod), ns)
 
 	// Process the configurations of the ResourceClaim
+	errorList := []error{}
 	for _, obj := range objs {
 		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
@@ -225,11 +230,11 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		if claim.Status.Allocation == nil {
 			continue
 		}
+		resourceClaimStatus := resourceapply.ResourceClaimStatus()
 		for _, result := range claim.Status.Allocation.Devices.Results {
 			if result.Driver != np.driverName {
 				continue
 			}
-
 			// Process the configurations of the ResourceClaim
 			for _, config := range claim.Status.Allocation.Devices.Config {
 				if config.Opaque == nil {
@@ -255,14 +260,54 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 			// TODO config options to rename the device and pass parameters
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			err := nsAttachNetdev(result.Device, ns, result.Device)
+			networkData, err := nsAttachNetdev(result.Device, ns, result.Device)
 			if err != nil {
 				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				return err
+				resourceClaimStatus = resourceClaimStatus.WithDevices(
+					resourceapply.AllocatedDeviceStatus().
+						WithDevice(result.Device).WithDriver(result.Driver).WithPool(result.Pool).
+						WithConditions(
+							metav1apply.Condition().
+								WithType("Ready").
+								WithStatus(metav1.ConditionFalse).
+								WithReason("NetworkDeviceError").
+								WithMessage(err.Error()).
+								WithLastTransitionTime(metav1.Now()),
+						),
+				)
+				errorList = append(errorList, err)
+			} else {
+				resourceClaimStatus = resourceClaimStatus.WithDevices(
+					resourceapply.AllocatedDeviceStatus().
+						WithDevice(result.Device).WithDriver(result.Driver).WithPool(result.Pool).
+						WithConditions(
+							metav1apply.Condition().
+								WithType("Ready").
+								WithReason("NetworkDeviceReady").
+								WithStatus(metav1.ConditionTrue).
+								WithLastTransitionTime(metav1.Now()),
+						).
+						WithNetworkData(resourceapply.NetworkDeviceData().
+							WithInterfaceName(networkData.InterfaceName).
+							WithHardwareAddress(networkData.HardwareAddress).
+							WithIPs(networkData.IPs...),
+						),
+				)
 			}
 		}
+		resourceClaimApply := resourceapply.ResourceClaim(claim.Name, claim.Namespace).WithStatus(resourceClaimStatus)
+		_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(claim.Namespace).ApplyStatus(ctx,
+			resourceClaimApply,
+			metav1.ApplyOptions{FieldManager: np.driverName, Force: true},
+		)
+		// do not fail hard
+		if err != nil {
+			klog.Infof("failed to update status for claim %s/%s : %v", claim.Namespace, claim.Name, err)
+		} else {
+			klog.V(2).Infof("update status for claim %s/%s", claim.Namespace, claim.Name)
+		}
 	}
-	return nil
+	return errors.Join(errorList...)
 }
 
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {

@@ -24,29 +24,31 @@ import (
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+
+	resourceapi "k8s.io/api/resource/v1beta1"
 )
 
-func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) error {
+func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) (*resourceapi.NetworkDeviceData, error) {
 	hostDev, err := netlink.LinkByName(hostIfName)
 	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return err
+		return nil, err
 	}
 
 	// Devices can be renamed only when down
 	if err = netlink.LinkSetDown(hostDev); err != nil {
-		return fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
 	}
 
 	// get the existing IP addresses
 	addresses, err := netlink.AddrList(hostDev, netlink.FAMILY_ALL)
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return fmt.Errorf("fail to get ip addresses: %w", err)
+		return nil, fmt.Errorf("fail to get ip addresses: %w", err)
 	}
 
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer containerNs.Close()
 
@@ -60,7 +62,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 	// Get a netlink socket in current namespace
 	s, err := nl.GetNetlinkSocketAt(netns.None(), netns.None(), unix.NETLINK_ROUTE)
 	if err != nil {
-		return fmt.Errorf("could not get network namespace handle: %w", err)
+		return nil, fmt.Errorf("could not get network namespace handle: %w", err)
 	}
 	defer s.Close()
 
@@ -87,37 +89,65 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, ifName string) er
 
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return err
+		return nil, err
 	}
 
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
 	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(attrs.Name)
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
+		return nil, fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
 	}
 
+	// Re-add the original IP addresses to the interface in the new namespace.
+	// The kernel removes IP addresses when an interface is moved between network namespaces.
 	for _, address := range addresses {
+		// Only move permanent IP addresses configured by the user, dynamic addresses are excluded because
+		// their validity may rely on the original network namespace's context and they may have limited
+		// lifetimes and are not guaranteed to be available in a new namespace.
+		// Ref: https://www.ietf.org/rfc/rfc3549.txt
+		if address.Flags&unix.IFA_F_PERMANENT == 0 {
+			continue
+		}
+		// Only move IP addresses with global scope because those are not host-specific, auto-configured,
+		// or have limited network scope, making them unsuitable inside the container namespace.
+		// Ref: https://www.ietf.org/rfc/rfc3549.txt
+		if address.Scope != unix.RT_SCOPE_UNIVERSE {
+			continue
+		}
 		// remove the interface attribute of the original address
 		// to avoid issues when the interface is renamed.
 		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address.IPNet})
 		if err != nil {
-			return fmt.Errorf("fail to set up address %s on namespace %s: %w", address.String(), containerNsPAth, err)
+			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address.String(), containerNsPAth, err)
 		}
 	}
 
 	err = nhNs.LinkSetUp(nsLink)
 	if err != nil {
-		return fmt.Errorf("failt to set up interface %s on namespace %s: %w", nsLink.Attrs().Name, containerNsPAth, err)
+		return nil, fmt.Errorf("failt to set up interface %s on namespace %s: %w", nsLink.Attrs().Name, containerNsPAth, err)
 	}
 
-	return nil
+	networkData := &resourceapi.NetworkDeviceData{
+		InterfaceName:   nsLink.Attrs().Name,
+		HardwareAddress: string(nsLink.Attrs().HardwareAddr.String()),
+	}
+
+	// get the existing IP addresses
+	addresses, err = nhNs.AddrList(nsLink, netlink.FAMILY_ALL)
+	if err == nil || errors.Is(err, netlink.ErrDumpInterrupted) {
+		for _, address := range addresses {
+			networkData.IPs = append(networkData.IPs, address.IPNet.String())
+		}
+	}
+
+	return networkData, nil
 }
 
 func nsDetachNetdev(containerNsPAth string, devName string) error {
