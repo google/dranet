@@ -133,9 +133,9 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	}
 	defer nhNs.Close()
 
-	nsLink, err := nhNs.LinkByName(attrs.Name)
+	nsLink, err := nhNs.LinkByName(ifName)
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return nil, fmt.Errorf("link not found for interface %s on namespace %s: %w", attrs.Name, containerNsPAth, err)
+		return nil, fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
 	}
 
 	networkData := &resourceapi.NetworkDeviceData{
@@ -160,7 +160,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	return networkData, nil
 }
 
-func nsDetachNetdev(containerNsPAth string, devName string) error {
+func nsDetachNetdev(containerNsPAth string, devName string, outName string) error {
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, devName, err)
@@ -214,14 +214,12 @@ func nsDetachNetdev(containerNsPAth string, devName string) error {
 	msg.Index = int32(attrs.Index)
 	req.AddData(msg)
 
-	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(attrs.Name))
+	ifName := attrs.Name
+	if outName != "" {
+		ifName = outName
+	}
+	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(ifName))
 	req.AddData(nameData)
-
-	alias := nl.NewRtAttr(unix.IFLA_IFALIAS, []byte(attrs.Alias))
-	req.AddData(alias)
-
-	mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(uint32(attrs.MTU)))
-	req.AddData(mtu)
 
 	val := nl.Uint32Attr(uint32(rootNs))
 	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)

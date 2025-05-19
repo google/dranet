@@ -233,7 +233,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		}
 		// final resourceClaim Status
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
-		var netconf *apis.NetworkConfig
+		var netconf apis.NetworkConfig
 		for _, result := range claim.Status.Allocation.Devices.Results {
 			if result.Driver != np.driverName {
 				continue
@@ -247,16 +247,18 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 					continue
 				}
 				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
-				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
+				conf, err := apis.ValidateConfig(&config.Opaque.Parameters)
 				if err != nil {
+					klog.Infof("podStartHook Configuration %+v error: %v", netconf, err)
 					return err
 				}
-				if netconf != nil {
-					klog.V(4).Infof("Configuration %#v", netconf)
+				// TODO: define a strategy for multiple configs
+				if conf != nil {
+					netconf = *conf
 					break
 				}
-				klog.V(4).Infof("podStartHook Configuration %+v", netconf)
 			}
+			klog.V(4).Infof("podStartHook final Configuration %+v", netconf)
 
 			// resourceClaim status for this specific device
 			resourceClaimStatusDevice := resourceapply.
@@ -374,19 +376,35 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 				continue
 			}
 
+			var netconf *apis.NetworkConfig
 			for _, config := range claim.Status.Allocation.Devices.Config {
 				if config.Opaque == nil {
 					continue
 				}
-				klog.V(4).Infof("podStopHook Configuration %s", string(config.Opaque.Parameters.String()))
-				// TODO get config options here, it can add ips or commands
-				// to add routes, run dhcp, rename the interface ... whatever
+				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
+					continue
+				}
+				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
+				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
+				if err != nil {
+					return err
+				}
+				if netconf != nil {
+					klog.V(4).Infof("Configuration %#v", netconf)
+					break
+				}
 			}
 
 			klog.V(4).Infof("podStopHook Device %s", result.Device)
 			// TODO config options to rename the device and pass parameters
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			err := nsDetachNetdev(ns, result.Device)
+			ifName := result.Device
+			outName := ""
+			if netconf.Interface.Name != "" {
+				ifName = netconf.Interface.Name
+				outName = result.Device
+			}
+			err := nsDetachNetdev(ns, ifName, outName)
 			if err != nil {
 				klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
 				continue
@@ -470,6 +488,7 @@ func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resource
 		}
 	}
 
+	var errorList []error
 	var devices []kubeletplugin.Device
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		requestName := result.Request
@@ -479,6 +498,10 @@ func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resource
 				len(config.Requests) > 0 && !slices.Contains(config.Requests, requestName) {
 				continue
 			}
+			_, err := apis.ValidateConfig(&config.Opaque.Parameters)
+			if err != nil {
+				errorList = append(errorList, err)
+			}
 		}
 		device := kubeletplugin.Device{
 			Requests:   []string{result.Request},
@@ -487,7 +510,11 @@ func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resource
 		}
 		devices = append(devices, device)
 	}
-
+	if len(errorList) > 0 {
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("claim %s contain errors: %w", claim.UID, errors.Join(errorList...)),
+		}
+	}
 	return kubeletplugin.PrepareResult{Devices: devices}
 }
 

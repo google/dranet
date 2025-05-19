@@ -24,15 +24,15 @@ type NetworkConfig struct {
 
 // InterfaceConfig represents the configuration for a single network interface.
 type InterfaceConfig struct {
-	Name         string   `json:"name"`                   // Logical name of the interface (e.g., "eth0", "enp0s3")
-	Addresses    []string `json:"addresses"`              // IP addresses and their CIDR masks
+	Name         string   `json:"name,omitempty"`         // Logical name of the interface (e.g., "eth0", "enp0s3")
+	Addresses    []string `json:"addresses,omitempty"`    // IP addresses and their CIDR masks
 	MTU          int32    `json:"mtu,omitempty"`          // Maximum Transmission Unit, optional
 	HardwareAddr string   `json:"hardwareAddr,omitempty"` // Read-only: Current hardware address (might be useful for GET)
 }
 
 // RouteConfig represents a network route configuration.
 type RouteConfig struct {
-	Destination string `json:"destination"`      // e.g., "0.0.0.0/0" for default, "10.0.0.0/8"
-	Gateway     string `json:"gateway"`          // The "via" address, e.g., "192.168.1.1"
-	Source      string `json:"source,omitempty"` // Optional source address for policy routing
+	Destination string `json:"destination,omitempty"` // e.g., "0.0.0.0/0" for default, "10.0.0.0/8"
+	Gateway     string `json:"gateway,omitempty`      // The "via" address, e.g., "192.168.1.1"
+	Source      string `json:"source,omitempty"`      // Optional source address for policy routing
 }

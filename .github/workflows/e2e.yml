@@ -137,7 +137,7 @@ jobs:
         /usr/local/bin/kubectl apply -f examples/deviceclass.yaml
         /usr/local/bin/kubectl apply -f examples/resourceclaim.yaml
         /usr/local/bin/kubectl wait --timeout=2m --for=condition=ready pods -l app=pod
-        /usr/local/bin/kubectl exec -it pod1 -- ip link show dummy0
+        /usr/local/bin/kubectl exec -it pod1 -- ip link show eth99
 
     - name: Upload Junit Reports
       if: always()
