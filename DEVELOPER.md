@@ -73,6 +73,12 @@ kubectl patch daemonset dranet -n kube-system --type='strategic' -p='
 }'
 ```
 
+If you build new images just restart the ds to pull it
+
+```
+kubectl -n kube-system rollout restart ds dranet
+daemonset.apps/dranet restarted
+```
 
 ## Troubleshooting
 
