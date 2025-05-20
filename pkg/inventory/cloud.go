@@ -18,6 +18,7 @@ package inventory
 
 import (
 	"context"
+	"strings"
 
 	"cloud.google.com/go/compute/metadata"
 
@@ -51,8 +52,24 @@ func cloudNetwork(mac string, instance *cloudprovider.CloudInstance) string {
 	}
 	for _, cloudInterface := range instance.Interfaces {
 		if cloudInterface.Mac == mac {
-			return cloudInterface.Network
+			return getLastSegmentAndTruncate(cloudInterface.Network, 64) // max size for an attribute value
 		}
 	}
 	return ""
+}
+
+// getLastSegmentAndTruncate extracts the last segment from a path
+// and truncates it to the specified maximum length.
+func getLastSegmentAndTruncate(s string, maxLength int) string {
+	segments := strings.Split(s, "/")
+	if len(segments) == 0 {
+		// This condition is technically unreachable because strings.Split always returns a slice with at least one element.
+		// For an empty input string, segments will be []string{""}.
+		return ""
+	}
+	lastSegment := segments[len(segments)-1]
+	if len(lastSegment) > maxLength {
+		return lastSegment[:maxLength]
+	}
+	return lastSegment
 }
