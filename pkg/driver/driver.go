@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -93,6 +94,9 @@ type NetworkDriver struct {
 	netdb *inventory.DB
 	// options
 	celProgram cel.Program
+	// local copy of current devices
+	muDevices sync.Mutex
+	devices   []resourceapi.Device
 }
 
 type Option func(*NetworkDriver)
@@ -109,6 +113,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		nodeName:         nodeName,
 		kubeClient:       kubeClient,
 		claimAllocations: store,
+		devices:          []resourceapi.Device{},
 	}
 
 	for _, o := range opts {
@@ -178,6 +183,17 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 func (np *NetworkDriver) Stop() {
 	np.nriPlugin.Stop()
 	np.draPlugin.Stop()
+}
+
+func (np *NetworkDriver) getDevice(deviceName string) *resourceapi.Device {
+	np.muDevices.Lock()
+	defer np.muDevices.Unlock()
+	for _, device := range np.devices {
+		if device.Name == deviceName {
+			return &device
+		}
+	}
+	return nil
 }
 
 func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
@@ -267,6 +283,14 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				WithDriver(result.Driver).
 				WithPool(result.Pool)
 
+			ifName := result.Device
+			localDevice := np.getDevice(result.Device)
+			if localDevice != nil {
+				ifName = getDeviceName(localDevice)
+			} else {
+				klog.Infof("local device for %s not found", ifName)
+			}
+
 			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
 			// TODO signal this via DRA
 			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
@@ -302,7 +326,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 			// TODO config options to rename the device and pass parameters
 			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			networkData, err := nsAttachNetdev(result.Device, ns, netconf.Interface)
+			networkData, err := nsAttachNetdev(ifName, ns, netconf.Interface)
 			if err != nil {
 				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
 				resourceClaimStatusDevice.WithConditions(
@@ -447,6 +471,13 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
 				klog.Error(err, "unexpected error trying to publish resources")
+			} else {
+				// keep a local copy of the published device if we need to operate
+				// with some of the exported attributes, typically dra.net/ifName in
+				// in case the device name has to be normalized.
+				np.muDevices.Lock()
+				np.devices = devices
+				np.muDevices.Unlock()
 			}
 		case <-ctx.Done():
 			klog.Error(ctx.Err(), "context canceled")
@@ -591,4 +622,42 @@ func getNetworkNamespace(pod *api.PodSandbox) string {
 
 func podKey(pod *api.PodSandbox) string {
 	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
+}
+
+// getDeviceName returns the actual device name since Kubernetes validation does not allow
+// some device interface names, the device name is normalized and the real interface name
+// is passed as an attribute.
+func getDeviceName(device *resourceapi.Device) string {
+	if device == nil {
+		klog.V(5).Info("GetDeviceName called with nil device")
+		return ""
+	}
+	if device.Basic == nil || device.Basic.Attributes == nil {
+		klog.V(5).Infof("GetDeviceName: device %s has no Basic attributes, returning normalized name", device.Name)
+		return device.Name // Fallback to normalized name
+	}
+
+	kindAttr, ok := device.Basic.Attributes["dra.net/kind"]
+	if !ok || kindAttr.StringValue == nil {
+		klog.V(4).Infof("GetDeviceName: 'dra.net/kind' attribute not found or not a string for device %s, returning normalized name", device.Name)
+		return device.Name // Fallback to normalized name
+	}
+
+	var nameAttrKey resourceapi.QualifiedName
+	switch *kindAttr.StringValue {
+	case apis.NetworkKind:
+		nameAttrKey = "dra.net/ifName"
+	case apis.RdmaKind:
+		nameAttrKey = "dra.net/rdmaDevName"
+	default:
+		klog.V(4).Infof("GetDeviceName: unknown kind '%s' for device %s, returning normalized name", *kindAttr.StringValue, device.Name)
+		return device.Name // Fallback to normalized name
+	}
+
+	actualNameAttr, ok := device.Basic.Attributes[nameAttrKey]
+	if !ok || actualNameAttr.StringValue == nil {
+		klog.V(4).Infof("GetDeviceName: attribute '%s' not found or not a string for device %s (kind: %s), returning normalized name", nameAttrKey, device.Name, *kindAttr.StringValue)
+		return device.Name // Fallback to normalized name
+	}
+	return *actualNameAttr.StringValue
 }

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Mellanox/rdmamap"
+	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -37,9 +38,6 @@ import (
 )
 
 const (
-	networkKind = "network"
-	rdmaKind    = "rdma"
-
 	// database poll period
 	minInterval = 5 * time.Second
 	maxInterval = 1 * time.Minute
@@ -57,11 +55,6 @@ type DB struct {
 
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
-}
-
-type Device struct {
-	Kind string
-	Name string
 }
 
 func New() *DB {
@@ -213,7 +206,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 		klog.V(2).Infof("normalizing iface %s name", ifName)
 		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(networkKind)}
+	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.NetworkKind)}
 	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
@@ -301,7 +294,7 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
 
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(rdmaKind)}
+	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.RdmaKind)}
 	device.Basic.Attributes["dra.net/rdmaDevName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	link, err := netlink.RdmaLinkByName(ifName)
