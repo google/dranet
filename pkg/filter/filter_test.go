@@ -224,7 +224,38 @@ func Test_filterDevices(t *testing.T) {
 					},
 				},
 			},
-			expectedLength: 1, // Only dev_no_error_eval_true should be included
+			expectedLength: 2,
+		},
+		{
+			name:       "eval error - no such key",
+			celProgram: mustCompileCEL(t, `attributes["dra.net/type"].StringValue != "veth"`),
+			devices: []resourcev1beta1.Device{
+				{
+					Name: "dev_missing_key", // This device will cause "no such key: dra.net/type"
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"some_other_key": {StringValue: ptr.To("value")},
+						},
+					},
+				},
+				{
+					Name: "dev_key_present_eval_true",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							resourcev1beta1.QualifiedName("dra.net/type"): {StringValue: ptr.To("eth0")}, // != "veth" is true
+						},
+					},
+				},
+				{
+					Name: "dev_key_present_eval_false",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							resourcev1beta1.QualifiedName("dra.net/type"): {StringValue: ptr.To("veth")}, // != "veth" is false
+						},
+					},
+				},
+			},
+			expectedLength: 2, // dev_missing_key (due to error) and dev_key_present_eval_true
 		},
 	}
 

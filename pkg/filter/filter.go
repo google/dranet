@@ -34,6 +34,7 @@ func FilterDevices(celProgram cel.Program, devices []resourcev1beta1.Device) []r
 		out, _, err := celProgram.Eval(map[string]interface{}{"attributes": dev.Basic.Attributes})
 		if err != nil {
 			klog.Infof("prg.Eval() failed: %v", err)
+			filteredDevices = append(filteredDevices, dev)
 			continue
 		}
 		// The result should be a boolean.
