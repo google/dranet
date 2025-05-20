@@ -195,6 +195,37 @@ func Test_filterDevices(t *testing.T) {
 			},
 			expectedLength: 2,
 		},
+		{
+			name:       "eval error - division by zero",
+			celProgram: mustCompileCEL(t, `(1 / attributes["divisor"].IntValue) == 1`), // Program is valid, but data can cause eval error
+			devices: []resourcev1beta1.Device{
+				{
+					Name: "dev_error_div_zero",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"divisor": {IntValue: ptr.To[int64](0)}, // Causes division by zero during Eval
+						},
+					},
+				},
+				{
+					Name: "dev_no_error_eval_false",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"divisor": {IntValue: ptr.To[int64](2)},
+						},
+					},
+				},
+				{
+					Name: "dev_no_error_eval_true",
+					Basic: &resourcev1beta1.BasicDevice{
+						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
+							"divisor": {IntValue: ptr.To[int64](1)},
+						},
+					},
+				},
+			},
+			expectedLength: 1, // Only dev_no_error_eval_true should be included
+		},
 	}
 
 	for _, tt := range tests {
