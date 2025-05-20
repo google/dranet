@@ -297,7 +297,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				err := nsAttachRdmadev(rdmaDev, ns)
 				if err != nil {
 					klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
-					continue
 				}
 			}
 
