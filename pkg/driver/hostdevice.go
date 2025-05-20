@@ -50,13 +50,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 			return nil, fmt.Errorf("fail to get ip addresses: %w", err)
 		}
 		for _, address := range nlAddresses {
-			// Only move permanent IP addresses configured by the user, dynamic addresses are excluded because
-			// their validity may rely on the original network namespace's context and they may have limited
-			// lifetimes and are not guaranteed to be available in a new namespace.
-			// Ref: https://www.ietf.org/rfc/rfc3549.txt
-			if address.Flags&unix.IFA_F_PERMANENT == 0 {
-				continue
-			}
 			// Only move IP addresses with global scope because those are not host-specific, auto-configured,
 			// or have limited network scope, making them unsuitable inside the container namespace.
 			// Ref: https://www.ietf.org/rfc/rfc3549.txt
