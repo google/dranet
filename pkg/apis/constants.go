@@ -19,4 +19,16 @@ package apis
 const (
 	NetworkKind = "network"
 	RdmaKind    = "rdma"
+	// rdmaNetnsModeShared and rdmaNetnsModeExclusive define the RDMA subsystem
+	// network namespace mode. An RDMA device can only be assigned to a network
+	// namespace when the RDMA subsystem is set to an "exclusive" network
+	// namespace mode. When the subsystem is set to "shared" mode, an attempt to
+	// assign an RDMA device to a network namespace will result in failure.
+	// Additionally, "If there are active network namespaces and if one or more
+	// RDMA devices exist, changing mode from shared to exclusive returns error
+	// code EBUSY."
+	//
+	// Ref. https://man7.org/linux/man-pages/man8/rdma-system.8.html
+	RdmaNetnsModeShared    = "shared"
+	RdmaNetnsModeExclusive = "exclusive"
 )

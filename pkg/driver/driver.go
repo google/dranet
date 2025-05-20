@@ -30,6 +30,7 @@ import (
 	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
 	"github.com/google/dranet/pkg/inventory"
+	"github.com/vishvananda/netlink"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
@@ -97,6 +98,9 @@ type NetworkDriver struct {
 	// local copy of current devices
 	muDevices sync.Mutex
 	devices   []resourceapi.Device
+	// An RDMA device can only be assigned to a network namespace when the RDMA subsystem is set to an "exclusive" network namespace mode
+	// Do not publish or process RDMA devices in shared mode.
+	rdmaSharedMode bool
 }
 
 type Option func(*NetworkDriver)
@@ -108,12 +112,20 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 			podUIDIndex:          podUIDIndexFunc,
 		})
 
+	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
+	if err != nil {
+		klog.Infof("failed to determine the RDMA subsystem's network namespace mode: %w", err)
+	} else {
+		klog.Infof("RDMA subsystem in mode: %s", rdmaNetnsMode)
+	}
+
 	plugin := &NetworkDriver{
 		driverName:       driverName,
 		nodeName:         nodeName,
 		kubeClient:       kubeClient,
 		claimAllocations: store,
 		devices:          []resourceapi.Device{},
+		rdmaSharedMode:   rdmaNetnsMode == apis.RdmaNetnsModeShared,
 	}
 
 	for _, o := range opts {
@@ -121,7 +133,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, driverName)
-	err := os.MkdirAll(driverPluginPath, 0750)
+	err = os.MkdirAll(driverPluginPath, 0750)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin path %s: %v", driverPluginPath, err)
 	}
@@ -291,12 +303,33 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				klog.Infof("local device for %s not found", ifName)
 			}
 
-			klog.Infof("RunPodSandbox allocation.Devices.Result: %#v", result)
-			// TODO signal this via DRA
-			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
-				err := nsAttachRdmadev(rdmaDev, ns)
-				if err != nil {
-					klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+			// default to network device
+			kind := apis.NetworkKind
+			if v, ok := localDevice.Basic.Attributes["dra.net/kind"]; ok && v.StringValue != nil {
+				kind = *v.StringValue
+			}
+
+			klog.V(2).Infof("RunPodSandbox processing RDMA device: %#v", localDevice.Basic.Attributes)
+			if kind == apis.RdmaKind {
+				if !np.rdmaSharedMode {
+					err := nsAttachRdmadev(ifName, ns)
+					if err != nil {
+						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+						return err
+					}
+				}
+				// no more procesing
+				continue
+			}
+
+			klog.V(2).Infof("RunPodSandbox processing Network device: %#v", localDevice.Basic.Attributes)
+			// only process RDMA devices associated to the network interface if in exclusive mode.
+			if !np.rdmaSharedMode {
+				if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+					err := nsAttachRdmadev(rdmaDev, ns)
+					if err != nil {
+						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
+					}
 				}
 			}
 
@@ -456,6 +489,20 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		case devices := <-np.netdb.GetResources(ctx):
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
+			if np.rdmaSharedMode {
+				// do not publish RDMA devices in shared mode
+				n := 0
+				for _, device := range devices {
+					if kind, ok := device.Basic.Attributes["dra.net/kind"]; ok &&
+						kind.StringValue != nil &&
+						*kind.StringValue == "rdma" {
+						continue
+					}
+					devices[n] = device
+					n++
+				}
+				devices = devices[:n]
+			}
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
 					np.nodeName: {
