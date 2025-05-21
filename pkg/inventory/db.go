@@ -318,6 +318,7 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 
 	device.Basic.Attributes["dra.net/firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
 	device.Basic.Attributes["dra.net/nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
+	device.Basic.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: ptr.To("rdma")}
 
 	if isVirtual(ifName, sysrdmaPath) {
 		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
