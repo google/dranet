@@ -114,7 +114,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 
 	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
 	if err != nil {
-		klog.Infof("failed to determine the RDMA subsystem's network namespace mode: %w", err)
+		klog.Infof("failed to determine the RDMA subsystem's network namespace mode: %v", err)
 	} else {
 		klog.Infof("RDMA subsystem in mode: %s", rdmaNetnsMode)
 	}
