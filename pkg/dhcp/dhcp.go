@@ -364,7 +364,14 @@ func createRequestPacket(offer *DHCPPacket, mac net.HardwareAddr, xid uint32) *D
 
 */
 
-func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
+func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			klog.Infof("Recovered from panic: %v", r)
+			acquiredIP = nil
+			err = fmt.Errorf("panic occurred: %v", r)
+		}
+	}()
 	rootNs, err := netns.Get()
 	if err != nil {
 		return nil, err
@@ -429,7 +436,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		return nil, fmt.Errorf("failed to marshal DISCOVER packet: %v", err)
 	}
 
-	klog.Infoln("Sending DHCP DISCOVER...")
+	klog.V(2).Infoln("Sending DHCP DISCOVER...")
 	if err := syscall.Sendto(sockFD, discoverBytes, 0, &serverSockaddr); err != nil {
 		return nil, fmt.Errorf("failed to send DISCOVER packet: %v", err)
 	}
@@ -444,6 +451,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		return nil, fmt.Errorf("failed to set receive timeout: %v", err)
 	}
 
+	klog.V(2).Infoln("Waiting for DHCP OFFER...")
 	n, from, err := syscall.Recvfrom(sockFD, buffer, 0)
 	if err != nil {
 		if errno, ok := err.(syscall.Errno); ok && errno == syscall.EAGAIN { // EAGAIN for timeout
@@ -451,6 +459,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		}
 		return nil, fmt.Errorf("failed to receive OFFER packet: %v", err)
 	}
+	klog.V(2).Infoln("Received packet ...")
 	if err := offer.Unmarshal(buffer[:n]); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal OFFER packet: %v", err)
 	}
@@ -459,6 +468,8 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 	if len(msgType) == 0 || msgType[0] != dhcpOffer {
 		return nil, fmt.Errorf("received packet is not a DHCP OFFER (type: %v)", msgType)
 	}
+
+	klog.V(2).Infoln("Received DHCP OFFER...")
 	if offer.Xid != clientXid {
 		return nil, fmt.Errorf("received OFFER with mismatched XID: expected 0x%x, got 0x%x", clientXid, offer.Xid)
 	}
@@ -479,7 +490,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		return nil, fmt.Errorf("failed to marshal REQUEST packet: %v", err)
 	}
 
-	klog.Infoln("Sending DHCP REQUEST...")
+	klog.V(2).Infoln("Sending DHCP REQUEST...")
 	// Send REQUEST to the specific server that offered, not broadcast
 	var requestServerSockaddr syscall.SockaddrInet4
 	requestServerSockaddr.Port = dhcpServerPort
@@ -502,6 +513,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		}
 		return nil, fmt.Errorf("failed to receive ACK packet: %v", err)
 	}
+	klog.V(2).Infoln("Received packet ...")
 	if err := ack.Unmarshal(buffer[:n]); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ACK packet: %v", err)
 	}
@@ -510,6 +522,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 	if len(msgType) == 0 || msgType[0] != dhcpACK {
 		return nil, fmt.Errorf("received packet is not a DHCP ACK (type: %v)", msgType)
 	}
+	klog.V(2).Infoln("Received DHCP ACK...")
 	if ack.Xid != clientXid {
 		return nil, fmt.Errorf("received ACK with mismatched XID: expected 0x%x, got 0x%x", clientXid, ack.Xid)
 	}
@@ -529,7 +542,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (*net.IPNet, error) {
 		routerIP = net.IPv4(routerBytes[0], routerBytes[1], routerBytes[2], routerBytes[3])
 	}
 
-	klog.Infoln("\n--- DHCP Lease Acquired ---")
+	klog.V(2).Infoln("\n--- DHCP Lease Acquired ---")
 	klog.V(2).Infof("Assigned IP: %s\n", assignedIP)
 	klog.V(2).Infof("Netmask: %s\n", subnetMask)
 	klog.V(2).Infof("Router (Gateway): %s\n", routerIP)
