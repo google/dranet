@@ -402,7 +402,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 }
 
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
-	klog.V(2).Infof("StopPodSandbox pod %s/%s", pod.Namespace, pod.Name)
+	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	defer np.netdb.RemovePodNetns(podKey(pod))
 
 	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
@@ -476,14 +476,8 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 }
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
+	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	defer np.netdb.RemovePodNetns(podKey(pod))
-	klog.V(2).Infof("RemovePodSandbox pod %s/%s: ips=%v", pod.GetNamespace(), pod.GetName(), pod.GetIps())
-	// get the pod network namespace
-	ns := getNetworkNamespace(pod)
-	if ns == "" {
-		klog.V(2).Infof("RemovePodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		return nil
-	}
 	return nil
 }
 
