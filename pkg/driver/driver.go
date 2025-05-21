@@ -309,8 +309,8 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				kind = *v.StringValue
 			}
 
-			klog.V(2).Infof("RunPodSandbox processing RDMA device: %#v", localDevice.Basic.Attributes)
 			if kind == apis.RdmaKind {
+				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
 				if !np.rdmaSharedMode {
 					err := nsAttachRdmadev(ifName, ns)
 					if err != nil {
@@ -322,10 +322,11 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				continue
 			}
 
-			klog.V(2).Infof("RunPodSandbox processing Network device: %#v", localDevice.Basic.Attributes)
+			klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
 			// only process RDMA devices associated to the network interface if in exclusive mode.
 			if !np.rdmaSharedMode {
 				if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+					klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
 					err := nsAttachRdmadev(rdmaDev, ns)
 					if err != nil {
 						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
