@@ -144,17 +144,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 		HardwareAddress: string(nsLink.Attrs().HardwareAddr.String()),
 	}
 
-	if useDHCP {
-		// TODO: if there are temporary addresses acquire by DHCP renew them
-	}
-	// try to acquire an IP via DHCP if there are no addresses
-	if len(addresses) == 0 {
-		acquiredIP, err := dhcp.AcquireNewIP(containerNsPAth, nsLink.Attrs().Name)
-		if err == nil {
-			addresses = append(addresses, acquiredIP)
-		}
-	}
-
 	for _, address := range addresses {
 		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address})
 		if err != nil {
@@ -166,6 +155,17 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	err = nhNs.LinkSetUp(nsLink)
 	if err != nil {
 		return nil, fmt.Errorf("failt to set up interface %s on namespace %s: %w", nsLink.Attrs().Name, containerNsPAth, err)
+	}
+
+	if useDHCP {
+		// TODO: if there are temporary addresses acquire by DHCP renew them
+	}
+	// try to acquire an IP via DHCP if there are no addresses
+	if len(addresses) == 0 {
+		acquiredIP, _ := dhcp.AcquireNewIP(containerNsPAth, nsLink.Attrs().Name)
+		if acquiredIP != nil {
+			networkData.IPs = append(networkData.IPs, acquiredIP.String())
+		}
 	}
 
 	return networkData, nil

@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
-
-	"github.com/aojea/socketat"
 )
 
 const (
@@ -371,6 +371,9 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 			acquiredIP = nil
 			err = fmt.Errorf("panic occurred: %v", r)
 		}
+		if err != nil {
+			klog.Infof("fail to acquire ip on ns %s for iface %s : %v", containerNsPAth, ifName, err)
+		}
 	}()
 	rootNs, err := netns.Get()
 	if err != nil {
@@ -396,13 +399,20 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	}
 	macAddr := nsLink.Attrs().HardwareAddr
 	// Create UDP socket in the target network namespace
-	// AF_INET for IPv4, SOCK_DGRAM for UDP, 0 for default protocol
-	sockFD, err := socketat.SocketAt(syscall.AF_INET, syscall.SOCK_DGRAM, 0, int(containerNs))
+	sockFD, err := socketAt(syscall.AF_INET, syscall.SOCK_DGRAM, 0, containerNs)
 	if err != nil {
 		return nil, fmt.Errorf("fail to create socket in namespace '%s': %v", containerNsPAth, err)
 	}
 	defer syscall.Close(sockFD) // Close the socket FD
 
+	// Go's network poller expects non-blocking file descriptors.
+	if err := syscall.SetNonblock(sockFD, true); err != nil {
+		return nil, fmt.Errorf("fail setting non-blocking: %v", err)
+	}
+	// Bind to the specific device
+	if err := syscall.SetsockoptString(sockFD, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifName); err != nil {
+		return nil, fmt.Errorf("gailed to set SO_BINDTODEVICE to '%s': %v", ifName, err)
+	}
 	// Set socket options: SO_REUSEADDR and SO_BROADCAST
 	if err := syscall.SetsockoptInt(sockFD, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
 		return nil, fmt.Errorf("failed to set SO_REUSEADDR: %v", err)
@@ -412,23 +422,29 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	}
 
 	// Bind the socket to the client port (68) on 0.0.0.0 in the target namespace
-	// This sockaddr_in structure is for IPv4
 	var sockaddr syscall.SockaddrInet4
 	sockaddr.Port = dhcpClientPort
-	copy(sockaddr.Addr[:], net.IPv4zero.To4()) // Bind to 0.0.0.0
+	copy(sockaddr.Addr[:], net.IPv4zero.To4())
 
 	if err := syscall.Bind(sockFD, &sockaddr); err != nil {
 		return nil, fmt.Errorf("failed to bind socket to 0.0.0.0:%d in namespace: %v", dhcpClientPort, err)
 	}
-	klog.V(2).Infof("Socket bound to 0.0.0.0:%d in namespace.\n", dhcpClientPort)
+	klog.V(4).Infof("Socket bound to 0.0.0.0:%d in namespace.\n", dhcpClientPort)
 
-	// Prepare server address for sending (broadcast address)
-	var serverSockaddr syscall.SockaddrInet4
-	serverSockaddr.Port = dhcpServerPort
-	copy(serverSockaddr.Addr[:], net.IPv4bcast.To4()) // Send to 255.255.255.255
+	file := os.NewFile(uintptr(sockFD), "dhcp-socket")
+	if file == nil {
+		return nil, fmt.Errorf("error creating os.File from file descriptor")
+	}
+
+	// use golang library to avoid working with low level syscalls
+	udpConn, err := net.FilePacketConn(file)
+	if err != nil {
+		return nil, fmt.Errorf("fail to create PacketConn on socket: %v", err)
+	}
+	file.Close()
+	defer udpConn.Close()
 
 	clientXid := newXid()
-
 	// --- DHCP DISCOVER ---
 	discoverPacket := createDiscoverPacket(macAddr, clientXid)
 	discoverBytes, err := discoverPacket.Marshal()
@@ -436,8 +452,10 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 		return nil, fmt.Errorf("failed to marshal DISCOVER packet: %v", err)
 	}
 
-	klog.V(2).Infoln("Sending DHCP DISCOVER...")
-	if err := syscall.Sendto(sockFD, discoverBytes, 0, &serverSockaddr); err != nil {
+	klog.V(4).Infoln("Sending DHCP DISCOVER...")
+	broadcastDestAddr := &net.UDPAddr{IP: net.IPv4bcast, Port: dhcpServerPort}
+	_, err = udpConn.WriteTo(discoverBytes, broadcastDestAddr)
+	if err != nil {
 		return nil, fmt.Errorf("failed to send DISCOVER packet: %v", err)
 	}
 
@@ -445,21 +463,22 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	offer := &DHCPPacket{}
 	buffer := make([]byte, 1500) // Max DHCP packet size
 
-	// Set read timeout for the socket
-	tv := syscall.Timeval{Sec: 5, Usec: 0} // 5 seconds timeout
-	if err := syscall.SetsockoptTimeval(sockFD, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv); err != nil {
-		return nil, fmt.Errorf("failed to set receive timeout: %v", err)
+	// Set read deadline for the socket so it does not block forever
+	readDeadline := time.Now().Add(5 * time.Second)
+	if err := udpConn.SetReadDeadline(readDeadline); err != nil {
+		return nil, fmt.Errorf("failed to set read deadline for OFFER: %v", err)
 	}
 
-	klog.V(2).Infoln("Waiting for DHCP OFFER...")
-	n, from, err := syscall.Recvfrom(sockFD, buffer, 0)
+	klog.V(4).Infoln("Waiting for DHCP OFFER...")
+	n, fromAddr, err := udpConn.ReadFrom(buffer)
 	if err != nil {
-		if errno, ok := err.(syscall.Errno); ok && errno == syscall.EAGAIN { // EAGAIN for timeout
-			return nil, fmt.Errorf("failed to receive OFFER packet: Timeout after 5 seconds")
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			klog.Infof("failed to receive OFFER packet: Timeout after 5 seconds")
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to receive OFFER packet: %v", err)
 	}
-	klog.V(2).Infoln("Received packet ...")
+	klog.V(4).Infoln("Received packet ...")
 	if err := offer.Unmarshal(buffer[:n]); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal OFFER packet: %v", err)
 	}
@@ -469,19 +488,19 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 		return nil, fmt.Errorf("received packet is not a DHCP OFFER (type: %v)", msgType)
 	}
 
-	klog.V(2).Infoln("Received DHCP OFFER...")
+	klog.V(4).Infoln("Received DHCP OFFER...")
 	if offer.Xid != clientXid {
 		return nil, fmt.Errorf("received OFFER with mismatched XID: expected 0x%x, got 0x%x", clientXid, offer.Xid)
 	}
 
 	// Extract server IP from 'from' address
 	var offerServerIP net.IP
-	if sa4, ok := from.(*syscall.SockaddrInet4); ok {
-		offerServerIP = net.IPv4(sa4.Addr[0], sa4.Addr[1], sa4.Addr[2], sa4.Addr[3])
+	if udpFromAddr, ok := fromAddr.(*net.UDPAddr); ok {
+		offerServerIP = udpFromAddr.IP
 	} else {
 		offerServerIP = offer.Siaddr // Fallback to Siaddr if from address is not IPv4
 	}
-	klog.V(2).Infof("received DHCP OFFER from %s. Offered IP: %s\n", offerServerIP, offer.Yiaddr)
+	klog.V(4).Infof("received DHCP OFFER from %s. Offered IP: %s\n", offerServerIP, offer.Yiaddr)
 
 	// --- DHCP REQUEST ---
 	requestPacket := createRequestPacket(offer, macAddr, clientXid)
@@ -490,30 +509,31 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 		return nil, fmt.Errorf("failed to marshal REQUEST packet: %v", err)
 	}
 
-	klog.V(2).Infoln("Sending DHCP REQUEST...")
+	klog.V(4).Infoln("Sending DHCP REQUEST...")
 	// Send REQUEST to the specific server that offered, not broadcast
-	var requestServerSockaddr syscall.SockaddrInet4
-	requestServerSockaddr.Port = dhcpServerPort
-	copy(requestServerSockaddr.Addr[:], offerServerIP.To4())
-
-	if err := syscall.Sendto(sockFD, requestBytes, 0, &requestServerSockaddr); err != nil {
+	requestDestAddr := &net.UDPAddr{IP: offerServerIP, Port: dhcpServerPort}
+	_, err = udpConn.WriteTo(requestBytes, requestDestAddr)
+	if err != nil {
 		return nil, fmt.Errorf("failed to send REQUEST packet: %v", err)
 	}
 
 	// --- Wait for DHCP ACK ---
 	ack := &DHCPPacket{}
-	if err := syscall.SetsockoptTimeval(sockFD, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv); err != nil {
-		return nil, fmt.Errorf("failed to set receive timeout for ACK: %v", err)
+	// Set read deadline for the socket again for ACK
+	readDeadline = time.Now().Add(5 * time.Second)
+	if err := udpConn.SetReadDeadline(readDeadline); err != nil {
+		return nil, fmt.Errorf("failed to set read deadline for ACK: %v", err)
 	}
 
-	n, _, err = syscall.Recvfrom(sockFD, buffer, 0)
+	klog.V(4).Infoln("Waiting for DHCP ACK in target namespace...")
+	n, _, err = udpConn.ReadFrom(buffer) // fromAddr might not be strictly needed for ACK validation against serverIP
 	if err != nil {
-		if errno, ok := err.(syscall.Errno); ok && errno == syscall.EAGAIN {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			return nil, fmt.Errorf("failed to receive ACK packet: Timeout after 5 seconds")
 		}
 		return nil, fmt.Errorf("failed to receive ACK packet: %v", err)
 	}
-	klog.V(2).Infoln("Received packet ...")
+	klog.V(4).Infoln("Received packet ...")
 	if err := ack.Unmarshal(buffer[:n]); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ACK packet: %v", err)
 	}
@@ -522,7 +542,7 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	if len(msgType) == 0 || msgType[0] != dhcpACK {
 		return nil, fmt.Errorf("received packet is not a DHCP ACK (type: %v)", msgType)
 	}
-	klog.V(2).Infoln("Received DHCP ACK...")
+	klog.V(4).Infoln("Received DHCP ACK...")
 	if ack.Xid != clientXid {
 		return nil, fmt.Errorf("received ACK with mismatched XID: expected 0x%x, got 0x%x", clientXid, ack.Xid)
 	}
@@ -542,13 +562,12 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 		routerIP = net.IPv4(routerBytes[0], routerBytes[1], routerBytes[2], routerBytes[3])
 	}
 
-	klog.V(2).Infoln("\n--- DHCP Lease Acquired ---")
-	klog.V(2).Infof("Assigned IP: %s\n", assignedIP)
-	klog.V(2).Infof("Netmask: %s\n", subnetMask)
-	klog.V(2).Infof("Router (Gateway): %s\n", routerIP)
+	klog.V(2).Infof("DHCP Assigned IP: %s\n", assignedIP)
+	klog.V(2).Infof("DHCP Netmask: %s\n", subnetMask)
+	klog.V(4).Infof("Router (Gateway): %s\n", routerIP)
 	if leaseTimeBytes := ack.GetOptionValue(optLeaseTime); len(leaseTimeBytes) == 4 {
 		leaseTime := time.Duration(binary.BigEndian.Uint32(leaseTimeBytes)) * time.Second
-		klog.V(2).Infof("Lease Time: %s\n", leaseTime)
+		klog.V(4).Infof("Lease Time: %s\n", leaseTime)
 	}
 
 	return &net.IPNet{IP: assignedIP, Mask: net.IPMask(subnetMask)}, nil
@@ -585,4 +604,25 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 func RenewIP(containerNsPAth string, ifName string, ip net.IP) error {
 	// TODO
 	return fmt.Errorf("not implemented")
+}
+
+// SocketAt creates a socket in the namespace passed as argument.
+// ref: https://lore.kernel.org/patchwork/patch/217025/
+func socketAt(domain, typ, proto int, ns netns.NsHandle) (int, error) {
+	// lock the thread so we don't switch namespaces
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	// get current namespace
+	origin, err := netns.Get()
+	if err != nil {
+		return -1, err
+	}
+
+	defer func() {
+		netns.Set(origin)
+		origin.Close()
+	}()
+
+	netns.Set(ns)
+	return syscall.Socket(domain, typ, proto)
 }

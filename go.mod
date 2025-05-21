@@ -7,7 +7,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.7.0
 	cloud.google.com/go/container v1.42.4
 	github.com/Mellanox/rdmamap v1.1.0
-	github.com/aojea/socketat v0.0.0-20250102160353-3b8885253ad1
 	github.com/containerd/nri v0.9.0
 	github.com/google/cel-go v0.25.0
 	github.com/spf13/cobra v1.9.1
