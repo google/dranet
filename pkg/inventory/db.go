@@ -50,8 +50,9 @@ var (
 type DB struct {
 	instance *cloudprovider.CloudInstance
 
-	mu       sync.RWMutex
-	podStore map[int]string // key: netnsid path value: Pod namespace/name
+	mu         sync.RWMutex
+	podStore   map[int]string    // key: netnsid path value: Pod namespace/name
+	podNsStore map[string]string // key pod value: netns path
 
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
@@ -61,6 +62,7 @@ func New() *DB {
 	return &DB{
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
 		podStore:      map[int]string{},
+		podNsStore:    map[string]string{},
 		notifications: make(chan []resourceapi.Device),
 	}
 }
@@ -80,11 +82,13 @@ func (db *DB) AddPodNetns(pod string, netnsPath string) {
 		return
 	}
 	db.podStore[id] = pod
+	db.podNsStore[pod] = netnsPath
 }
 
 func (db *DB) RemovePodNetns(pod string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	delete(db.podNsStore, pod)
 	for k, v := range db.podStore {
 		if v == pod {
 			delete(db.podStore, k)
@@ -93,10 +97,19 @@ func (db *DB) RemovePodNetns(pod string) {
 	}
 }
 
+// GetPodName allows to get the Pod name from the namespace Id
+// that comes in the link id from the veth pair interface
 func (db *DB) GetPodName(netnsid int) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.podStore[netnsid]
+}
+
+// GetPodNamespace allows to get the Pod network namespace
+func (db *DB) GetPodNamespace(pod string) string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.podNsStore[pod]
 }
 
 func (db *DB) Run(ctx context.Context) error {

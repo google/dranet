@@ -415,7 +415,11 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	ns := getNetworkNamespace(pod)
 	if ns == "" {
 		klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		return nil
+		// check if is stored in our db, containerd old versions with NRI does not pass this information
+		ns = np.netdb.GetPodNamespace(podKey(pod))
+		if ns == "" {
+			return nil
+		}
 	}
 	// Process the configurations of the ResourceClaim
 	for _, obj := range objs {
