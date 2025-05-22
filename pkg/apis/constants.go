@@ -17,8 +17,6 @@ limitations under the License.
 package apis
 
 const (
-	NetworkKind = "network"
-	RdmaKind    = "rdma"
 	// rdmaNetnsModeShared and rdmaNetnsModeExclusive define the RDMA subsystem
 	// network namespace mode. An RDMA device can only be assigned to a network
 	// namespace when the RDMA subsystem is set to an "exclusive" network
