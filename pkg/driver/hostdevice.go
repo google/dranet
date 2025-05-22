@@ -162,7 +162,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	}
 	// try to acquire an IP via DHCP if there are no addresses
 	if len(addresses) == 0 {
-		acquiredIP, _ := dhcp.AcquireNewIP(containerNsPAth, nsLink.Attrs().Name)
+		acquiredIP, _ := dhcp.AcquireNewIP(containerNsPAth, nsLink.Attrs().Name, nsLink.Attrs().HardwareAddr)
 		if acquiredIP != nil {
 			networkData.IPs = append(networkData.IPs, acquiredIP.String())
 		}
@@ -214,7 +214,6 @@ func nsDetachNetdev(containerNsPAth string, devName string, outName string) erro
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
 	defer s.Close()
-
 	// copy from netlink.LinkModify(dev) using only the parts needed
 	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
 	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, flags)

@@ -27,7 +27,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
 )
@@ -364,7 +363,7 @@ func createRequestPacket(offer *DHCPPacket, mac net.HardwareAddr, xid uint32) *D
 
 */
 
-func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet, err error) {
+func AcquireNewIP(containerNsPAth string, ifName string, macAddr net.HardwareAddr) (acquiredIP *net.IPNet, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			klog.Infof("Recovered from panic: %v", r)
@@ -375,31 +374,9 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 			klog.Infof("fail to acquire ip on ns %s for iface %s : %v", containerNsPAth, ifName, err)
 		}
 	}()
-	rootNs, err := netns.Get()
-	if err != nil {
-		return nil, err
-	}
-	defer rootNs.Close()
 
-	containerNs, err := netns.GetFromPath(containerNsPAth)
-	if err != nil {
-		return nil, fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, ifName, err)
-	}
-	defer containerNs.Close()
-
-	nhNs, err := netlink.NewHandleAt(containerNs)
-	if err != nil {
-		return nil, fmt.Errorf("could not get network namespace handle: %w", err)
-	}
-	defer nhNs.Close()
-
-	nsLink, err := nhNs.LinkByName(ifName)
-	if err != nil {
-		return nil, fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
-	}
-	macAddr := nsLink.Attrs().HardwareAddr
 	// Create UDP socket in the target network namespace
-	sockFD, err := socketAt(syscall.AF_INET, syscall.SOCK_DGRAM, 0, containerNs)
+	sockFD, err := socketAt(syscall.AF_INET, syscall.SOCK_DGRAM, 0, containerNsPAth)
 	if err != nil {
 		return nil, fmt.Errorf("fail to create socket in namespace '%s': %v", containerNsPAth, err)
 	}
@@ -463,8 +440,11 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	offer := &DHCPPacket{}
 	buffer := make([]byte, 1500) // Max DHCP packet size
 
-	// Set read deadline for the socket so it does not block forever
-	readDeadline := time.Now().Add(5 * time.Second)
+	// Default NRI request timeout is 2 seconds, so we can not block
+	// for a long time or the server will disconnect us. The application
+	// should handle this but we can do just a best effort, this is specially
+	// problematic for GCE VMs.
+	readDeadline := time.Now().Add(1 * time.Second)
 	if err := udpConn.SetReadDeadline(readDeadline); err != nil {
 		return nil, fmt.Errorf("failed to set read deadline for OFFER: %v", err)
 	}
@@ -520,7 +500,8 @@ func AcquireNewIP(containerNsPAth string, ifName string) (acquiredIP *net.IPNet,
 	// --- Wait for DHCP ACK ---
 	ack := &DHCPPacket{}
 	// Set read deadline for the socket again for ACK
-	readDeadline = time.Now().Add(5 * time.Second)
+	// We can not take longer than the NRI request timeout that is 2 second by default
+	readDeadline = time.Now().Add(500 * time.Millisecond)
 	if err := udpConn.SetReadDeadline(readDeadline); err != nil {
 		return nil, fmt.Errorf("failed to set read deadline for ACK: %v", err)
 	}
@@ -608,7 +589,7 @@ func RenewIP(containerNsPAth string, ifName string, ip net.IP) error {
 
 // SocketAt creates a socket in the namespace passed as argument.
 // ref: https://lore.kernel.org/patchwork/patch/217025/
-func socketAt(domain, typ, proto int, ns netns.NsHandle) (int, error) {
+func socketAt(domain, typ, proto int, containerNsPAth string) (int, error) {
 	// lock the thread so we don't switch namespaces
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -618,11 +599,17 @@ func socketAt(domain, typ, proto int, ns netns.NsHandle) (int, error) {
 		return -1, err
 	}
 
+	containerNs, err := netns.GetFromPath(containerNsPAth)
+	if err != nil {
+		return -1, fmt.Errorf("could not get network namespace from path %s : %w", containerNsPAth, err)
+	}
+	defer containerNs.Close()
+
 	defer func() {
 		netns.Set(origin)
 		origin.Close()
 	}()
 
-	netns.Set(ns)
+	netns.Set(containerNs)
 	return syscall.Socket(domain, typ, proto)
 }
