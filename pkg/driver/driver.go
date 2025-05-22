@@ -39,6 +39,7 @@ import (
 	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
 	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1beta1"
@@ -106,6 +107,7 @@ type NetworkDriver struct {
 	// An RDMA device can only be assigned to a network namespace when the RDMA subsystem is set to an "exclusive" network namespace mode
 	// Do not publish or process RDMA devices in shared mode.
 	rdmaSharedMode bool
+	charDevices    map[string][]string // key pod UID value list of char devices to be mounted in the containers
 }
 
 type Option func(*NetworkDriver)
@@ -131,6 +133,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		kubeClient:       kubeClient,
 		claimAllocations: store,
 		devices:          []resourceapi.Device{},
+		charDevices:      map[string][]string{},
 		rdmaSharedMode:   rdmaNetnsMode == apis.RdmaNetnsModeShared,
 	}
 
@@ -263,86 +266,17 @@ func (np *NetworkDriver) Shutdown(_ context.Context) {
 // CreateContainer handles container creation requests.
 func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	klog.V(2).Infof("CreateContainer Pod %s/%s UID %s Container %s", pod.Namespace, pod.Name, pod.Uid, ctr.Name)
-	// get the pod network namespace
-	ns := getNetworkNamespace(pod)
-	// host network pods are skipped
-	if ns == "" {
-		klog.V(2).Infof("CreateContainer pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		return nil, nil, nil
-	}
-
-	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
-	if err != nil || len(objs) == 0 {
-		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated ResourceClaim", pod.Namespace, pod.Name)
-		return nil, nil, nil
-	}
-
-	// Process the configurations of the ResourceClaim
-	errorList := []error{}
 	adjust := &api.ContainerAdjustment{}
-	rdmaCM := false
-
-	for _, obj := range objs {
-		claim, ok := obj.(*resourceapi.ResourceClaim)
-		if !ok {
-			continue
-		}
-
-		if claim.Status.Allocation == nil {
-			continue
-		}
-		// final resourceClaim Status
-		// resourceClaimStatus := resourceapply.ResourceClaimStatus()
-		for _, result := range claim.Status.Allocation.Devices.Results {
-			if result.Driver != np.driverName {
-				continue
-			}
-
-			ifName := result.Device
-			localDevice := np.getDevice(result.Device)
-			if localDevice != nil {
-				ifName = getDeviceName(localDevice)
-			} else {
-				klog.Infof("local device for %s not found", ifName)
-			}
-
-			// default to network device
-			kind := apis.NetworkKind
-			if v, ok := localDevice.Basic.Attributes["dra.net/kind"]; ok && v.StringValue != nil {
-				kind = *v.StringValue
-			}
-
-			devices := []string{}
-			if kind == apis.RdmaKind {
-				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
-				devices = rdmamap.GetRdmaCharDevices(ifName)
-			} else if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
-				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
-				devices = rdmamap.GetRdmaCharDevices(rdmaDev)
-			}
-			for _, device := range devices {
-				adjust.AddMount(&api.Mount{
-					Source:      device,
-					Destination: device,
-					Type:        "bind",
-					Options:     []string{"bind", "rw"},
-				})
-				if device == rdmaCmPath {
-					rdmaCM = true
-				}
-			}
-		}
-	}
-	// only mount it once
-	if !rdmaCM {
+	// TODO check if we can make it more granular only to a specific containers
+	for _, device := range np.charDevices[pod.Uid] {
 		adjust.AddMount(&api.Mount{
-			Source:      rdmaCmPath,
-			Destination: rdmaCmPath,
+			Source:      device,
+			Destination: device,
 			Type:        "bind",
 			Options:     []string{"bind", "rw"},
 		})
 	}
-	return adjust, nil, errors.Join(errorList...)
+	return adjust, nil, nil
 }
 
 func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
@@ -369,6 +303,8 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 	// Process the configurations of the ResourceClaim
 	errorList := []error{}
+	// List if char devices associated to the RDMA selected devices
+	charDevices := sets.New[string](rdmaCmPath)
 	for _, obj := range objs {
 		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
@@ -414,6 +350,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				WithDriver(result.Driver).
 				WithPool(result.Pool)
 
+				// default to network device
 			ifName := result.Device
 			localDevice := np.getDevice(result.Device)
 			if localDevice != nil {
@@ -422,36 +359,22 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				klog.Infof("local device for %s not found", ifName)
 			}
 
-			// default to network device
-			kind := apis.NetworkKind
-			if v, ok := localDevice.Basic.Attributes["dra.net/kind"]; ok && v.StringValue != nil {
-				kind = *v.StringValue
-			}
-
-			if kind == apis.RdmaKind {
-				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
+			// only process RDMA devices associated to the network interface if in exclusive mode.
+			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
+				// Obtain the char devices associated to the rdma device
+				charDevices.Insert(rdmamap.GetRdmaCharDevices(rdmaDev)...)
+				// Move the RDMA device to the namespace in exclusive mode
 				if !np.rdmaSharedMode {
-					err := nsAttachRdmadev(ifName, ns)
+					err := nsAttachRdmadev(rdmaDev, ns)
 					if err != nil {
 						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
 						return err
 					}
 				}
-				// no more procesing
-				continue
 			}
 
 			klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
-			// only process RDMA devices associated to the network interface if in exclusive mode.
-			if !np.rdmaSharedMode {
-				if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
-					klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
-					err := nsAttachRdmadev(rdmaDev, ns)
-					if err != nil {
-						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
-					}
-				}
-			}
 
 			// configure routes
 			err = netnsRouting(ns, netconf.Routes)
@@ -504,6 +427,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				)
 			}
 			resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
+			np.charDevices[pod.Uid] = charDevices.UnsortedList()
 		}
 		resourceClaimApply := resourceapply.ResourceClaim(claim.Name, claim.Namespace).WithStatus(resourceClaimStatus)
 		_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(claim.Namespace).ApplyStatus(ctx,
@@ -527,6 +451,8 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
 	defer np.netdb.RemovePodNetns(podKey(pod))
+	// delete the list of char devices associated to this Pod
+	delete(np.charDevices, pod.Uid)
 
 	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
 	if err != nil || len(objs) == 0 {
@@ -611,20 +537,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 		case devices := <-np.netdb.GetResources(ctx):
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
-			if np.rdmaSharedMode {
-				// do not publish RDMA devices in shared mode
-				n := 0
-				for _, device := range devices {
-					if kind, ok := device.Basic.Attributes["dra.net/kind"]; ok &&
-						kind.StringValue != nil &&
-						*kind.StringValue == "rdma" {
-						continue
-					}
-					devices[n] = device
-					n++
-				}
-				devices = devices[:n]
-			}
+			klog.V(4).Infof("After filtering %d devices", len(devices))
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
 					np.nodeName: {
@@ -805,26 +718,10 @@ func getDeviceName(device *resourceapi.Device) string {
 		return device.Name // Fallback to normalized name
 	}
 
-	kindAttr, ok := device.Basic.Attributes["dra.net/kind"]
-	if !ok || kindAttr.StringValue == nil {
-		klog.V(4).Infof("GetDeviceName: 'dra.net/kind' attribute not found or not a string for device %s, returning normalized name", device.Name)
-		return device.Name // Fallback to normalized name
-	}
-
-	var nameAttrKey resourceapi.QualifiedName
-	switch *kindAttr.StringValue {
-	case apis.NetworkKind:
-		nameAttrKey = "dra.net/ifName"
-	case apis.RdmaKind:
-		nameAttrKey = "dra.net/rdmaDevName"
-	default:
-		klog.V(4).Infof("GetDeviceName: unknown kind '%s' for device %s, returning normalized name", *kindAttr.StringValue, device.Name)
-		return device.Name // Fallback to normalized name
-	}
-
+	nameAttrKey := resourceapi.QualifiedName("dra.net/ifName")
 	actualNameAttr, ok := device.Basic.Attributes[nameAttrKey]
 	if !ok || actualNameAttr.StringValue == nil {
-		klog.V(4).Infof("GetDeviceName: attribute '%s' not found or not a string for device %s (kind: %s), returning normalized name", nameAttrKey, device.Name, *kindAttr.StringValue)
+		klog.V(4).Infof("GetDeviceName: attribute '%s' not found or not a string for device %s , returning normalized name", nameAttrKey, device.Name)
 		return device.Name // Fallback to normalized name
 	}
 	return *actualNameAttr.StringValue

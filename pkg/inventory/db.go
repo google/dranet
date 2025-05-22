@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/Mellanox/rdmamap"
-	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -170,25 +169,6 @@ func (db *DB) Run(ctx context.Context) error {
 			klog.V(4).Infof("Found following network interface %s", iface.Attrs().Name)
 		}
 
-		// List RDMA devices
-		rdmaIfaces, err := nlHandle.RdmaLinkList()
-		if err != nil {
-			klog.Error(err, "could not obtain the list of RDMA resources")
-		}
-
-		for _, iface := range rdmaIfaces {
-			klog.V(7).InfoS("Checking rdma interface", "name", iface.Attrs.Name)
-			// publish this RDMA interface
-			device, err := db.rdmaToDRAdev(iface)
-			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs.Name, err)
-				continue
-			}
-
-			devices = append(devices, *device)
-			klog.V(4).Infof("Found following rdma interface %s", iface.Attrs.Name)
-		}
-
 		klog.V(4).Infof("Found %d devices", len(devices))
 		if len(devices) > 0 {
 			db.notifications <- devices
@@ -226,7 +206,6 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 		klog.V(2).Infof("normalizing iface %s name", ifName)
 		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
 	}
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.NetworkKind)}
 	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 
 	linkType := link.Type()
@@ -292,42 +271,6 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 		device.Basic.Attributes["dra.net/cloudNetwork"] = resourceapi.DeviceAttribute{StringValue: &network}
 	}
 
-	return &device, nil
-}
-
-func (db *DB) rdmaToDRAdev(link *netlink.RdmaLink) (*resourceapi.Device, error) {
-	if link == nil {
-		return nil, fmt.Errorf("link is nil")
-	}
-	ifName := link.Attrs.Name
-
-	device := resourceapi.Device{
-		Name: ifName,
-		Basic: &resourceapi.BasicDevice{
-			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
-			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
-		},
-	}
-	// normalize the name because interface names may contain invalid
-	// characters as object names
-	if len(validation.IsDNS1123Label(ifName)) > 0 {
-		klog.V(2).Infof("normalizing iface %s name", ifName)
-		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
-	}
-
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.RdmaKind)}
-	device.Basic.Attributes["dra.net/rdmaDevName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
-	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
-
-	device.Basic.Attributes["dra.net/firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
-	device.Basic.Attributes["dra.net/nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
-	device.Basic.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: ptr.To("rdma")}
-
-	if isVirtual(ifName, sysrdmaPath) {
-		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
-	} else {
-		addPCIAttributes(device.Basic, ifName, sysrdmaPath)
-	}
 	return &device, nil
 }
 
