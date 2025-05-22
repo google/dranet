@@ -57,6 +57,9 @@ const (
 const (
 	// podUIDIndex is the lookup name for the most common index function, which is to index by the pod UID field.
 	podUIDIndex string = "podUID"
+
+	// maxAttempts indicates the number of times the driver will try to recover itself before failing
+	maxAttempts = 5
 )
 
 // podUIDIndexFunc is a default index function that indexes based on an pod UID
@@ -114,7 +117,8 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 
 	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
 	if err != nil {
-		klog.Infof("failed to determine the RDMA subsystem's network namespace mode: %v", err)
+		klog.Infof("failed to determine the RDMA subsystem's network namespace mode, assume shared mode: %v", err)
+		rdmaNetnsMode = apis.RdmaNetnsModeShared
 	} else {
 		klog.Infof("RDMA subsystem in mode: %s", rdmaNetnsMode)
 	}
@@ -163,6 +167,11 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	nriOpts := []stub.Option{
 		stub.WithPluginName(driverName),
 		stub.WithPluginIdx("00"),
+		// https://github.com/containerd/nri/pull/173
+		// Otherwise it silently exits the progrms
+		stub.WithOnClose(func() {
+			klog.Infof("%s NRI plugin closed", driverName)
+		}),
 	}
 	stub, err := stub.New(plugin, nriOpts...)
 	if err != nil {
@@ -171,19 +180,37 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	plugin.nriPlugin = stub
 
 	go func() {
-		err = plugin.nriPlugin.Run(ctx)
-		if err != nil {
-			klog.Infof("NRI plugin failed with error %v", err)
+		for i := 0; i < maxAttempts; i++ {
+			err = plugin.nriPlugin.Run(ctx)
+			if err != nil {
+				klog.Infof("NRI plugin failed with error %v", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				klog.Infof("Restarting NRI plugin %d out of %d", i, maxAttempts)
+			}
 		}
+		klog.Fatalf("NRI plugin failed for %d times to be restarted", maxAttempts)
 	}()
 
 	// register the host network interfaces
 	plugin.netdb = inventory.New()
 	go func() {
-		err = plugin.netdb.Run(ctx)
-		if err != nil {
-			klog.Infof("Network Device DB failed with error %v", err)
+		for i := 0; i < maxAttempts; i++ {
+			err = plugin.netdb.Run(ctx)
+			if err != nil {
+				klog.Infof("Network Device DB failed with error %v", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				klog.Infof("Restarting Network Device DB %d out of %d", i, maxAttempts)
+			}
 		}
+		klog.Fatalf("Network Device DB failed for %d times to be restarted", maxAttempts)
 	}()
 
 	// publish available resources
@@ -233,6 +260,10 @@ func (np *NetworkDriver) Shutdown(_ context.Context) {
 
 func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+	start := time.Now()
+	defer func() {
+		klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
+	}()
 	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
 	if err != nil || len(objs) == 0 {
 		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated ResourceClaim", pod.Namespace, pod.Name)
@@ -404,6 +435,10 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+	start := time.Now()
+	defer func() {
+		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
+	}()
 	defer np.netdb.RemovePodNetns(podKey(pod))
 
 	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
