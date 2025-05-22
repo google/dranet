@@ -60,6 +60,8 @@ const (
 
 	// maxAttempts indicates the number of times the driver will try to recover itself before failing
 	maxAttempts = 5
+
+	rdmaCmPath = "/dev/infiniband/rdma_cm"
 )
 
 // podUIDIndexFunc is a default index function that indexes based on an pod UID
@@ -256,6 +258,91 @@ func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, 
 
 func (np *NetworkDriver) Shutdown(_ context.Context) {
 	klog.Info("Runtime shutting down...")
+}
+
+// CreateContainer handles container creation requests.
+func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+	klog.V(2).Infof("CreateContainer Pod %s/%s UID %s Container %s", pod.Namespace, pod.Name, pod.Uid, ctr.Name)
+	// get the pod network namespace
+	ns := getNetworkNamespace(pod)
+	// host network pods are skipped
+	if ns == "" {
+		klog.V(2).Infof("CreateContainer pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
+		return nil, nil, nil
+	}
+
+	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
+	if err != nil || len(objs) == 0 {
+		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated ResourceClaim", pod.Namespace, pod.Name)
+		return nil, nil, nil
+	}
+
+	// Process the configurations of the ResourceClaim
+	errorList := []error{}
+	adjust := &api.ContainerAdjustment{}
+	rdmaCM := false
+
+	for _, obj := range objs {
+		claim, ok := obj.(*resourceapi.ResourceClaim)
+		if !ok {
+			continue
+		}
+
+		if claim.Status.Allocation == nil {
+			continue
+		}
+		// final resourceClaim Status
+		// resourceClaimStatus := resourceapply.ResourceClaimStatus()
+		for _, result := range claim.Status.Allocation.Devices.Results {
+			if result.Driver != np.driverName {
+				continue
+			}
+
+			ifName := result.Device
+			localDevice := np.getDevice(result.Device)
+			if localDevice != nil {
+				ifName = getDeviceName(localDevice)
+			} else {
+				klog.Infof("local device for %s not found", ifName)
+			}
+
+			// default to network device
+			kind := apis.NetworkKind
+			if v, ok := localDevice.Basic.Attributes["dra.net/kind"]; ok && v.StringValue != nil {
+				kind = *v.StringValue
+			}
+
+			devices := []string{}
+			if kind == apis.RdmaKind {
+				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
+				devices = rdmamap.GetRdmaCharDevices(ifName)
+			} else if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
+				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
+				devices = rdmamap.GetRdmaCharDevices(rdmaDev)
+			}
+			for _, device := range devices {
+				adjust.AddMount(&api.Mount{
+					Source:      device,
+					Destination: device,
+					Type:        "bind",
+					Options:     []string{"bind", "rw"},
+				})
+				if device == rdmaCmPath {
+					rdmaCM = true
+				}
+			}
+		}
+	}
+	// only mount it once
+	if !rdmaCM {
+		adjust.AddMount(&api.Mount{
+			Source:      rdmaCmPath,
+			Destination: rdmaCmPath,
+			Type:        "bind",
+			Options:     []string{"bind", "rw"},
+		})
+	}
+	return adjust, nil, errors.Join(errorList...)
 }
 
 func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
