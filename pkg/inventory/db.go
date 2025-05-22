@@ -18,6 +18,7 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -114,6 +115,11 @@ func (db *DB) GetPodNamespace(pod string) string {
 
 func (db *DB) Run(ctx context.Context) error {
 	defer close(db.notifications)
+
+	nlHandle, err := netlink.NewHandle()
+	if err != nil {
+		return fmt.Errorf("error creating netlink handle %v", err)
+	}
 	// Resources are published periodically or if there is a netlink notification
 	// indicating a new interfaces was added or changed
 	nlChannel := make(chan netlink.LinkUpdate)
@@ -137,35 +143,35 @@ func (db *DB) Run(ctx context.Context) error {
 		}
 
 		devices := []resourceapi.Device{}
-		ifaces, err := net.Interfaces()
+		ifaces, err := nlHandle.LinkList()
 		if err != nil {
 			klog.Error(err, "unexpected error trying to get system interfaces")
 		}
 		for _, iface := range ifaces {
-			klog.V(7).InfoS("Checking network interface", "name", iface.Name)
-			if gwInterfaces.Has(iface.Name) {
-				klog.V(4).Infof("iface %s is an uplink interface", iface.Name)
+			klog.V(7).InfoS("Checking network interface", "name", iface.Attrs().Name)
+			if gwInterfaces.Has(iface.Attrs().Name) {
+				klog.V(4).Infof("iface %s is an uplink interface", iface.Attrs().Name)
 				continue
 			}
 
 			// skip loopback interfaces
-			if iface.Flags&net.FlagLoopback != 0 {
+			if iface.Attrs().Flags&net.FlagLoopback != 0 {
 				continue
 			}
 
 			// publish this network interface
-			device, err := db.netdevToDRAdev(iface.Name)
+			device, err := db.netdevToDRAdev(iface)
 			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Name, err)
+				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs().Name, err)
 				continue
 			}
 
 			devices = append(devices, *device)
-			klog.V(4).Infof("Found following network interface %s", iface.Name)
+			klog.V(4).Infof("Found following network interface %s", iface.Attrs().Name)
 		}
 
 		// List RDMA devices
-		rdmaIfaces, err := netlink.RdmaLinkList()
+		rdmaIfaces, err := nlHandle.RdmaLinkList()
 		if err != nil {
 			klog.Error(err, "could not obtain the list of RDMA resources")
 		}
@@ -173,7 +179,7 @@ func (db *DB) Run(ctx context.Context) error {
 		for _, iface := range rdmaIfaces {
 			klog.V(7).InfoS("Checking rdma interface", "name", iface.Attrs.Name)
 			// publish this RDMA interface
-			device, err := db.rdmaToDRAdev(iface.Attrs.Name)
+			device, err := db.rdmaToDRAdev(iface)
 			if err != nil {
 				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs.Name, err)
 				continue
@@ -205,7 +211,8 @@ func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 	return db.notifications
 }
 
-func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
+func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
+	ifName := link.Attrs().Name
 	device := resourceapi.Device{
 		Name: ifName,
 		Basic: &resourceapi.BasicDevice{
@@ -221,11 +228,7 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	}
 	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.NetworkKind)}
 	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
-	link, err := netlink.LinkByName(ifName)
-	if err != nil {
-		klog.Infof("Error getting link by name %v", err)
-		return nil, err
-	}
+
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
 
@@ -292,7 +295,12 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 	return &device, nil
 }
 
-func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
+func (db *DB) rdmaToDRAdev(link *netlink.RdmaLink) (*resourceapi.Device, error) {
+	if link == nil {
+		return nil, fmt.Errorf("link is nil")
+	}
+	ifName := link.Attrs.Name
+
 	device := resourceapi.Device{
 		Name: ifName,
 		Basic: &resourceapi.BasicDevice{
@@ -310,11 +318,6 @@ func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
 	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.RdmaKind)}
 	device.Basic.Attributes["dra.net/rdmaDevName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
-	link, err := netlink.RdmaLinkByName(ifName)
-	if err != nil {
-		klog.Infof("Error getting link by name %v", err)
-		return nil, err
-	}
 
 	device.Basic.Attributes["dra.net/firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
 	device.Basic.Attributes["dra.net/nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
