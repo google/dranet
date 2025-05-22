@@ -47,21 +47,21 @@ const (
 	dhcpACK      = 5
 
 	// DHCP options
-	optMessageType          = 53
-	optRequestedIPAddress   = 50
-	optServerIdentifier     = 54
-	optSubnetMask           = 1
-	optRouter               = 3
-	optParameterRequestList = 55
-	optEnd                  = 255
-	optLeaseTime            = 51
+	optMessageType               = 53
+	optRequestedIPAddress        = 50
+	optServerIdentifier          = 54
+	optSubnetMask                = 1
+	optRouter                    = 3
+	optParameterRequestList      = 55
+	optEnd                  byte = 255
+	optLeaseTime                 = 51
 
 	// DHCP ports
 	dhcpClientPort = 68
 	dhcpServerPort = 67
 
 	// Magic cookie for DHCP options
-	magicCookie = 0x63825363 // 99.130.83.99
+	magicCookie uint32 = 0x63825363 // 99.130.83.99
 )
 
 // DHCPOption represents a DHCP option (Type, Length, Value)
@@ -132,38 +132,37 @@ func (p *DHCPPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// Write fixed-size header fields
-	binary.Write(buf, binary.BigEndian, p.Op)
-	binary.Write(buf, binary.BigEndian, p.Htype)
-	binary.Write(buf, binary.BigEndian, p.Hlen)
-	binary.Write(buf, binary.BigEndian, p.Hops)
-	binary.Write(buf, binary.BigEndian, p.Xid)
-	binary.Write(buf, binary.BigEndian, p.Secs)
-	binary.Write(buf, binary.BigEndian, p.Flags)
-	binary.Write(buf, binary.BigEndian, p.Ciaddr.To4())
-	binary.Write(buf, binary.BigEndian, p.Yiaddr.To4())
-	binary.Write(buf, binary.BigEndian, p.Siaddr.To4())
-	binary.Write(buf, binary.BigEndian, p.Giaddr.To4())
+	binary.Write(buf, binary.BigEndian, p.Op)           // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Htype)        // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Hlen)         // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Hops)         // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Xid)          // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Secs)         // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Flags)        // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Ciaddr.To4()) // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Yiaddr.To4()) // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Siaddr.To4()) // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.Giaddr.To4()) // nolint:errcheck
 
 	// Write chaddr (16 bytes, pad with zeros if less than 16)
 	chaddrBuf := make([]byte, 16)
 	copy(chaddrBuf, p.Chaddr)
-	binary.Write(buf, binary.BigEndian, chaddrBuf)
+	binary.Write(buf, binary.BigEndian, chaddrBuf) // nolint:errcheck
 
 	// Write sname and file (padded with zeros)
-	binary.Write(buf, binary.BigEndian, p.Sname)
-	binary.Write(buf, binary.BigEndian, p.File)
+	binary.Write(buf, binary.BigEndian, p.Sname) // nolint:errcheck
+	binary.Write(buf, binary.BigEndian, p.File)  // nolint:errcheck
 
 	// Write magic cookie
-	binary.Write(buf, binary.BigEndian, magicCookie)
+	binary.Write(buf, binary.BigEndian, magicCookie) // nolint:errcheck
 
 	// Write options
 	for _, opt := range p.Options {
-		binary.Write(buf, binary.BigEndian, opt.Type)
-		binary.Write(buf, binary.BigEndian, opt.Length)
-		binary.Write(buf, binary.BigEndian, opt.Value)
+		binary.Write(buf, binary.BigEndian, opt.Type)   // nolint:errcheck
+		binary.Write(buf, binary.BigEndian, opt.Length) // nolint:errcheck
+		binary.Write(buf, binary.BigEndian, opt.Value)  // nolint:errcheck
 	}
-	binary.Write(buf, binary.BigEndian, optEnd) // End option
-
+	binary.Write(buf, binary.BigEndian, optEnd) // nolint:errcheck
 	return buf.Bytes(), nil
 }
 
@@ -175,33 +174,33 @@ func (p *DHCPPacket) Unmarshal(data []byte) error {
 
 	reader := bytes.NewReader(data)
 
-	binary.Read(reader, binary.BigEndian, &p.Op)
-	binary.Read(reader, binary.BigEndian, &p.Htype)
-	binary.Read(reader, binary.BigEndian, &p.Hlen)
-	binary.Read(reader, binary.BigEndian, &p.Hops)
-	binary.Read(reader, binary.BigEndian, &p.Xid)
-	binary.Read(reader, binary.BigEndian, &p.Secs)
-	binary.Read(reader, binary.BigEndian, &p.Flags)
+	binary.Read(reader, binary.BigEndian, &p.Op)    // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Htype) // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Hlen)  // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Hops)  // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Xid)   // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Secs)  // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, &p.Flags) // nolint:errcheck
 
 	ipBuf := make([]byte, 4)
-	binary.Read(reader, binary.BigEndian, ipBuf)
+	binary.Read(reader, binary.BigEndian, ipBuf) // nolint:errcheck
 	p.Ciaddr = net.IP(ipBuf)
-	binary.Read(reader, binary.BigEndian, ipBuf)
+	binary.Read(reader, binary.BigEndian, ipBuf) // nolint:errcheck
 	p.Yiaddr = net.IP(ipBuf)
-	binary.Read(reader, binary.BigEndian, ipBuf)
+	binary.Read(reader, binary.BigEndian, ipBuf) // nolint:errcheck
 	p.Siaddr = net.IP(ipBuf)
-	binary.Read(reader, binary.BigEndian, ipBuf)
+	binary.Read(reader, binary.BigEndian, ipBuf) // nolint:errcheck
 	p.Giaddr = net.IP(ipBuf)
 
 	chaddrBuf := make([]byte, 16)
-	binary.Read(reader, binary.BigEndian, chaddrBuf)
-	p.Chaddr = net.HardwareAddr(chaddrBuf[:p.Hlen]) // Use Hlen for actual MAC length
+	binary.Read(reader, binary.BigEndian, chaddrBuf) // nolint:errcheck
+	p.Chaddr = net.HardwareAddr(chaddrBuf[:p.Hlen])  // Use Hlen for actual MAC length
 
-	binary.Read(reader, binary.BigEndian, p.Sname[:])
-	binary.Read(reader, binary.BigEndian, p.File[:])
+	binary.Read(reader, binary.BigEndian, p.Sname[:]) // nolint:errcheck
+	binary.Read(reader, binary.BigEndian, p.File[:])  // nolint:errcheck
 
 	var cookie uint32
-	binary.Read(reader, binary.BigEndian, &cookie)
+	binary.Read(reader, binary.BigEndian, &cookie) // nolint:errcheck
 	if cookie != magicCookie {
 		return fmt.Errorf("invalid DHCP magic cookie: 0x%x", cookie)
 	}
@@ -444,7 +443,7 @@ func AcquireNewIP(containerNsPAth string, ifName string, macAddr net.HardwareAdd
 	// for a long time or the server will disconnect us. The application
 	// should handle this but we can do just a best effort, this is specially
 	// problematic for GCE VMs.
-	readDeadline := time.Now().Add(1 * time.Second)
+	readDeadline := time.Now().Add(500 * time.Second)
 	if err := udpConn.SetReadDeadline(readDeadline); err != nil {
 		return nil, fmt.Errorf("failed to set read deadline for OFFER: %v", err)
 	}
@@ -606,10 +605,13 @@ func socketAt(domain, typ, proto int, containerNsPAth string) (int, error) {
 	defer containerNs.Close()
 
 	defer func() {
-		netns.Set(origin)
-		origin.Close()
+		netns.Set(origin) // nolint:errcheck
+		origin.Close()    // nolint:errcheck
 	}()
 
-	netns.Set(containerNs)
+	err = netns.Set(containerNs)
+	if err != nil {
+		return -1, fmt.Errorf("could not set network namespace path %s : %w", containerNsPAth, err)
+	}
 	return syscall.Socket(domain, typ, proto)
 }
