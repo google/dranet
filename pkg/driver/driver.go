@@ -233,12 +233,12 @@ func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox,
 	adjust := &api.ContainerAdjustment{}
 	for _, config := range podConfig {
 		for _, devpath := range config.RDMADevice.DevChars {
-			adjust.AddMount(&api.Mount{
-				Source:      devpath,
-				Destination: devpath,
-				Type:        "bind",
-				Options:     []string{"bind", "rw"},
-			})
+			dev, err := GetDeviceInfo(devpath)
+			if err != nil {
+				klog.Infof("fail to get device info for %s : %v", devpath, err)
+			} else {
+				adjust.AddDevice(&dev)
+			}
 		}
 	}
 	return adjust, nil, nil
