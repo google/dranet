@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
+	"k8s.io/klog/v2"
 )
 
 func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig apis.InterfaceConfig) (*resourceapi.NetworkDeviceData, error) {
@@ -50,8 +51,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	defer containerNs.Close()
 
 	attrs := hostDev.Attrs()
-	// Store the original name
-	attrs.Alias = hostIfName
 
 	// copy from netlink.LinkModify(dev) using only the parts needed
 	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
@@ -115,6 +114,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	for _, address := range interfaceConfig.Addresses {
 		_, ipnet, err := net.ParseCIDR(address)
 		if err != nil {
+			klog.Infof("fail to parse address %s : %v", address, err)
 			continue // this should not happen since it has been already validated
 		}
 		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: ipnet})

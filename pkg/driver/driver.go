@@ -250,13 +250,14 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	defer func() {
 		klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
+	// get the devices associated to this Pod
 	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
 	if !ok {
 		return nil
 	}
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
-	// host network pods are skipped
+	// host network pods can not allocate network devices because it impact the host
 	if ns == "" {
 		return fmt.Errorf("RunPodSandbox pod %s/%s using host network can not claim host devices", pod.Namespace, pod.Name)
 	}
@@ -265,7 +266,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 	// Process the configurations of the ResourceClaim
 	errorList := []error{}
-	// List if char devices associated to the RDMA selected devices
 	for deviceName, config := range podConfig {
 		klog.V(4).Infof("RunPodSandbox processing device: %s with config: %#v", deviceName, config)
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
@@ -278,18 +278,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 
 		ifName := names.GetOriginalName(deviceName)
 
-		// Move the RDMA device to the namespace in exclusive mode
-		if !np.rdmaSharedMode {
-			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
-			err := nsAttachRdmadev(config.RDMADevice.LinkDev, ns)
-			if err != nil {
-				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", deviceName, ns, err)
-				return err
-			}
-		}
-
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
-
 		// TODO config options to rename the device and pass parameters
 		// use https://github.com/opencontainers/runtime-spec/pull/1271
 		networkData, err := nsAttachNetdev(ifName, ns, config.NetDevice)
@@ -304,41 +293,53 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 					WithLastTransitionTime(metav1.Now()),
 			)
 			errorList = append(errorList, err)
+			continue
+		}
+
+		resourceClaimStatusDevice.WithConditions(
+			metav1apply.Condition().
+				WithType("Ready").
+				WithReason("NetworkDeviceReady").
+				WithStatus(metav1.ConditionTrue).
+				WithLastTransitionTime(metav1.Now()),
+		).WithNetworkData(resourceapply.NetworkDeviceData().
+			WithInterfaceName(networkData.InterfaceName).
+			WithHardwareAddress(networkData.HardwareAddress).
+			WithIPs(networkData.IPs...),
+		)
+		// configure routes
+		err = netnsRouting(ns, config.NetNamespaceRoutes)
+		if err != nil {
+			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
+			resourceClaimStatusDevice.WithConditions(
+				metav1apply.Condition().
+					WithType("NetworkReady").
+					WithStatus(metav1.ConditionFalse).
+					WithReason("NetworkReadyError").
+					WithMessage(err.Error()).
+					WithLastTransitionTime(metav1.Now()),
+			)
+			errorList = append(errorList, err)
 		} else {
 			resourceClaimStatusDevice.WithConditions(
 				metav1apply.Condition().
-					WithType("Ready").
-					WithReason("NetworkDeviceReady").
+					WithType("NetworkReady").
 					WithStatus(metav1.ConditionTrue).
+					WithReason("NetworkReady").
 					WithLastTransitionTime(metav1.Now()),
-			).WithNetworkData(resourceapply.NetworkDeviceData().
-				WithInterfaceName(networkData.InterfaceName).
-				WithHardwareAddress(networkData.HardwareAddress).
-				WithIPs(networkData.IPs...),
 			)
-			// configure routes
-			err := netnsRouting(ns, config.NetNamespaceRoutes)
+		}
+
+		// Move the RDMA device to the namespace if the host is in exclusive mode
+		if !np.rdmaSharedMode {
+			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
+			err := nsAttachRdmadev(config.RDMADevice.LinkDev, ns)
 			if err != nil {
-				klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("NetworkReady").
-						WithStatus(metav1.ConditionFalse).
-						WithReason("NetworkReadyError").
-						WithMessage(err.Error()).
-						WithLastTransitionTime(metav1.Now()),
-				)
-				errorList = append(errorList, err)
-			} else {
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("NetworkReady").
-						WithStatus(metav1.ConditionTrue).
-						WithReason("NetworkReady").
-						WithLastTransitionTime(metav1.Now()),
-				)
+				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", deviceName, ns, err)
+				return err
 			}
 		}
+
 		resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
 		resourceClaimApply := resourceapply.ResourceClaim(config.Claim.Name, config.Claim.Namespace).WithStatus(resourceClaimStatus)
 		// do not block the handler to update the status
@@ -440,10 +441,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 	}
 
 	var errorList []error
-	var netconf apis.NetworkConfig
 	charDevices := sets.New[string]()
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		requestName := result.Request
+		netconf := apis.NetworkConfig{}
 		for _, config := range claim.Status.Allocation.Devices.Config {
 			// Check there is a config associated to this device
 			if config.Opaque == nil ||
@@ -484,17 +485,18 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
 			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
 				klog.Infof("fail to get ip addresses for interface %s : %v", ifName, err)
-			}
-			for _, address := range nlAddresses {
-				// Only move IP addresses with global scope because those are not host-specific, auto-configured,
-				// or have limited network scope, making them unsuitable inside the container namespace.
-				// Ref: https://www.ietf.org/rfc/rfc3549.txt
-				if address.Scope != unix.RT_SCOPE_UNIVERSE {
-					continue
+			} else {
+				for _, address := range nlAddresses {
+					// Only move IP addresses with global scope because those are not host-specific, auto-configured,
+					// or have limited network scope, making them unsuitable inside the container namespace.
+					// Ref: https://www.ietf.org/rfc/rfc3549.txt
+					if address.Scope != unix.RT_SCOPE_UNIVERSE {
+						continue
+					}
+					// remove the interface attribute of the original address
+					// to avoid issues when the interface is renamed.
+					netconf.Interface.Addresses = append(netconf.Interface.Addresses, address.IPNet.String())
 				}
-				// remove the interface attribute of the original address
-				// to avoid issues when the interface is renamed.
-				netconf.Interface.Addresses = append(netconf.Interface.Addresses, address.IPNet.String())
 			}
 		}
 
