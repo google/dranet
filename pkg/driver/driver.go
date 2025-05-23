@@ -232,13 +232,8 @@ func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox,
 	// Containers only cares about the RDMA char devices
 	adjust := &api.ContainerAdjustment{}
 	for _, config := range podConfig {
-		for _, devpath := range config.RDMADevice.DevChars {
-			dev, err := GetDeviceInfo(devpath)
-			if err != nil {
-				klog.Infof("fail to get device info for %s : %v", devpath, err)
-			} else {
-				adjust.AddDevice(&dev)
-			}
+		for _, dev := range config.RDMADevice.DevChars {
+			adjust.AddDevice(&dev)
 		}
 	}
 	return adjust, nil, nil
@@ -586,7 +581,14 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			// Obtain the char devices associated to the rdma device
 			charDevices.Insert(rdmaCmPath)
 			charDevices.Insert(rdmamap.GetRdmaCharDevices(rdmaDev)...)
-			podCfg.RDMADevice.DevChars = charDevices.UnsortedList()
+			for _, devpath := range charDevices.UnsortedList() {
+				dev, err := GetDeviceInfo(devpath)
+				if err != nil {
+					klog.Infof("fail to get device info for %s : %v", devpath, err)
+				} else {
+					podCfg.RDMADevice.DevChars = append(podCfg.RDMADevice.DevChars, dev)
+				}
+			}
 		}
 
 		device := kubeletplugin.Device{
