@@ -502,6 +502,8 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				Namespace: claim.Namespace,
 				Name:      claim.Name,
 			},
+			NetDevice:          netconf.Interface,
+			NetNamespaceRoutes: netconf.Routes,
 		}
 		ifName := names.GetOriginalName(result.Device)
 		// Get Network configuration and merge it
@@ -512,7 +514,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		}
 
 		// If there is no custom addresses then use the existing ones
-		if len(netconf.Interface.Addresses) == 0 {
+		if len(podCfg.NetDevice.Addresses) == 0 {
 			// get the existing IP addresses
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
 			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
@@ -525,7 +527,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					if address.Scope != unix.RT_SCOPE_UNIVERSE {
 						continue
 					}
-					netconf.Interface.Addresses = append(netconf.Interface.Addresses, address.IPNet.String())
+					podCfg.NetDevice.Addresses = append(podCfg.NetDevice.Addresses, address.IPNet.String())
 				}
 			}
 		}
@@ -534,14 +536,14 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		// this may be an interface that uses DHCP, so we bring it up if necessary and do a DHCP
 		// request to gather the network parameters (IPs and Routes) ... but we DO NOT apply them
 		// in the root namespace
-		if len(netconf.Interface.Addresses) == 0 {
+		if len(podCfg.NetDevice.Addresses) == 0 {
 			klog.V(2).Infof("trying to get network configuration via DHCP")
 			ip, routes, err := getDHCP(ifName)
 			if err != nil {
 				klog.Infof("fail to get configuration via DHCP: %v", err)
 			} else {
-				netconf.Interface.Addresses = []string{ip}
-				netconf.Routes = append(netconf.Routes, routes...)
+				podCfg.NetDevice.Addresses = []string{ip}
+				podCfg.NetNamespaceRoutes = append(podCfg.NetNamespaceRoutes, routes...)
 			}
 		}
 
