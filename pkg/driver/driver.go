@@ -391,12 +391,14 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	for deviceName, config := range podConfig {
 		ifName := names.GetOriginalName(deviceName)
 
-		if err := nsDetachNetdev(ns, ifName, config.NetDevice.Name); err != nil {
+		if err := nsDetachNetdev(ns, config.NetDevice.Name, ifName); err != nil {
 			klog.Infof("fail to return network device %s : %v", deviceName, err)
 		}
 
-		if err := nsDetachRdmadev(ns, config.RDMADevice.LinkDev); err != nil {
-			klog.Infof("fail to return rdma device %s : %v", deviceName, err)
+		if config.RDMADevice.LinkDev != "" {
+			if err := nsDetachRdmadev(ns, config.RDMADevice.LinkDev); err != nil {
+				klog.Infof("fail to return rdma device %s : %v", deviceName, err)
+			}
 		}
 	}
 	return nil
