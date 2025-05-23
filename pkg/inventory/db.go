@@ -27,12 +27,12 @@ import (
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/google/dranet/pkg/cloudprovider"
+	"github.com/google/dranet/pkg/names"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -194,18 +194,14 @@ func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	ifName := link.Attrs().Name
 	device := resourceapi.Device{
-		Name: ifName,
 		Basic: &resourceapi.BasicDevice{
 			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
 			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
 		},
 	}
-	// normalize the name because interface names may contain invalid
-	// characters as object names
-	if len(validation.IsDNS1123Label(ifName)) > 0 {
-		klog.V(2).Infof("normalizing iface %s name", ifName)
-		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
-	}
+	// Set the device name. It will be normalized only if necessary.
+	device.Name = names.SetDeviceName(ifName)
+	// expose the real interface name as an attribute in case it is normalized.
 	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 
 	linkType := link.Type()
