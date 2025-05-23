@@ -359,6 +359,9 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	return errors.Join(errorList...)
 }
 
+// StopPodSandbox tries to move back the devices to the rootnamespace but does not fail
+// to avoid disrupting the pod shutdown. The kernel will do the cleanup once the namespace
+// is deleted.
 func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	start := time.Now()
@@ -367,6 +370,35 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
 
+	// get the devices associated to this Pod
+	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
+	if !ok {
+		return nil
+	}
+	// get the pod network namespace
+	ns := getNetworkNamespace(pod)
+	if ns == "" {
+		// some version of containerd does not send the network namespace information on this hook so
+		// we workaround it using the local copy we have in the db to associate interfaces with Pods via
+		// the network namespace id.
+		ns = np.netdb.GetPodNamespace(podKey(pod))
+		if ns == "" {
+			klog.Infof("StopPodSandbox pod %s/%s using host network ... skipping", pod.Namespace, pod.Name)
+			return nil
+		}
+	}
+
+	for deviceName, config := range podConfig {
+		ifName := names.GetOriginalName(deviceName)
+
+		if err := nsDetachNetdev(ns, ifName, config.NetDevice.Name); err != nil {
+			klog.Infof("fail to return network device %s : %v", deviceName, err)
+		}
+
+		if err := nsDetachRdmadev(ns, config.RDMADevice.LinkDev); err != nil {
+			klog.Infof("fail to return rdma device %s : %v", deviceName, err)
+		}
+	}
 	return nil
 }
 
