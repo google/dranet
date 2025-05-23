@@ -319,7 +319,9 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 					WithMessage(err.Error()).
 					WithLastTransitionTime(metav1.Now()),
 			)
-			errorList = append(errorList, err)
+			// some routes are not guaranteed to work so we do not fail
+			// and we make a best effort to configure them
+			klog.Infof("fail to configure routing: %v", err)
 		} else {
 			resourceClaimStatusDevice.WithConditions(
 				metav1apply.Condition().
