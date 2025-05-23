@@ -598,7 +598,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 	}
 
 	if len(errorList) > 0 {
-		klog.Infof("claim %s contain errors: %w", claim.UID, errors.Join(errorList...))
+		klog.Infof("claim %s contain errors: %v", claim.UID, errors.Join(errorList...))
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("claim %s contain errors: %w", claim.UID, errors.Join(errorList...)),
 		}
