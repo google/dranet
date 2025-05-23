@@ -363,7 +363,6 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	start := time.Now()
 	defer func() {
 		np.netdb.RemovePodNetns(podKey(pod))
-		np.podConfigStore.DeletePod(types.UID(pod.GetUid()))
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
 
@@ -373,7 +372,6 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	np.netdb.RemovePodNetns(podKey(pod))
-	np.podConfigStore.DeletePod(types.UID(pod.GetUid()))
 	return nil
 }
 
@@ -574,7 +572,6 @@ func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []k
 	}
 
 	result := make(map[types.UID]error)
-
 	for _, claim := range claims {
 		err := np.unprepareResourceClaim(ctx, claim)
 		result[claim.UID] = err
@@ -586,6 +583,7 @@ func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []k
 }
 
 func (np *NetworkDriver) unprepareResourceClaim(_ context.Context, claim kubeletplugin.NamespacedObject) error {
+	np.podConfigStore.DeleteClaim(claim.NamespacedName)
 	return nil
 }
 

@@ -194,3 +194,91 @@ func TestPodConfigStore_ThreadSafety(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestPodConfigStore_DeleteClaim(t *testing.T) {
+	claim1 := types.NamespacedName{Namespace: "ns1", Name: "claim1"}
+	claim2 := types.NamespacedName{Namespace: "ns1", Name: "claim2"}
+
+	podUID1 := types.UID("pod-uid-1")
+	podUID2 := types.UID("pod-uid-2")
+	podUID3 := types.UID("pod-uid-3")
+
+	dev1 := "eth0"
+	dev2 := "eth1"
+
+	config1_1 := PodConfig{Claim: claim1, NetDevice: apis.InterfaceConfig{Name: "p1d1c1"}} // Pod1, Dev1, Claim1
+	config1_2 := PodConfig{Claim: claim1, NetDevice: apis.InterfaceConfig{Name: "p1d2c1"}} // Pod1, Dev2, Claim1
+	config2_1 := PodConfig{Claim: claim1, NetDevice: apis.InterfaceConfig{Name: "p2d1c1"}} // Pod2, Dev1, Claim1
+	config3_1 := PodConfig{Claim: claim2, NetDevice: apis.InterfaceConfig{Name: "p3d1c2"}} // Pod3, Dev1, Claim2
+
+	tests := []struct {
+		name                string
+		initialConfigs      func() *PodConfigStore
+		claimToDelete       types.NamespacedName
+		expectedPodsAfter   map[types.UID]map[string]PodConfig
+		checkSpecificConfig func(t *testing.T, store *PodConfigStore)
+	}{
+		{
+			name: "delete claim associated with one pod, one device",
+			initialConfigs: func() *PodConfigStore {
+				s := NewPodConfigStore()
+				s.Set(podUID3, dev1, config3_1) // Pod3 has Claim2
+				s.Set(podUID1, dev1, config1_1) // Pod1 has Claim1
+				return s
+			},
+			claimToDelete: claim2, // Delete Claim2
+			expectedPodsAfter: map[types.UID]map[string]PodConfig{
+				podUID1: {dev1: config1_1}, // Pod1 (Claim1) should remain
+			},
+		},
+		{
+			name: "delete claim associated with multiple pods",
+			initialConfigs: func() *PodConfigStore {
+				s := NewPodConfigStore()
+				s.Set(podUID1, dev1, config1_1) // Pod1, Dev1, Claim1
+				s.Set(podUID1, dev2, config1_2) // Pod1, Dev2, Claim1
+				s.Set(podUID2, dev1, config2_1) // Pod2, Dev1, Claim1
+				s.Set(podUID3, dev1, config3_1) // Pod3, Dev1, Claim2
+				return s
+			},
+			claimToDelete: claim1, // Delete Claim1
+			expectedPodsAfter: map[types.UID]map[string]PodConfig{
+				podUID3: {dev1: config3_1}, // Pod3 (Claim2) should remain
+			},
+		},
+		{
+			name: "delete non-existent claim",
+			initialConfigs: func() *PodConfigStore {
+				s := NewPodConfigStore()
+				s.Set(podUID1, dev1, config1_1)
+				return s
+			},
+			claimToDelete: types.NamespacedName{Namespace: "ns-other", Name: "claim-non-existent"},
+			expectedPodsAfter: map[types.UID]map[string]PodConfig{
+				podUID1: {dev1: config1_1}, // Pod1 should remain
+			},
+		},
+		{
+			name: "delete claim from empty store",
+			initialConfigs: func() *PodConfigStore {
+				return NewPodConfigStore()
+			},
+			claimToDelete:     claim1,
+			expectedPodsAfter: map[types.UID]map[string]PodConfig{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := tt.initialConfigs()
+			store.DeleteClaim(tt.claimToDelete)
+
+			if !reflect.DeepEqual(store.configs, tt.expectedPodsAfter) {
+				t.Errorf("configs mismatch after DeleteClaim.\nGot:    %+v\nWanted: %+v", store.configs, tt.expectedPodsAfter)
+			}
+			if tt.checkSpecificConfig != nil {
+				tt.checkSpecificConfig(t, store)
+			}
+		})
+	}
+}
