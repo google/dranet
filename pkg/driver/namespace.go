@@ -18,9 +18,11 @@ package driver
 
 import (
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/google/dranet/pkg/apis"
+	"k8s.io/klog/v2"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -37,7 +39,7 @@ func netnsRouting(containerNsPAth string, routeConfig []apis.RouteConfig) error 
 	// namespace and use it directly
 	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
-		return err
+		return fmt.Errorf("can not get netlink handle: %v", err)
 	}
 	defer nhNs.Close()
 
@@ -45,12 +47,17 @@ func netnsRouting(containerNsPAth string, routeConfig []apis.RouteConfig) error 
 	for _, route := range routeConfig {
 		r := netlink.Route{}
 
-		_, dst, _ := net.ParseCIDR(route.Destination) // nolint:errcheck already validated
+		_, dst, err := net.ParseCIDR(route.Destination) // nolint:errcheck already validated
+		if err != nil {
+			errorList = append(errorList, err)
+			continue
+		}
 		r.Dst = dst
 		r.Gw = net.ParseIP(route.Gateway) // already validated
 		if route.Source != "" {
 			r.Src = net.ParseIP(route.Source)
 		}
+		klog.V(4).Infof("Configuring route %#v", route)
 		if err := nhNs.RouteAdd(&r); err != nil {
 			errorList = append(errorList, err)
 		}
