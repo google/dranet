@@ -19,6 +19,7 @@ package cloudprovider
 type CloudInstance struct {
 	Name                string
 	Type                string
+	Provider            string
 	AcceleratorProtocol string
 	Interfaces          []NetworkInterface
 }

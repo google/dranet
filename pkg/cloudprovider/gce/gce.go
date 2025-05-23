@@ -19,6 +19,7 @@ package gce
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/google/dranet/pkg/cloudprovider"
+	resourceapi "k8s.io/api/resource/v1beta1"
 )
 
 // GPUDirectSupport represents the type of GPUDirect support for a given machine type.
@@ -84,6 +86,7 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 		instance = &cloudprovider.CloudInstance{
 			Name:                instanceName,
 			Type:                instanceType,
+			Provider:            "GCE",
 			AcceleratorProtocol: string(protocol),
 		}
 		if err = json.Unmarshal([]byte(gceInterfacesRaw), &instance.Interfaces); err != nil {
@@ -96,4 +99,18 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 		return nil, err
 	}
 	return instance, nil
+}
+
+func GetGCEAttributes(network string) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
+	var projectNumber int64
+	var name string
+	_, err := fmt.Sscanf(network, "projects/%d/networks/%s", &projectNumber, &name)
+	if err != nil {
+		klog.Infof("Error parsing network %q : %v", network, err)
+		return nil
+	}
+	attributes["gce.dra.net/networkName"] = resourceapi.DeviceAttribute{StringValue: &name}
+	attributes["gce.dra.net/networkProjectNumber"] = resourceapi.DeviceAttribute{IntValue: &projectNumber}
+	return attributes
 }

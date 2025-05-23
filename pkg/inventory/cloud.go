@@ -26,6 +26,7 @@ import (
 
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/google/dranet/pkg/cloudprovider/gce"
+	resourceapi "k8s.io/api/resource/v1beta1"
 )
 
 // getInstanceProperties get the instace properties and stores them in a global variable to be used in discovery
@@ -44,6 +45,27 @@ func getInstanceProperties(ctx context.Context) *cloudprovider.CloudInstance {
 		return nil
 	}
 	return instance
+}
+
+// getProviderAttributes retrieves cloud provider-specific attributes for a network interface
+func getProviderAttributes(mac string, instance *cloudprovider.CloudInstance) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	if instance == nil {
+		klog.Info("nstance metadata is nil, cannot get provider attributes.")
+		return nil
+	}
+	for _, cloudInterface := range instance.Interfaces {
+		if cloudInterface.Mac == mac {
+			switch instance.Provider {
+			case "GCE":
+				return gce.GetGCEAttributes(cloudInterface.Network)
+			default:
+				klog.Infof("cloud provider %q is not supported", instance.Provider)
+				return nil
+			}
+		}
+	}
+	klog.Infof("no matching cloud interface found for mac %s", mac)
+	return nil
 }
 
 func cloudNetwork(mac string, instance *cloudprovider.CloudInstance) string {

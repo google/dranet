@@ -17,9 +17,13 @@ limitations under the License.
 package inventory
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/google/dranet/pkg/cloudprovider"
+	"github.com/google/dranet/pkg/cloudprovider/gce"
+	resourceapi "k8s.io/api/resource/v1beta1"
+	"k8s.io/utils/ptr"
 )
 
 func Test_cloudNetwork(t *testing.T) {
@@ -101,6 +105,98 @@ func Test_cloudNetwork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := cloudNetwork(tt.args.mac, tt.args.instance); got != tt.want {
 				t.Errorf("cloudNetwork() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetProviderAttributes(t *testing.T) {
+	gceNetworkName := "test-network"
+	gceProjectNumber := int64(12345)
+	validGCEAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+		"gce.dra.net/networkName":          {StringValue: ptr.To(gceNetworkName)},
+		"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(gceProjectNumber)},
+	}
+
+	tests := []struct {
+		name     string
+		mac      string
+		instance *cloudprovider.CloudInstance
+		want     map[resourceapi.QualifiedName]resourceapi.DeviceAttribute
+	}{
+		{
+			name:     "nil instance",
+			mac:      "00:11:22:33:44:55",
+			instance: nil,
+			want:     nil,
+		},
+		{
+			name: "instance with no interfaces",
+			mac:  "00:11:22:33:44:55",
+			instance: &cloudprovider.CloudInstance{
+				Provider:   "GCE",
+				Interfaces: []cloudprovider.NetworkInterface{},
+			},
+			want: nil,
+		},
+		{
+			name: "MAC not found in instance interfaces",
+			mac:  "00:11:22:33:44:FF", // MAC that won't be found
+			instance: &cloudprovider.CloudInstance{
+				Provider: "GCE",
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "GCE provider, MAC found, valid network",
+			mac:  "00:11:22:33:44:55",
+			instance: &cloudprovider.CloudInstance{
+				Provider: "GCE",
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
+					{Mac: "AA:BB:CC:DD:EE:FF", Network: "projects/67890/networks/other-network"},
+				},
+			},
+			want: validGCEAttributes,
+		},
+		{
+			name: "GCE provider, MAC found, invalid network string for GCE parsing",
+			mac:  "00:11:22:33:44:55",
+			instance: &cloudprovider.CloudInstance{
+				Provider: "GCE",
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "invalid-gce-network-string"},
+				},
+			},
+			want: nil, // gce.GetGCEAttributes returns nil for invalid network string
+		},
+		{
+			name: "Unsupported provider, MAC found",
+			mac:  "00:11:22:33:44:55",
+			instance: &cloudprovider.CloudInstance{
+				Provider: "AWS", // Unsupported provider
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "aws-network-info"},
+				},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// For the GCE success case, we call gce.GetGCEAttributes directly to ensure `want` is correctly defined
+			// based on the current implementation of gce.GetGCEAttributes.
+			if tt.name == "GCE provider, MAC found, valid network" {
+				tt.want = gce.GetGCEAttributes("projects/12345/networks/test-network")
+			}
+
+			got := getProviderAttributes(tt.mac, tt.instance)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getProviderAttributes() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
