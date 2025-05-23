@@ -344,14 +344,16 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		resourceClaimApply := resourceapply.ResourceClaim(config.Claim.Name, config.Claim.Namespace).WithStatus(resourceClaimStatus)
 		// do not block the handler to update the status
 		go func() {
-			_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(config.Claim.Namespace).ApplyStatus(ctx,
+			ctxStatus, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(config.Claim.Namespace).ApplyStatus(ctxStatus,
 				resourceClaimApply,
 				metav1.ApplyOptions{FieldManager: np.driverName, Force: true},
 			)
 			if err != nil {
 				klog.Infof("failed to update status for claim %s/%s : %v", config.Claim.Namespace, config.Claim.Name, err)
 			} else {
-				klog.V(2).Infof("update status for claim %s/%s", config.Claim.Namespace, config.Claim.Name)
+				klog.V(4).Infof("update status for claim %s/%s", config.Claim.Namespace, config.Claim.Name)
 			}
 		}()
 	}
