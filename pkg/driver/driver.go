@@ -493,8 +493,6 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					if address.Scope != unix.RT_SCOPE_UNIVERSE {
 						continue
 					}
-					// remove the interface attribute of the original address
-					// to avoid issues when the interface is renamed.
 					netconf.Interface.Addresses = append(netconf.Interface.Addresses, address.IPNet.String())
 				}
 			}
@@ -505,6 +503,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		// request to gather the network parameters (IPs and Routes) ... but we DO NOT apply them
 		// in the root namespace
 		if len(netconf.Interface.Addresses) == 0 {
+			klog.V(2).Infof("trying to get network configuration via DHCP")
 			ip, routes, err := getDHCP(ifName)
 			if err != nil {
 				klog.Infof("fail to get configuration via DHCP: %v", err)
@@ -557,9 +556,11 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		for _, uid := range podUIDs {
 			np.podConfigStore.Set(uid, device.DeviceName, podCfg)
 		}
+		klog.V(4).Infof("Claim Resources for pods %v : %#v", podUIDs, podCfg)
 	}
 
 	if len(errorList) > 0 {
+		klog.Infof("claim %s contain errors: %w", claim.UID, errors.Join(errorList...))
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("claim %s contain errors: %w", claim.UID, errors.Join(errorList...)),
 		}
