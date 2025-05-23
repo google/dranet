@@ -70,7 +70,16 @@ func TestValidateConfig(t *testing.T) {
 			name:    "malformed json",
 			raw:     &runtime.RawExtension{Raw: []byte(`{"interface": {"name": "eth0"`)}, // Missing closing brace
 			wantErr: true,
-			errMsgs: []string{"failed to unmarshal YAML data"},
+			errMsgs: []string{"failed to unmarshal JSON data: unexpected end of JSON"},
+		},
+		{
+			name: "unknown fields",
+			raw: &runtime.RawExtension{Raw: []byte(`{
+				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
+				"routes": [{"gateways": "192.168.1.1"}]
+			}`)}, // use gateways instead gateway
+			wantErr: true,
+			errMsgs: []string{`failed to unmarshal strict JSON data: unknown field "routes[0].gateways"`},
 		},
 		{
 			name: "invalid interface IP CIDR",

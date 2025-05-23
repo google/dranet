@@ -17,13 +17,13 @@ limitations under the License.
 package apis
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/json"
 )
 
 // ValidateConfig validates the data in a runtime.RawExtension against the OpenAPI schema.
@@ -37,8 +37,12 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 	}
 	var errorsList []error
 	var config NetworkConfig
-	if err := json.Unmarshal(raw.Raw, &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML data: %w", err)
+	strictErrs, err := json.UnmarshalStrict(raw.Raw, &config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON data: %w", err)
+	}
+	if len(strictErrs) > 0 {
+		return nil, fmt.Errorf("failed to unmarshal strict JSON data: %w", errors.Join(strictErrs...))
 	}
 
 	for _, ip := range config.Interface.Addresses {
