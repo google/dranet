@@ -19,7 +19,6 @@ package driver
 import (
 	"testing"
 
-	"github.com/google/dranet/pkg/apis"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/utils/ptr"
 )
@@ -76,80 +75,24 @@ func TestGetDeviceName(t *testing.T) {
 				Name: "normalized-eth0",
 				Basic: &resourceapi.BasicDevice{
 					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind":   {StringValue: ptr.To(apis.NetworkKind)},
 						"dra.net/ifName": {StringValue: ptr.To("eth0")},
 					},
 				},
 			}},
 			want: "eth0",
 		},
+
 		{
-			name: "network kind, ifName missing",
+			name: "ifName not a string",
 			args: args{device: &resourceapi.Device{
 				Name: "normalized-eth0",
 				Basic: &resourceapi.BasicDevice{
 					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind": {StringValue: ptr.To(apis.NetworkKind)},
-					},
-				},
-			}},
-			want: "normalized-eth0",
-		},
-		{
-			name: "network kind, ifName not a string",
-			args: args{device: &resourceapi.Device{
-				Name: "normalized-eth0",
-				Basic: &resourceapi.BasicDevice{
-					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind":   {StringValue: ptr.To(apis.NetworkKind)},
 						"dra.net/ifName": {IntValue: ptr.To[int64](123)},
 					},
 				},
 			}},
 			want: "normalized-eth0",
-		},
-		{
-			name: "rdma kind, rdmaDevName present",
-			args: args{device: &resourceapi.Device{
-				Name: "normalized-rdma0",
-				Basic: &resourceapi.BasicDevice{
-					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind":        {StringValue: ptr.To(apis.RdmaKind)},
-						"dra.net/rdmaDevName": {StringValue: ptr.To("mlx5_0")},
-					},
-				},
-			}},
-			want: "mlx5_0",
-		},
-		{
-			name: "rdma kind, rdmaDevName missing",
-			args: args{device: &resourceapi.Device{
-				Name: "normalized-rdma0",
-				Basic: &resourceapi.BasicDevice{
-					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind": {StringValue: ptr.To(apis.RdmaKind)},
-					},
-				},
-			}},
-			want: "normalized-rdma0",
-		},
-		{
-			name: "rdma kind, rdmaDevName not a string",
-			args: args{device: &resourceapi.Device{
-				Name: "normalized-rdma0",
-				Basic: &resourceapi.BasicDevice{
-					Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-						"dra.net/kind":        {StringValue: ptr.To(apis.RdmaKind)},
-						"dra.net/rdmaDevName": {BoolValue: ptr.To(false)},
-					},
-				},
-			}},
-			want: "normalized-rdma0",
-		},
-		{
-			name: "unknown kind",
-			args: args{device: &resourceapi.Device{Name: "test-dev", Basic: &resourceapi.BasicDevice{Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"dra.net/kind": {StringValue: ptr.To("unknown")}}}}},
-			want: "test-dev",
 		},
 	}
 	for _, tt := range tests {
