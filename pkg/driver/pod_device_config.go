@@ -23,10 +23,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Config holds the set of actions and configurations to be applied for a single
+// PodConfig holds the set of configurations to be applied for a single
 // network device allocated to a Pod. This includes network interface settings,
 // routes for the Pod's network namespace, and RDMA configurations.
-type Config struct {
+type PodConfig struct {
+	Claim types.NamespacedName
 	// NetDevice specifies the configuration for the network interface itself,
 	// such as its desired name within the Pod, IP addresses, and MTU.
 	NetDevice apis.InterfaceConfig
@@ -58,37 +59,37 @@ type RDMAConfig struct {
 // network device names (as allocated) to their specific Config.
 type PodConfigStore struct {
 	mu      sync.RWMutex
-	configs map[types.UID]map[string]Config
+	configs map[types.UID]map[string]PodConfig
 }
 
 // NewPodConfigStore creates and returns a new instance of PodConfigStore.
 func NewPodConfigStore() *PodConfigStore {
 	return &PodConfigStore{
-		configs: make(map[types.UID]map[string]Config),
+		configs: make(map[types.UID]map[string]PodConfig),
 	}
 }
 
 // Set stores the configuration for a specific device under a given Pod UID.
 // If a configuration for the Pod UID or device name already exists, it will be overwritten.
-func (s *PodConfigStore) Set(podUID types.UID, deviceName string, config Config) {
+func (s *PodConfigStore) Set(podUID types.UID, deviceName string, config PodConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.configs[podUID]; !ok {
-		s.configs[podUID] = make(map[string]Config)
+		s.configs[podUID] = make(map[string]PodConfig)
 	}
 	s.configs[podUID][deviceName] = config
 }
 
 // Get retrieves the configuration for a specific device under a given Pod UID.
 // It returns the Config and true if found, otherwise an empty Config and false.
-func (s *PodConfigStore) Get(podUID types.UID, deviceName string) (Config, bool) {
+func (s *PodConfigStore) Get(podUID types.UID, deviceName string) (PodConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if podConfigs, ok := s.configs[podUID]; ok {
 		config, found := podConfigs[deviceName]
 		return config, found
 	}
-	return Config{}, false
+	return PodConfig{}, false
 }
 
 // DeletePod removes all configurations associated with a given Pod UID.
@@ -101,7 +102,7 @@ func (s *PodConfigStore) DeletePod(podUID types.UID) {
 // GetPodConfigs retrieves all device configurations for a given Pod UID.
 // It is indexed by the Pod's UID, and for each Pod, it maps network device names (as allocated)
 // to their specific Config.
-func (s *PodConfigStore) GetPodConfigs(podUID types.UID) (map[string]Config, bool) {
+func (s *PodConfigStore) GetPodConfigs(podUID types.UID) (map[string]PodConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	podConfigs, found := s.configs[podUID]
@@ -109,7 +110,7 @@ func (s *PodConfigStore) GetPodConfigs(podUID types.UID) (map[string]Config, boo
 		return nil, false
 	}
 	// Return a copy to prevent external modification of the internal map
-	configsCopy := make(map[string]Config, len(podConfigs))
+	configsCopy := make(map[string]PodConfig, len(podConfigs))
 	for k, v := range podConfigs {
 		configsCopy[k] = v
 	}

@@ -22,7 +22,6 @@ import (
 	"net"
 
 	"github.com/google/dranet/pkg/apis"
-	"github.com/google/dranet/pkg/dhcp"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
@@ -42,31 +41,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	// Devices can be renamed only when down
 	if err = netlink.LinkSetDown(hostDev); err != nil {
 		return nil, fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
-	}
-
-	addresses := []*net.IPNet{}
-	if len(interfaceConfig.Addresses) == 0 {
-		// get the existing IP addresses
-		nlAddresses, err := netlink.AddrList(hostDev, netlink.FAMILY_ALL)
-		if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-			return nil, fmt.Errorf("fail to get ip addresses: %w", err)
-		}
-		for _, address := range nlAddresses {
-			// Only move IP addresses with global scope because those are not host-specific, auto-configured,
-			// or have limited network scope, making them unsuitable inside the container namespace.
-			// Ref: https://www.ietf.org/rfc/rfc3549.txt
-			if address.Scope != unix.RT_SCOPE_UNIVERSE {
-				continue
-			}
-			// remove the interface attribute of the original address
-			// to avoid issues when the interface is renamed.
-			addresses = append(addresses, address.IPNet)
-		}
-	} else {
-		for _, addr := range interfaceConfig.Addresses {
-			_, ipnet, _ := net.ParseCIDR(addr) // already validated
-			addresses = append(addresses, ipnet)
-		}
 	}
 
 	containerNs, err := netns.GetFromPath(containerNsPAth)
@@ -138,25 +112,21 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 		HardwareAddress: string(nsLink.Attrs().HardwareAddr.String()),
 	}
 
-	for _, address := range addresses {
-		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address})
+	for _, address := range interfaceConfig.Addresses {
+		_, ipnet, err := net.ParseCIDR(address)
 		if err != nil {
-			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address.String(), containerNsPAth, err)
+			continue // this should not happen since it has been already validated
 		}
-		networkData.IPs = append(networkData.IPs, address.String())
+		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: ipnet})
+		if err != nil {
+			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address, containerNsPAth, err)
+		}
+		networkData.IPs = append(networkData.IPs, address)
 	}
 
 	err = nhNs.LinkSetUp(nsLink)
 	if err != nil {
 		return nil, fmt.Errorf("failt to set up interface %s on namespace %s: %w", nsLink.Attrs().Name, containerNsPAth, err)
-	}
-
-	// try to acquire an IP via DHCP if there are no addresses
-	if len(addresses) == 0 {
-		acquiredIP, _ := dhcp.AcquireNewIP(containerNsPAth, nsLink.Attrs().Name, nsLink.Attrs().HardwareAddr)
-		if acquiredIP != nil {
-			networkData.IPs = append(networkData.IPs, acquiredIP.String())
-		}
 	}
 
 	return networkData, nil

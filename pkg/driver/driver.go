@@ -30,11 +30,12 @@ import (
 	"github.com/google/dranet/pkg/filter"
 	"github.com/google/dranet/pkg/inventory"
 	"github.com/google/dranet/pkg/names"
-	"github.com/vishvananda/netlink"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +45,6 @@ import (
 	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
 	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1beta1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
@@ -65,23 +65,6 @@ const (
 	rdmaCmPath = "/dev/infiniband/rdma_cm"
 )
 
-// podUIDIndexFunc is a default index function that indexes based on an pod UID
-func podUIDIndexFunc(obj interface{}) ([]string, error) {
-	claim, ok := obj.(*resourceapi.ResourceClaim)
-	if !ok {
-		return []string{}, nil
-	}
-
-	result := []string{}
-	for _, reserved := range claim.Status.ReservedFor {
-		if reserved.Resource != "pods" || reserved.APIGroup != "" {
-			continue
-		}
-		result = append(result, string(reserved.UID))
-	}
-	return result, nil
-}
-
 // WithFilter
 func WithFilter(filter cel.Program) Option {
 	return func(o *NetworkDriver) {
@@ -96,27 +79,18 @@ type NetworkDriver struct {
 	draPlugin  *kubeletplugin.Helper
 	nriPlugin  stub.Stub
 
-	claimAllocations cache.Indexer // claims indexed by Claim UID to run on the Kubelet/DRA hooks
 	// contains the host interfaces
-	netdb *inventory.DB
-	// options
+	netdb      *inventory.DB
 	celProgram cel.Program
 
-	// An RDMA device can only be assigned to a network namespace when the RDMA subsystem is set to an "exclusive" network namespace mode
-	// Do not publish or process RDMA devices in shared mode.
+	// Cache the rdma shared mode state
 	rdmaSharedMode bool
-	charDevices    map[string][]string // key pod UID value list of char devices to be mounted in the containers
+	podConfigStore *PodConfigStore
 }
 
 type Option func(*NetworkDriver)
 
 func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interface, nodeName string, opts ...Option) (*NetworkDriver, error) {
-	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc,
-		cache.Indexers{
-			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
-			podUIDIndex:          podUIDIndexFunc,
-		})
-
 	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
 	if err != nil {
 		klog.Infof("failed to determine the RDMA subsystem's network namespace mode, assume shared mode: %v", err)
@@ -126,12 +100,11 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	}
 
 	plugin := &NetworkDriver{
-		driverName:       driverName,
-		nodeName:         nodeName,
-		kubeClient:       kubeClient,
-		claimAllocations: store,
-		charDevices:      map[string][]string{},
-		rdmaSharedMode:   rdmaNetnsMode == apis.RdmaNetnsModeShared,
+		driverName:     driverName,
+		nodeName:       nodeName,
+		kubeClient:     kubeClient,
+		rdmaSharedMode: rdmaNetnsMode == apis.RdmaNetnsModeShared,
+		podConfigStore: NewPodConfigStore(),
 	}
 
 	for _, o := range opts {
@@ -170,7 +143,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		stub.WithPluginName(driverName),
 		stub.WithPluginIdx("00"),
 		// https://github.com/containerd/nri/pull/173
-		// Otherwise it silently exits the progrms
+		// Otherwise it silently exits the program
 		stub.WithOnClose(func() {
 			klog.Infof("%s NRI plugin closed", driverName)
 		}),
@@ -252,15 +225,21 @@ func (np *NetworkDriver) Shutdown(_ context.Context) {
 // CreateContainer handles container creation requests.
 func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	klog.V(2).Infof("CreateContainer Pod %s/%s UID %s Container %s", pod.Namespace, pod.Name, pod.Uid, ctr.Name)
+	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
+	if !ok {
+		return nil, nil, nil
+	}
+	// Containers only cares about the RDMA char devices
 	adjust := &api.ContainerAdjustment{}
-	// TODO check if we can make it more granular only to a specific containers
-	for _, device := range np.charDevices[pod.Uid] {
-		adjust.AddMount(&api.Mount{
-			Source:      device,
-			Destination: device,
-			Type:        "bind",
-			Options:     []string{"bind", "rw"},
-		})
+	for _, config := range podConfig {
+		for _, devpath := range config.RDMADevice.DevChars {
+			adjust.AddMount(&api.Mount{
+				Source:      devpath,
+				Destination: devpath,
+				Type:        "bind",
+				Options:     []string{"bind", "rw"},
+			})
+		}
 	}
 	return adjust, nil, nil
 }
@@ -271,18 +250,15 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	defer func() {
 		klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
-	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
-	if err != nil || len(objs) == 0 {
-		klog.V(4).Infof("RunPodSandbox Pod %s/%s does not have an associated ResourceClaim", pod.Namespace, pod.Name)
+	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
+	if !ok {
 		return nil
 	}
-
 	// get the pod network namespace
 	ns := getNetworkNamespace(pod)
 	// host network pods are skipped
 	if ns == "" {
-		klog.V(2).Infof("RunPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		return nil
+		return fmt.Errorf("RunPodSandbox pod %s/%s using host network can not claim host devices", pod.Namespace, pod.Name)
 	}
 	// store the Pod metadata in the db
 	np.netdb.AddPodNetns(podKey(pod), ns)
@@ -290,137 +266,95 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	// Process the configurations of the ResourceClaim
 	errorList := []error{}
 	// List if char devices associated to the RDMA selected devices
-	charDevices := sets.New[string]()
-	for _, obj := range objs {
-		claim, ok := obj.(*resourceapi.ResourceClaim)
-		if !ok {
-			continue
-		}
-
-		if claim.Status.Allocation == nil {
-			continue
-		}
-		// final resourceClaim Status
+	for deviceName, config := range podConfig {
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
-		var netconf apis.NetworkConfig
-		for _, result := range claim.Status.Allocation.Devices.Results {
-			if result.Driver != np.driverName {
-				continue
-			}
-			// Process the configurations of the ResourceClaim
-			for _, config := range claim.Status.Allocation.Devices.Config {
-				if config.Opaque == nil {
-					continue
-				}
-				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
-					continue
-				}
-				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
-				conf, err := apis.ValidateConfig(&config.Opaque.Parameters)
-				if err != nil {
-					klog.Infof("podStartHook Configuration %+v error: %v", netconf, err)
-					return err
-				}
-				// TODO: define a strategy for multiple configs
-				if conf != nil {
-					netconf = *conf
-					break
-				}
-			}
-			klog.V(4).Infof("podStartHook final Configuration %+v", netconf)
+		// resourceClaim status for this specific device
+		resourceClaimStatusDevice := resourceapply.
+			AllocatedDeviceStatus().
+			WithDevice(deviceName).
+			WithDriver(np.driverName).
+			WithPool(np.nodeName)
 
-			// resourceClaim status for this specific device
-			resourceClaimStatusDevice := resourceapply.
-				AllocatedDeviceStatus().
-				WithDevice(result.Device).
-				WithDriver(result.Driver).
-				WithPool(result.Pool)
+		ifName := names.GetOriginalName(deviceName)
 
-			ifName := names.GetOriginalName(result.Device)
-
-			// only process RDMA devices associated to the network interface if in exclusive mode.
-			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(ifName); rdmaDev != "" {
-				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
-				// Obtain the char devices associated to the rdma device
-				charDevices.Insert(rdmaCmPath)
-				charDevices.Insert(rdmamap.GetRdmaCharDevices(rdmaDev)...)
-				// Move the RDMA device to the namespace in exclusive mode
-				if !np.rdmaSharedMode {
-					err := nsAttachRdmadev(rdmaDev, ns)
-					if err != nil {
-						klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", result.Device, ns, err)
-						return err
-					}
-				}
-			}
-
-			klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
-
-			// configure routes
-			err = netnsRouting(ns, netconf.Routes)
+		// Move the RDMA device to the namespace in exclusive mode
+		if !np.rdmaSharedMode {
+			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
+			err := nsAttachRdmadev(config.RDMADevice.LinkDev, ns)
 			if err != nil {
-				klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", result.Device, ns, err)
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("NetworkReady").
-						WithStatus(metav1.ConditionFalse).
-						WithReason("NetworkReadyError").
-						WithMessage(err.Error()).
-						WithLastTransitionTime(metav1.Now()),
-				)
-				errorList = append(errorList, err)
-			} else {
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("NetworkReady").
-						WithStatus(metav1.ConditionTrue).
-						WithReason("NetworkReady").
-						WithLastTransitionTime(metav1.Now()),
-				)
+				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", deviceName, ns, err)
+				return err
 			}
-
-			// TODO config options to rename the device and pass parameters
-			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			networkData, err := nsAttachNetdev(ifName, ns, netconf.Interface)
-			if err != nil {
-				klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("Ready").
-						WithStatus(metav1.ConditionFalse).
-						WithReason("NetworkDeviceError").
-						WithMessage(err.Error()).
-						WithLastTransitionTime(metav1.Now()),
-				)
-				errorList = append(errorList, err)
-			} else {
-				resourceClaimStatusDevice.WithConditions(
-					metav1apply.Condition().
-						WithType("Ready").
-						WithReason("NetworkDeviceReady").
-						WithStatus(metav1.ConditionTrue).
-						WithLastTransitionTime(metav1.Now()),
-				).WithNetworkData(resourceapply.NetworkDeviceData().
-					WithInterfaceName(networkData.InterfaceName).
-					WithHardwareAddress(networkData.HardwareAddress).
-					WithIPs(networkData.IPs...),
-				)
-			}
-			resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
-			np.charDevices[pod.Uid] = charDevices.UnsortedList()
 		}
-		resourceClaimApply := resourceapply.ResourceClaim(claim.Name, claim.Namespace).WithStatus(resourceClaimStatus)
-		_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(claim.Namespace).ApplyStatus(ctx,
-			resourceClaimApply,
-			metav1.ApplyOptions{FieldManager: np.driverName, Force: true},
-		)
-		// do not fail hard
+
+		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
+
+		// configure routes
+		err := netnsRouting(ns, config.NetNamespaceRoutes)
 		if err != nil {
-			klog.Infof("failed to update status for claim %s/%s : %v", claim.Namespace, claim.Name, err)
+			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
+			resourceClaimStatusDevice.WithConditions(
+				metav1apply.Condition().
+					WithType("NetworkReady").
+					WithStatus(metav1.ConditionFalse).
+					WithReason("NetworkReadyError").
+					WithMessage(err.Error()).
+					WithLastTransitionTime(metav1.Now()),
+			)
+			errorList = append(errorList, err)
 		} else {
-			klog.V(2).Infof("update status for claim %s/%s", claim.Namespace, claim.Name)
+			resourceClaimStatusDevice.WithConditions(
+				metav1apply.Condition().
+					WithType("NetworkReady").
+					WithStatus(metav1.ConditionTrue).
+					WithReason("NetworkReady").
+					WithLastTransitionTime(metav1.Now()),
+			)
 		}
+
+		// TODO config options to rename the device and pass parameters
+		// use https://github.com/opencontainers/runtime-spec/pull/1271
+		networkData, err := nsAttachNetdev(ifName, ns, config.NetDevice)
+		if err != nil {
+			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", deviceName, ns, err)
+			resourceClaimStatusDevice.WithConditions(
+				metav1apply.Condition().
+					WithType("Ready").
+					WithStatus(metav1.ConditionFalse).
+					WithReason("NetworkDeviceError").
+					WithMessage(err.Error()).
+					WithLastTransitionTime(metav1.Now()),
+			)
+			errorList = append(errorList, err)
+		} else {
+			resourceClaimStatusDevice.WithConditions(
+				metav1apply.Condition().
+					WithType("Ready").
+					WithReason("NetworkDeviceReady").
+					WithStatus(metav1.ConditionTrue).
+					WithLastTransitionTime(metav1.Now()),
+			).WithNetworkData(resourceapply.NetworkDeviceData().
+				WithInterfaceName(networkData.InterfaceName).
+				WithHardwareAddress(networkData.HardwareAddress).
+				WithIPs(networkData.IPs...),
+			)
+		}
+		resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
+		resourceClaimApply := resourceapply.ResourceClaim(config.Claim.Name, config.Claim.Namespace).WithStatus(resourceClaimStatus)
+		// do not block the handler to update the status
+		go func() {
+			_, err = np.kubeClient.ResourceV1beta1().ResourceClaims(config.Claim.Namespace).ApplyStatus(ctx,
+				resourceClaimApply,
+				metav1.ApplyOptions{FieldManager: np.driverName, Force: true},
+			)
+			if err != nil {
+				klog.Infof("failed to update status for claim %s/%s : %v", config.Claim.Namespace, config.Claim.Name, err)
+			} else {
+				klog.V(2).Infof("update status for claim %s/%s", config.Claim.Namespace, config.Claim.Name)
+			}
+		}()
 	}
+
 	return errors.Join(errorList...)
 }
 
@@ -428,85 +362,18 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	start := time.Now()
 	defer func() {
+		np.netdb.RemovePodNetns(podKey(pod))
+		np.podConfigStore.DeletePod(types.UID(pod.GetUid()))
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
-	defer np.netdb.RemovePodNetns(podKey(pod))
-	// delete the list of char devices associated to this Pod
-	delete(np.charDevices, pod.Uid)
 
-	objs, err := np.claimAllocations.ByIndex(podUIDIndex, pod.Uid)
-	if err != nil || len(objs) == 0 {
-		klog.V(2).Infof("StopPodSandbox pod %s/%s does not have allocations", pod.Namespace, pod.Name)
-		return nil
-	}
-
-	// get the pod network namespace
-	ns := getNetworkNamespace(pod)
-	if ns == "" {
-		klog.V(2).Infof("StopPodSandbox pod %s/%s using host network, skipping", pod.Namespace, pod.Name)
-		// check if is stored in our db, containerd old versions with NRI does not pass this information
-		ns = np.netdb.GetPodNamespace(podKey(pod))
-		if ns == "" {
-			return nil
-		}
-	}
-	// Process the configurations of the ResourceClaim
-	for _, obj := range objs {
-		claim, ok := obj.(*resourceapi.ResourceClaim)
-		if !ok {
-			continue
-		}
-
-		if claim.Status.Allocation == nil {
-			continue
-		}
-
-		for _, result := range claim.Status.Allocation.Devices.Results {
-			if result.Driver != np.driverName {
-				continue
-			}
-
-			var netconf *apis.NetworkConfig
-			for _, config := range claim.Status.Allocation.Devices.Config {
-				if config.Opaque == nil {
-					continue
-				}
-				if len(config.Requests) > 0 && !slices.Contains(config.Requests, result.Request) {
-					continue
-				}
-				// TODO: handle the case with multiple configurations (is that possible, should we merge them?)
-				netconf, err = apis.ValidateConfig(&config.Opaque.Parameters)
-				if err != nil {
-					return err
-				}
-				if netconf != nil {
-					klog.V(4).Infof("Configuration %#v", netconf)
-					break
-				}
-			}
-
-			klog.V(4).Infof("podStopHook Device %s", result.Device)
-			// TODO config options to rename the device and pass parameters
-			// use https://github.com/opencontainers/runtime-spec/pull/1271
-			ifName := result.Device
-			outName := ""
-			if netconf.Interface.Name != "" {
-				ifName = netconf.Interface.Name
-				outName = result.Device
-			}
-			err := nsDetachNetdev(ns, ifName, outName)
-			if err != nil {
-				klog.Infof("StopPodSandbox error moving device %s to namespace %s: %v", result.Device, ns, err)
-				continue
-			}
-		}
-	}
 	return nil
 }
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
-	defer np.netdb.RemovePodNetns(podKey(pod))
+	np.netdb.RemovePodNetns(podKey(pod))
+	np.podConfigStore.DeletePod(types.UID(pod.GetUid()))
 	return nil
 }
 
@@ -520,14 +387,7 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			klog.V(4).Infof("After filtering %d devices", len(devices))
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
-					np.nodeName: {
-						Slices: []resourceslice.Slice{
-							{
-								Devices: devices,
-							},
-						},
-					},
-				},
+					np.nodeName: {Slices: []resourceslice.Slice{{Devices: devices}}}},
 			}
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
@@ -556,45 +416,149 @@ func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*re
 	return result, nil
 }
 
-// TODO define better what is passed at the podStartHook
-// Filter out the allocations not required for this Pod
-func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
-	err := np.claimAllocations.Add(claim)
-	if err != nil {
-		return kubeletplugin.PrepareResult{
-			Err: fmt.Errorf("failed to add claim %s to local cache:: %w", claim.UID, err),
-		}
-	}
-
+// prepareResourceClaim gets all the configuration required to be applied at runtime and passes it downs to the handlers.
+// This happens in the kubelet so it can be a "slow" operation, so we can execute fast in RunPodsandbox, that happens in the
+// container runtime and has strong expectactions to be executed fast (default hook timeout is 2 seconds).
+func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+	// TODO: shared devices may allocate the same device to multiple pods, i.e. macvlan, ipvlan, ...
+	podUIDs := []types.UID{}
 	for _, reserved := range claim.Status.ReservedFor {
 		if reserved.Resource != "pods" || reserved.APIGroup != "" {
 			klog.Infof("Driver only supports Pods, unsupported reference %#v", reserved)
 			continue
 		}
+		podUIDs = append(podUIDs, reserved.UID)
+	}
+	if len(podUIDs) == 0 {
+		klog.Infof("no pods allocated to claim %s/%s", claim.Namespace, claim.Name)
+		return kubeletplugin.PrepareResult{}
+	}
+
+	nlHandle, err := netlink.NewHandle()
+	if err != nil {
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("error creating netlink handle %v", err),
+		}
 	}
 
 	var errorList []error
-	var devices []kubeletplugin.Device
+	var netconf apis.NetworkConfig
+	charDevices := sets.New[string]()
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		requestName := result.Request
 		for _, config := range claim.Status.Allocation.Devices.Config {
+			// Check there is a config associated to this device
 			if config.Opaque == nil ||
 				config.Opaque.Driver != np.driverName ||
 				len(config.Requests) > 0 && !slices.Contains(config.Requests, requestName) {
 				continue
 			}
-			_, err := apis.ValidateConfig(&config.Opaque.Parameters)
+			// Check if there is a custom configuration
+			conf, err := apis.ValidateConfig(&config.Opaque.Parameters)
 			if err != nil {
 				errorList = append(errorList, err)
+				continue
+			}
+			// TODO: define a strategy for multiple configs
+			if conf != nil {
+				netconf = *conf
+				break
 			}
 		}
+		klog.V(4).Infof("PrepareResourceClaim %s/%s final Configuration %#v", claim.Namespace, claim.Name, netconf)
+		podCfg := PodConfig{
+			Claim: types.NamespacedName{
+				Namespace: claim.Namespace,
+				Name:      claim.Name,
+			},
+		}
+		ifName := names.GetOriginalName(result.Device)
+		// Get Network configuration and merge it
+		link, err := nlHandle.LinkByName(ifName)
+		if err != nil {
+			errorList = append(errorList, fmt.Errorf("fail to get network interface %s", ifName))
+			continue
+		}
+
+		// If there is no custom addresses then use the existing ones
+		if len(netconf.Interface.Addresses) == 0 {
+			// get the existing IP addresses
+			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
+			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+				klog.Infof("fail to get ip addresses for interface %s : %v", ifName, err)
+			}
+			for _, address := range nlAddresses {
+				// Only move IP addresses with global scope because those are not host-specific, auto-configured,
+				// or have limited network scope, making them unsuitable inside the container namespace.
+				// Ref: https://www.ietf.org/rfc/rfc3549.txt
+				if address.Scope != unix.RT_SCOPE_UNIVERSE {
+					continue
+				}
+				// remove the interface attribute of the original address
+				// to avoid issues when the interface is renamed.
+				netconf.Interface.Addresses = append(netconf.Interface.Addresses, address.IPNet.String())
+			}
+		}
+
+		// If there are no addresses configured on the interface and the user is not setting them
+		// this may be an interface that uses DHCP, so we bring it up if necessary and do a DHCP
+		// request to gather the network parameters (IPs and Routes) ... but we DO NOT apply them
+		// in the root namespace
+		if len(netconf.Interface.Addresses) == 0 {
+			ip, routes, err := getDHCP(ifName)
+			if err != nil {
+				klog.Infof("fail to get configuration via DHCP: %v", err)
+			} else {
+				netconf.Interface.Addresses = []string{ip}
+				netconf.Routes = append(netconf.Routes, routes...)
+			}
+		}
+
+		// Obtain the routes associated to the interface
+		// TODO: only considers outgoing traffic
+		filter := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+		}
+		routes, err := nlHandle.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_OIF)
+		if err != nil {
+			klog.Infof("fail to get ip routes for interface %s : %v", ifName, err)
+		}
+		for _, route := range routes {
+			routeCfg := apis.RouteConfig{}
+			if route.Src != nil {
+				routeCfg.Source = route.Src.String()
+			}
+			if route.Dst != nil {
+				routeCfg.Destination = route.Dst.String()
+			}
+			if route.Gw != nil {
+				routeCfg.Gateway = route.Gw.String()
+			}
+			podCfg.NetNamespaceRoutes = append(podCfg.NetNamespaceRoutes, routeCfg)
+		}
+
+		// Get RDMA configuration: link and char devices
+		if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(ifName); rdmaDev != "" {
+			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
+			podCfg.RDMADevice.LinkDev = rdmaDev
+			// Obtain the char devices associated to the rdma device
+			charDevices.Insert(rdmaCmPath)
+			charDevices.Insert(rdmamap.GetRdmaCharDevices(rdmaDev)...)
+			podCfg.RDMADevice.DevChars = charDevices.UnsortedList()
+		}
+
 		device := kubeletplugin.Device{
 			Requests:   []string{result.Request},
 			PoolName:   result.Pool,
 			DeviceName: result.Device,
 		}
-		devices = append(devices, device)
+		// TODO: support for multiple pods sharing the same device
+		// we'll create the subinterface here
+		for _, uid := range podUIDs {
+			np.podConfigStore.Set(uid, device.DeviceName, podCfg)
+		}
 	}
+
 	if len(errorList) > 0 {
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("claim %s contain errors: %w", claim.UID, errors.Join(errorList...)),
@@ -622,45 +586,6 @@ func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []k
 }
 
 func (np *NetworkDriver) unprepareResourceClaim(_ context.Context, claim kubeletplugin.NamespacedObject) error {
-	objs, err := np.claimAllocations.ByIndex(cache.NamespaceIndex, fmt.Sprintf("%s/%s", claim.Namespace, claim.Name))
-	if err != nil || len(objs) == 0 {
-		klog.Infof("Claim %s/%s does not have an associated cached ResourceClaim: %v", claim.Namespace, claim.Name, err)
-		return nil
-	}
-
-	for _, obj := range objs {
-		claim, ok := obj.(*resourceapi.ResourceClaim)
-		if !ok {
-			continue
-		}
-		defer func() {
-			err := np.claimAllocations.Delete(obj)
-			if err != nil {
-				klog.Infof("Claim %s/%s can not be deleted from cache: %v", claim.Namespace, claim.Name, err)
-			}
-		}()
-
-		if claim.Status.Allocation == nil {
-			continue
-		}
-
-		for _, result := range claim.Status.Allocation.Devices.Results {
-			if result.Driver != np.driverName {
-				continue
-			}
-
-			for _, config := range claim.Status.Allocation.Devices.Config {
-				if config.Opaque == nil {
-					continue
-				}
-				klog.V(4).Infof("nodeUnprepareResource Configuration %s", string(config.Opaque.Parameters.String()))
-				// TODO get config options here, it can add ips or commands
-				// to add routes, run dhcp, rename the interface ... whatever
-			}
-			klog.Infof("nodeUnprepareResource claim %s/%s with allocation result %#v", claim.Namespace, claim.Name, result)
-
-		}
-	}
 	return nil
 }
 

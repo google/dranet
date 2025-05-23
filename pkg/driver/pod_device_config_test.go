@@ -40,7 +40,7 @@ func TestPodConfigStore_SetAndGet(t *testing.T) {
 	store := NewPodConfigStore()
 	podUID := types.UID("test-pod-uid-1")
 	deviceName := "eth0"
-	config := Config{
+	config := PodConfig{
 		NetDevice: apis.InterfaceConfig{Name: "eth0-pod"},
 		NetNamespaceRoutes: []apis.RouteConfig{
 			{Destination: "0.0.0.0/0", Gateway: "192.168.1.1"},
@@ -77,7 +77,7 @@ func TestPodConfigStore_SetAndGet(t *testing.T) {
 	}
 
 	// Test overwriting
-	newConfig := Config{NetDevice: apis.InterfaceConfig{Name: "eth0-new"}}
+	newConfig := PodConfig{NetDevice: apis.InterfaceConfig{Name: "eth0-new"}}
 	store.Set(podUID, deviceName, newConfig)
 	retrievedConfig, found = store.Get(podUID, deviceName)
 	if !found {
@@ -94,9 +94,9 @@ func TestPodConfigStore_DeletePod(t *testing.T) {
 	podUID2 := types.UID("test-pod-uid-2")
 	dev1 := "eth0"
 	dev2 := "eth1"
-	config1 := Config{NetDevice: apis.InterfaceConfig{Name: "p1eth0"}}
-	config2 := Config{NetDevice: apis.InterfaceConfig{Name: "p1eth1"}}
-	config3 := Config{NetDevice: apis.InterfaceConfig{Name: "p2eth0"}}
+	config1 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p1eth0"}}
+	config2 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p1eth1"}}
+	config3 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p2eth0"}}
 
 	store.Set(podUID1, dev1, config1)
 	store.Set(podUID1, dev2, config2)
@@ -131,15 +131,15 @@ func TestPodConfigStore_GetPodConfigs(t *testing.T) {
 	podUID2 := types.UID("test-pod-uid-2")
 	dev1 := "eth0"
 	dev2 := "eth1"
-	config1 := Config{NetDevice: apis.InterfaceConfig{Name: "p1eth0"}}
-	config2 := Config{NetDevice: apis.InterfaceConfig{Name: "p1eth1"}}
-	config3 := Config{NetDevice: apis.InterfaceConfig{Name: "p2eth0"}}
+	config1 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p1eth0"}}
+	config2 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p1eth1"}}
+	config3 := PodConfig{NetDevice: apis.InterfaceConfig{Name: "p2eth0"}}
 
 	store.Set(podUID1, dev1, config1)
 	store.Set(podUID1, dev2, config2)
 	store.Set(podUID2, dev1, config3)
 
-	expectedPod1Configs := map[string]Config{
+	expectedPod1Configs := map[string]PodConfig{
 		dev1: config1,
 		dev2: config2,
 	}
@@ -159,7 +159,7 @@ func TestPodConfigStore_GetPodConfigs(t *testing.T) {
 	}
 
 	// Modify returned map and check if original is unchanged
-	pod1Configs["newDev"] = Config{}
+	pod1Configs["newDev"] = PodConfig{}
 	originalPod1Configs, _ := store.GetPodConfigs(podUID1)
 	if !reflect.DeepEqual(originalPod1Configs, expectedPod1Configs) {
 		t.Errorf("Original map in store was modified after GetPodConfigs() returned map was changed. Original: %+v, Expected: %+v", originalPod1Configs, expectedPod1Configs)
@@ -177,7 +177,7 @@ func TestPodConfigStore_ThreadSafety(t *testing.T) {
 			defer wg.Done()
 			podUID := types.UID(fmt.Sprintf("pod-%d", i))
 			deviceName := fmt.Sprintf("eth%d", i%2)
-			config := Config{NetDevice: apis.InterfaceConfig{Name: fmt.Sprintf("dev-%d", i)}}
+			config := PodConfig{NetDevice: apis.InterfaceConfig{Name: fmt.Sprintf("dev-%d", i)}}
 			store.Set(podUID, deviceName, config)
 			retrieved, _ := store.Get(podUID, deviceName)
 			if !reflect.DeepEqual(retrieved, config) {
