@@ -304,7 +304,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	// Process the configurations of the ResourceClaim
 	errorList := []error{}
 	// List if char devices associated to the RDMA selected devices
-	charDevices := sets.New[string](rdmaCmPath)
+	charDevices := sets.New[string]()
 	for _, obj := range objs {
 		claim, ok := obj.(*resourceapi.ResourceClaim)
 		if !ok {
@@ -363,6 +363,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(result.Device); rdmaDev != "" {
 				klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)
 				// Obtain the char devices associated to the rdma device
+				charDevices.Insert(rdmaCmPath)
 				charDevices.Insert(rdmamap.GetRdmaCharDevices(rdmaDev)...)
 				// Move the RDMA device to the namespace in exclusive mode
 				if !np.rdmaSharedMode {
