@@ -627,7 +627,7 @@ func (np *NetworkDriver) prepareResourceClaim(_ context.Context, claim *resource
 			Err: fmt.Errorf("claim %s contain errors: %w", claim.UID, errors.Join(errorList...)),
 		}
 	}
-	return kubeletplugin.PrepareResult{Devices: devices}
+	return kubeletplugin.PrepareResult{}
 }
 
 func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
