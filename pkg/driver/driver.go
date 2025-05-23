@@ -267,6 +267,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	errorList := []error{}
 	// List if char devices associated to the RDMA selected devices
 	for deviceName, config := range podConfig {
+		klog.V(4).Infof("RunPodSandbox processing device: %s with config: %#v", deviceName, config)
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
 		// resourceClaim status for this specific device
 		resourceClaimStatusDevice := resourceapply.
@@ -288,29 +289,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		}
 
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
-
-		// configure routes
-		err := netnsRouting(ns, config.NetNamespaceRoutes)
-		if err != nil {
-			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
-			resourceClaimStatusDevice.WithConditions(
-				metav1apply.Condition().
-					WithType("NetworkReady").
-					WithStatus(metav1.ConditionFalse).
-					WithReason("NetworkReadyError").
-					WithMessage(err.Error()).
-					WithLastTransitionTime(metav1.Now()),
-			)
-			errorList = append(errorList, err)
-		} else {
-			resourceClaimStatusDevice.WithConditions(
-				metav1apply.Condition().
-					WithType("NetworkReady").
-					WithStatus(metav1.ConditionTrue).
-					WithReason("NetworkReady").
-					WithLastTransitionTime(metav1.Now()),
-			)
-		}
 
 		// TODO config options to rename the device and pass parameters
 		// use https://github.com/opencontainers/runtime-spec/pull/1271
@@ -338,6 +316,28 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 				WithHardwareAddress(networkData.HardwareAddress).
 				WithIPs(networkData.IPs...),
 			)
+			// configure routes
+			err := netnsRouting(ns, config.NetNamespaceRoutes)
+			if err != nil {
+				klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("NetworkReady").
+						WithStatus(metav1.ConditionFalse).
+						WithReason("NetworkReadyError").
+						WithMessage(err.Error()).
+						WithLastTransitionTime(metav1.Now()),
+				)
+				errorList = append(errorList, err)
+			} else {
+				resourceClaimStatusDevice.WithConditions(
+					metav1apply.Condition().
+						WithType("NetworkReady").
+						WithStatus(metav1.ConditionTrue).
+						WithReason("NetworkReady").
+						WithLastTransitionTime(metav1.Now()),
+				)
+			}
 		}
 		resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
 		resourceClaimApply := resourceapply.ResourceClaim(config.Claim.Name, config.Claim.Namespace).WithStatus(resourceClaimStatus)
