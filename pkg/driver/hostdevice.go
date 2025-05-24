@@ -112,12 +112,12 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	}
 
 	for _, address := range interfaceConfig.Addresses {
-		_, ipnet, err := net.ParseCIDR(address)
+		ip, ipnet, err := net.ParseCIDR(address)
 		if err != nil {
 			klog.Infof("fail to parse address %s : %v", address, err)
 			continue // this should not happen since it has been already validated
 		}
-		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: ipnet})
+		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: &net.IPNet{IP: ip, Mask: ipnet.Mask}})
 		if err != nil {
 			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address, containerNsPAth, err)
 		}

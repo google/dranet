@@ -37,6 +37,30 @@
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim.yaml
 }
 
+
+@test "dummy interface with IP addresses ResourceClaim and routes" {
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
+
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
+  kubectl wait --timeout=2m --for=condition=ready pods -l app=pod
+  run kubectl exec pod_route -- ip addr show eth99
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"169.254.169.13"* ]]
+
+  run kubectl exec pod3 -- ip route show
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"169.254.169.1"* ]]
+
+  run kubectl get resourceclaims dummy-interface-static-ip  -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"169.254.169.0/24 via 169.254.169.1"* ]]
+
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
+}
+
 @test "dummy interface with IP addresses ResourceClaimTemplate" {
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy1 type dummy"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip addr add 169.254.169.14/32 dev dummy1"
