@@ -70,7 +70,7 @@
   [ "$status" -eq 0 ]
   [[ "$output" == *"169.254.169.0/24 via 169.254.169.1"* ]]
 
-  run kubectl get resourceclaims dummy-interface-static-ip  -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
+  run kubectl get resourceclaims dummy-interface-static-ip-route -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
   [ "$status" -eq 0 ]
   [[ "$output" == *"169.254.169.1"* ]]
 
