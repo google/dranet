@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +43,9 @@ const (
 )
 
 var (
-	dns1123LabelNonValid = regexp.MustCompile("[^a-z0-9-]")
+	// ignoredInterfaceNames is a set of network interface names that are typically
+	// created by CNI plugins or are otherwise not relevant for DRA resource exposure.
+	ignoredInterfaceNames = sets.New("cilium_net", "cilium_host")
 )
 
 type DB struct {
@@ -150,6 +151,11 @@ func (db *DB) Run(ctx context.Context) error {
 			klog.V(7).InfoS("Checking network interface", "name", iface.Attrs().Name)
 			if gwInterfaces.Has(iface.Attrs().Name) {
 				klog.V(4).Infof("iface %s is an uplink interface", iface.Attrs().Name)
+				continue
+			}
+
+			if ignoredInterfaceNames.Has(iface.Attrs().Name) {
+				klog.V(4).Infof("iface %s is in the list of ignored interfaces", iface.Attrs().Name)
 				continue
 			}
 
