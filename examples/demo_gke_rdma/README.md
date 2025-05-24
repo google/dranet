@@ -54,3 +54,36 @@ gke-gauravkg-dra-1-gpu-nodes-2-e5f6f579-f5pj    Ready    <none>   4d16h   v1.32.
             bool: false
       name: gpu6rdma0
 ```
+
+
+## Install the RDMA binary and configure NCCL
+
+This Daemonset does the following:
+Installs RDMA binaries and the NCCL library on the node.
+Stores the library and the binary in the /home/kubernetes/bin/nvidia/lib64 and the  /home/kubernetes/bin/gib directory on the VM.
+
+```
+kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
+```
+
+
+```
+ kubectl get pods -o wide
+NAME                            READY   STATUS    RESTARTS   AGE     IP            NODE                                            NOMINATED NODE   READINESS GATES
+demo-c8577459c-g74tn            2/2     Running   0          6d16h   10.180.5.2    gke-gauravkg-dra-1-default-pool-9d7a355f-a888   <none>           <none>
+nccl-workload-b585465b6-mm8nf   1/1     Running   0          20s     10.180.3.11   gke-gauravkg-dra-1-gpu-nodes-2-e5f6f579-f5pj    <none>           <none>
+nccl-workload-b585465b6-xlw27   1/1     Running   0          20s     10.180.0.11   gke-gauravkg-dra-1-gpu-nodes-2-e5f6f579-73tg    <none>           <none>
+
+```
+
+```
+kubectl get resourceclaims
+NAME                                                     STATE                AGE
+claim-any-rdma-nic                                       pending              18d
+cpu-with-aligned-nic                                     pending              41h
+nccl-workload-b585465b6-mm8nf-rdma-net-interface-kwh66   allocated,reserved   54s
+nccl-workload-b585465b6-xlw27-rdma-net-interface-wgcbk   allocated,reserved   54s
+
+```
+
+
