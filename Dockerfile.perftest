@@ -1,0 +1,55 @@
+# Stage 1: Builder
+FROM nvidia/cuda:12.9.0-devel-ubuntu24.04 AS builder
+
+# Set environment variables for non-interactive apt-get installs
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    libibverbs-dev \
+    librdmacm-dev \
+    libibumad-dev \
+    libnl-3-dev \
+    libnl-route-3-dev \
+    libssl-dev \
+    libpci-dev \
+    libnuma-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set environment variables for CUDA libraries in the builder stage.
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH}"
+
+# --- Build linux-rdma/perftest ---
+WORKDIR /usr/src
+RUN git clone https://github.com/linux-rdma/perftest.git
+WORKDIR /usr/src/perftest
+RUN ./autogen.sh && \
+    ./configure \
+        CUDA_H_PATH=/usr/local/cuda/include/cuda.h \
+        --enable-cudart && \
+    make -j$(nproc) && \
+    # Make install places binaries in /usr/local/bin. Keep them there in the builder stage.
+    make install
+
+# Stage 2: Runtime
+FROM nvidia/cuda:12.9.0-runtime-ubuntu24.04 AS runtime
+
+# Set environment variables for CUDA libraries in the runtime stage.
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH:-}"
+
+COPY --from=builder /usr/local/bin/ib_* /usr/local/bin/
+COPY --from=builder /usr/local/bin/raw_ethernet_* /usr/local/bin/
+
+# Add the installation directory to the PATH for easy execution.
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Set the default command to run when the container starts.
+CMD ["/bin/bash"]
