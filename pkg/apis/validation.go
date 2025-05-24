@@ -17,13 +17,14 @@ limitations under the License.
 package apis
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 
+	"golang.org/x/sys/unix"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/json"
 )
 
 // ValidateConfig validates the data in a runtime.RawExtension against the OpenAPI schema.
@@ -37,8 +38,12 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 	}
 	var errorsList []error
 	var config NetworkConfig
-	if err := json.Unmarshal(raw.Raw, &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML data: %w", err)
+	strictErrs, err := json.UnmarshalStrict(raw.Raw, &config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON data: %w", err)
+	}
+	if len(strictErrs) > 0 {
+		return nil, fmt.Errorf("failed to unmarshal strict JSON data: %w", errors.Join(strictErrs...))
 	}
 
 	for _, ip := range config.Interface.Addresses {
@@ -60,11 +65,17 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, error) {
 			}
 		}
 
+		// only Link or Univer scope allowed
+		if route.Scope != unix.RT_SCOPE_UNIVERSE && route.Scope != unix.RT_SCOPE_LINK {
+			errorsList = append(errorsList, fmt.Errorf("route %d: invalid scope '%d' only Link (253) or Universe (0) allowed", i, route.Scope))
+		}
+
+		// Link scoped routes do not need gateway
 		if route.Gateway != "" {
 			if net.ParseIP(route.Gateway) == nil {
 				errorsList = append(errorsList, fmt.Errorf("route %d: invalid gateway IP '%s'", i, route.Gateway))
 			}
-		} else {
+		} else if route.Scope != unix.RT_SCOPE_LINK {
 			errorsList = append(errorsList, fmt.Errorf("route %d: for destination '%s' must have a gateway", i, route.Destination))
 		}
 	}

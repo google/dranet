@@ -161,6 +161,7 @@ func main() {
 		klog.Infof("Exiting: received signal")
 		cancel()
 	case <-ctx.Done():
+		klog.Infof("Exiting: context cancelled")
 	}
 }
 

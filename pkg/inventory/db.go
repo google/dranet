@@ -18,21 +18,20 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Mellanox/rdmamap"
-	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/cloudprovider"
+	"github.com/google/dranet/pkg/names"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -44,14 +43,17 @@ const (
 )
 
 var (
-	dns1123LabelNonValid = regexp.MustCompile("[^a-z0-9-]")
+	// ignoredInterfaceNames is a set of network interface names that are typically
+	// created by CNI plugins or are otherwise not relevant for DRA resource exposure.
+	ignoredInterfaceNames = sets.New("cilium_net", "cilium_host", "docker")
 )
 
 type DB struct {
 	instance *cloudprovider.CloudInstance
 
-	mu       sync.RWMutex
-	podStore map[int]string // key: netnsid path value: Pod namespace/name
+	mu         sync.RWMutex
+	podStore   map[int]string    // key: netnsid path value: Pod namespace/name
+	podNsStore map[string]string // key pod value: netns path
 
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
@@ -61,6 +63,7 @@ func New() *DB {
 	return &DB{
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
 		podStore:      map[int]string{},
+		podNsStore:    map[string]string{},
 		notifications: make(chan []resourceapi.Device),
 	}
 }
@@ -80,11 +83,13 @@ func (db *DB) AddPodNetns(pod string, netnsPath string) {
 		return
 	}
 	db.podStore[id] = pod
+	db.podNsStore[pod] = netnsPath
 }
 
 func (db *DB) RemovePodNetns(pod string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	delete(db.podNsStore, pod)
 	for k, v := range db.podStore {
 		if v == pod {
 			delete(db.podStore, k)
@@ -93,14 +98,28 @@ func (db *DB) RemovePodNetns(pod string) {
 	}
 }
 
+// GetPodName allows to get the Pod name from the namespace Id
+// that comes in the link id from the veth pair interface
 func (db *DB) GetPodName(netnsid int) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.podStore[netnsid]
 }
 
+// GetPodNamespace allows to get the Pod network namespace
+func (db *DB) GetPodNamespace(pod string) string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.podNsStore[pod]
+}
+
 func (db *DB) Run(ctx context.Context) error {
 	defer close(db.notifications)
+
+	nlHandle, err := netlink.NewHandle()
+	if err != nil {
+		return fmt.Errorf("error creating netlink handle %v", err)
+	}
 	// Resources are published periodically or if there is a netlink notification
 	// indicating a new interfaces was added or changed
 	nlChannel := make(chan netlink.LinkUpdate)
@@ -124,50 +143,36 @@ func (db *DB) Run(ctx context.Context) error {
 		}
 
 		devices := []resourceapi.Device{}
-		ifaces, err := net.Interfaces()
+		ifaces, err := nlHandle.LinkList()
 		if err != nil {
 			klog.Error(err, "unexpected error trying to get system interfaces")
 		}
 		for _, iface := range ifaces {
-			klog.V(7).InfoS("Checking network interface", "name", iface.Name)
-			if gwInterfaces.Has(iface.Name) {
-				klog.V(4).Infof("iface %s is an uplink interface", iface.Name)
+			klog.V(7).InfoS("Checking network interface", "name", iface.Attrs().Name)
+			if gwInterfaces.Has(iface.Attrs().Name) {
+				klog.V(4).Infof("iface %s is an uplink interface", iface.Attrs().Name)
+				continue
+			}
+
+			if ignoredInterfaceNames.Has(iface.Attrs().Name) {
+				klog.V(4).Infof("iface %s is in the list of ignored interfaces", iface.Attrs().Name)
 				continue
 			}
 
 			// skip loopback interfaces
-			if iface.Flags&net.FlagLoopback != 0 {
+			if iface.Attrs().Flags&net.FlagLoopback != 0 {
 				continue
 			}
 
 			// publish this network interface
-			device, err := db.netdevToDRAdev(iface.Name)
+			device, err := db.netdevToDRAdev(iface)
 			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Name, err)
+				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs().Name, err)
 				continue
 			}
 
 			devices = append(devices, *device)
-			klog.V(4).Infof("Found following network interface %s", iface.Name)
-		}
-
-		// List RDMA devices
-		rdmaIfaces, err := netlink.RdmaLinkList()
-		if err != nil {
-			klog.Error(err, "could not obtain the list of RDMA resources")
-		}
-
-		for _, iface := range rdmaIfaces {
-			klog.V(7).InfoS("Checking rdma interface", "name", iface.Attrs.Name)
-			// publish this RDMA interface
-			device, err := db.rdmaToDRAdev(iface.Attrs.Name)
-			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs.Name, err)
-				continue
-			}
-
-			devices = append(devices, *device)
-			klog.V(4).Infof("Found following rdma interface %s", iface.Attrs.Name)
+			klog.V(4).Infof("Found following network interface %s", iface.Attrs().Name)
 		}
 
 		klog.V(4).Infof("Found %d devices", len(devices))
@@ -192,27 +197,19 @@ func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 	return db.notifications
 }
 
-func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
+func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
+	ifName := link.Attrs().Name
 	device := resourceapi.Device{
-		Name: ifName,
 		Basic: &resourceapi.BasicDevice{
 			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
 			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
 		},
 	}
-	// normalize the name because interface names may contain invalid
-	// characters as object names
-	if len(validation.IsDNS1123Label(ifName)) > 0 {
-		klog.V(2).Infof("normalizing iface %s name", ifName)
-		device.Name = "normalized-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
-	}
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.NetworkKind)}
+	// Set the device name. It will be normalized only if necessary.
+	device.Name = names.SetDeviceName(ifName)
+	// expose the real interface name as an attribute in case it is normalized.
 	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
-	link, err := netlink.LinkByName(ifName)
-	if err != nil {
-		klog.Infof("Error getting link by name %v", err)
-		return nil, err
-	}
+
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
 
@@ -276,41 +273,6 @@ func (db *DB) netdevToDRAdev(ifName string) (*resourceapi.Device, error) {
 		device.Basic.Attributes["dra.net/cloudNetwork"] = resourceapi.DeviceAttribute{StringValue: &network}
 	}
 
-	return &device, nil
-}
-
-func (db *DB) rdmaToDRAdev(ifName string) (*resourceapi.Device, error) {
-	device := resourceapi.Device{
-		Name: ifName,
-		Basic: &resourceapi.BasicDevice{
-			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
-			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
-		},
-	}
-	// normalize the name because interface names may contain invalid
-	// characters as object names
-	if len(validation.IsDNS1123Label(ifName)) > 0 {
-		klog.V(2).Infof("normalizing iface %s name", ifName)
-		device.Name = "norm-" + dns1123LabelNonValid.ReplaceAllString(ifName, "-")
-	}
-
-	device.Basic.Attributes["dra.net/kind"] = resourceapi.DeviceAttribute{StringValue: ptr.To(apis.RdmaKind)}
-	device.Basic.Attributes["dra.net/rdmaDevName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
-	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
-	link, err := netlink.RdmaLinkByName(ifName)
-	if err != nil {
-		klog.Infof("Error getting link by name %v", err)
-		return nil, err
-	}
-
-	device.Basic.Attributes["dra.net/firmwareVersion"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.FirmwareVersion}
-	device.Basic.Attributes["dra.net/nodeGuid"] = resourceapi.DeviceAttribute{StringValue: &link.Attrs.NodeGuid}
-
-	if isVirtual(ifName, sysrdmaPath) {
-		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
-	} else {
-		addPCIAttributes(device.Basic, ifName, sysrdmaPath)
-	}
 	return &device, nil
 }
 

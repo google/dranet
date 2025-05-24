@@ -145,6 +145,9 @@ spec:
         - name: netns
           mountPath: /var/run/netns
           mountPropagation: HostToContainer
+        - name: infiniband
+          mountPath: /dev/infiniband
+          mountPropagation: HostToContainer
       volumes:
       - name: device-plugin
         hostPath:
@@ -158,6 +161,9 @@ spec:
       - name: netns
         hostPath:
           path: /var/run/netns
+      - name: infiniband
+        hostPath:
+          path: /dev/infiniband
       - name: etc
         hostPath:
           path: /etc

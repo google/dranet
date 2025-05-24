@@ -22,12 +22,14 @@ import (
 	"net"
 
 	"github.com/google/dranet/pkg/apis"
+
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
+	"k8s.io/klog/v2"
 )
 
 func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig apis.InterfaceConfig) (*resourceapi.NetworkDeviceData, error) {
@@ -42,38 +44,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 		return nil, fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
 	}
 
-	addresses := []*net.IPNet{}
-	if len(interfaceConfig.Addresses) == 0 {
-		// get the existing IP addresses
-		nlAddresses, err := netlink.AddrList(hostDev, netlink.FAMILY_ALL)
-		if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-			return nil, fmt.Errorf("fail to get ip addresses: %w", err)
-		}
-		for _, address := range nlAddresses {
-			// Only move permanent IP addresses configured by the user, dynamic addresses are excluded because
-			// their validity may rely on the original network namespace's context and they may have limited
-			// lifetimes and are not guaranteed to be available in a new namespace.
-			// Ref: https://www.ietf.org/rfc/rfc3549.txt
-			if address.Flags&unix.IFA_F_PERMANENT == 0 {
-				continue
-			}
-			// Only move IP addresses with global scope because those are not host-specific, auto-configured,
-			// or have limited network scope, making them unsuitable inside the container namespace.
-			// Ref: https://www.ietf.org/rfc/rfc3549.txt
-			if address.Scope != unix.RT_SCOPE_UNIVERSE {
-				continue
-			}
-			// remove the interface attribute of the original address
-			// to avoid issues when the interface is renamed.
-			addresses = append(addresses, address.IPNet)
-		}
-	} else {
-		for _, addr := range interfaceConfig.Addresses {
-			_, ipnet, _ := net.ParseCIDR(addr) // already validated
-			addresses = append(addresses, ipnet)
-		}
-	}
-
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return nil, err
@@ -81,8 +51,6 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	defer containerNs.Close()
 
 	attrs := hostDev.Attrs()
-	// Store the original name
-	attrs.Alias = hostIfName
 
 	// copy from netlink.LinkModify(dev) using only the parts needed
 	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
@@ -143,13 +111,17 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 		HardwareAddress: string(nsLink.Attrs().HardwareAddr.String()),
 	}
 
-	for _, address := range addresses {
-		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: address})
+	for _, address := range interfaceConfig.Addresses {
+		ip, ipnet, err := net.ParseCIDR(address)
 		if err != nil {
-			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address.String(), containerNsPAth, err)
+			klog.Infof("fail to parse address %s : %v", address, err)
+			continue // this should not happen since it has been already validated
 		}
-		networkData.IPs = append(networkData.IPs, address.String())
-
+		err = nhNs.AddrAdd(nsLink, &netlink.Addr{IPNet: &net.IPNet{IP: ip, Mask: ipnet.Mask}})
+		if err != nil {
+			return nil, fmt.Errorf("fail to set up address %s on namespace %s: %w", address, containerNsPAth, err)
+		}
+		networkData.IPs = append(networkData.IPs, address)
 	}
 
 	err = nhNs.LinkSetUp(nsLink)
@@ -203,7 +175,6 @@ func nsDetachNetdev(containerNsPAth string, devName string, outName string) erro
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}
 	defer s.Close()
-
 	// copy from netlink.LinkModify(dev) using only the parts needed
 	flags := unix.NLM_F_REQUEST | unix.NLM_F_ACK
 	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, flags)
@@ -230,5 +201,15 @@ func nsDetachNetdev(containerNsPAth string, devName string, outName string) erro
 		return err
 	}
 
+	// Set up the interface in case host network workloads depend on it
+	hostDev, err := netlink.LinkByName(ifName)
+	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+		return err
+	}
+
+	if err = netlink.LinkSetUp(hostDev); err != nil {
+		return fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
+	}
 	return nil
 }

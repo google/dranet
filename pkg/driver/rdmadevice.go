@@ -18,42 +18,18 @@ package driver
 
 import (
 	"fmt"
+	"os"
+	"syscall"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-	"k8s.io/klog/v2"
-)
-
-const (
-	// rdmaNetnsModeShared and rdmaNetnsModeExclusive define the RDMA subsystem
-	// network namespace mode. An RDMA device can only be assigned to a network
-	// namespace when the RDMA subsystem is set to an "exclusive" network
-	// namespace mode. When the subsystem is set to "shared" mode, an attempt to
-	// assign an RDMA device to a network namespace will result in failure.
-	// Additionally, "If there are active network namespaces and if one or more
-	// RDMA devices exist, changing mode from shared to exclusive returns error
-	// code EBUSY."
-	//
-	// Ref. https://man7.org/linux/man-pages/man8/rdma-system.8.html
-	rdmaNetnsModeShared    = "shared"
-	rdmaNetnsModeExclusive = "exclusive"
+	"golang.org/x/sys/unix"
 )
 
 // Based on existing RDMA CNI plugin
 // https://github.com/k8snetworkplumbingwg/rdma-cni
 
 func nsAttachRdmadev(hostIfName string, containerNsPAth string) error {
-	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
-	if err != nil {
-		return fmt.Errorf("failed to determine the RDMA subsystem's network namespace mode: %w", err)
-	}
-	if rdmaNetnsMode == rdmaNetnsModeShared {
-		// TODO: Potentially move this check to the function invokers side for
-		// improved visiblity and expectation of what this function does.
-		klog.Info("Skipping setting network namespace for RDMA device since RDMA sybsystem is currently configured for shared mode.")
-		return nil
-	}
-
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, hostIfName, err)
@@ -100,4 +76,43 @@ func nsDetachRdmadev(containerNsPAth string, ifName string) error {
 	}
 	return nil
 
+}
+
+// GetDeviceInfo retrieves device type, major, and minor numbers for a given path.
+// It returns an error if the path does not exist or if it's not a device file.
+func GetDeviceInfo(path string) (LinuxDevice, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return LinuxDevice{}, fmt.Errorf("failed to stat path %s: %w", path, err)
+	}
+
+	// Check if it's a device file
+	if fileInfo.Mode()&os.ModeDevice == 0 {
+		return LinuxDevice{}, fmt.Errorf("path %s is not a device file", path)
+	}
+
+	// Determine device type ('c' for character, 'b' for block)
+	deviceType := ""
+	if fileInfo.Mode()&os.ModeCharDevice != 0 {
+		deviceType = "c" // Character device
+	} else if fileInfo.Mode()&os.ModeDevice != 0 && fileInfo.Mode()&os.ModeCharDevice == 0 {
+		deviceType = "b" // Block device (not a character device but is a device)
+	}
+
+	// Type assert to syscall.Stat_t to get Rdev (raw device number)
+	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return LinuxDevice{}, fmt.Errorf("failed to assert FileInfo.Sys() to syscall.Stat_t for path %s", path)
+	}
+
+	// Extract major and minor numbers from Rdev
+	majorVal := unix.Major(statT.Rdev)
+	minorVal := unix.Minor(statT.Rdev)
+
+	return LinuxDevice{
+		Path:  path,
+		Type:  deviceType,
+		Major: int64(majorVal),
+		Minor: int64(minorVal),
+	}, nil
 }

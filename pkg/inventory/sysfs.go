@@ -30,8 +30,7 @@ import (
 
 const (
 	// https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
-	sysnetPath  = "/sys/class/net/"
-	sysrdmaPath = "/sys/class/infiniband"
+	sysnetPath = "/sys/class/net/"
 	// Each of the entries in this directory is a symbolic link
 	// representing one of the real or virtual networking devices
 	// that are visible in the network namespace of the process

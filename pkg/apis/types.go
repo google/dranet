@@ -35,4 +35,5 @@ type RouteConfig struct {
 	Destination string `json:"destination,omitempty"` // e.g., "0.0.0.0/0" for default, "10.0.0.0/8"
 	Gateway     string `json:"gateway,omitempty"`     // The "gateway" address, e.g., "192.168.1.1"
 	Source      string `json:"source,omitempty"`      // Optional source address for policy routing
+	Scope       uint8  `json:"scope,omitempty"`       // Optional scope of the route, only Link (253) or Universe (0) allowed
 }
