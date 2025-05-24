@@ -62,7 +62,7 @@
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
   kubectl wait --timeout=2m --for=condition=ready pods -l app=pod
-  run kubectl exec pod_route -- ip addr show eth99
+  run kubectl exec pod3 -- ip addr show eth99
   [ "$status" -eq 0 ]
   [[ "$output" == *"169.254.169.13"* ]]
 
