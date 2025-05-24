@@ -151,6 +151,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			continue
 		}
 
+		if podCfg.NetDevice.Name == "" {
+			podCfg.NetDevice.Name = ifName
+		}
+
 		// If there is no custom addresses then use the existing ones
 		if len(podCfg.NetDevice.Addresses) == 0 {
 			// get the existing IP addresses
