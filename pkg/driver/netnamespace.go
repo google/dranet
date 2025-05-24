@@ -23,7 +23,6 @@ import (
 	"slices"
 
 	"github.com/google/dranet/pkg/apis"
-	"k8s.io/klog/v2"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -67,22 +66,21 @@ func netnsRouting(containerNsPAth string, ifName string, routeConfig []apis.Rout
 	for _, route := range routeConfig {
 		r := netlink.Route{
 			LinkIndex: nsLink.Attrs().Index,
+			Scope:     netlink.Scope(route.Scope),
 		}
 
-		_, dst, err := net.ParseCIDR(route.Destination) // nolint:errcheck already validated
+		_, dst, err := net.ParseCIDR(route.Destination)
 		if err != nil {
 			errorList = append(errorList, err)
 			continue
 		}
 		r.Dst = dst
-		r.Gw = net.ParseIP(route.Gateway) // already validated
+		r.Gw = net.ParseIP(route.Gateway)
 		if route.Source != "" {
 			r.Src = net.ParseIP(route.Source)
-			r.Scope = netlink.Scope(route.Scope)
 		}
-		klog.V(4).Infof("Configuring route %#v", route)
 		if err := nhNs.RouteAdd(&r); err != nil {
-			errorList = append(errorList, err)
+			errorList = append(errorList, fmt.Errorf("fail to add route %#v for interface %s on namespace %s: %w", r, ifName, containerNsPAth, err))
 		}
 
 	}
