@@ -204,6 +204,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			if route.Dst == nil {
 				continue
 			}
+			// Discard IPv6 link-local routes, but allow IPv4 link-local.
+			if route.Dst.IP.To4() == nil && route.Dst.IP.IsLinkLocalUnicast() {
+				continue
+			}
 			routeCfg.Destination = route.Dst.String()
 
 			if route.Gw != nil {
