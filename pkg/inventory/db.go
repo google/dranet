@@ -45,7 +45,7 @@ const (
 var (
 	// ignoredInterfaceNames is a set of network interface names that are typically
 	// created by CNI plugins or are otherwise not relevant for DRA resource exposure.
-	ignoredInterfaceNames = sets.New("cilium_net", "cilium_host")
+	ignoredInterfaceNames = sets.New("cilium_net", "cilium_host", "docker")
 )
 
 type DB struct {
