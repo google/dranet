@@ -140,7 +140,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			WithIPs(networkData.IPs...),
 		)
 		// configure routes
-		err = netnsRouting(ns, config.NetNamespaceRoutes)
+		err = netnsRouting(ns, ifName, config.NetNamespaceRoutes)
 		if err != nil {
 			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
 			resourceClaimStatusDevice.WithConditions(

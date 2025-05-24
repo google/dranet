@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 
 	"github.com/google/dranet/pkg/apis"
 	"k8s.io/klog/v2"
@@ -28,7 +29,7 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-func netnsRouting(containerNsPAth string, routeConfig []apis.RouteConfig) error {
+func netnsRouting(containerNsPAth string, ifName string, routeConfig []apis.RouteConfig) error {
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return err
@@ -43,9 +44,30 @@ func netnsRouting(containerNsPAth string, routeConfig []apis.RouteConfig) error 
 	}
 	defer nhNs.Close()
 
+	nsLink, err := nhNs.LinkByName(ifName)
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+		return fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
+	}
+
 	errorList := []error{}
+	// Sort routes to process link-local routes before universe routes.
+	// This is important because universe routes might depend on link-local ones.
+	// For example, in GCE VMs:
+	// # ip addr show eth0
+	//   inet 10.0.5.8/32 scope global dynamic eth0
+	// # ip route show dev eth0
+	//   10.0.5.0/24 via 10.0.5.1 proto dhcp src 10.0.5.8
+	//   10.0.5.1 proto dhcp scope link src 10.0.5.8
+	slices.SortFunc(routeConfig, func(a, b apis.RouteConfig) int {
+		// Routes with scope RT_SCOPE_LINK (253) should come before RT_SCOPE_UNIVERSE (0)
+		// A higher scope value means it's processed earlier.
+		return int(b.Scope) - int(a.Scope)
+	})
+
 	for _, route := range routeConfig {
-		r := netlink.Route{}
+		r := netlink.Route{
+			LinkIndex: nsLink.Attrs().Index,
+		}
 
 		_, dst, err := net.ParseCIDR(route.Destination) // nolint:errcheck already validated
 		if err != nil {
@@ -56,6 +78,7 @@ func netnsRouting(containerNsPAth string, routeConfig []apis.RouteConfig) error 
 		r.Gw = net.ParseIP(route.Gateway) // already validated
 		if route.Source != "" {
 			r.Src = net.ParseIP(route.Source)
+			r.Scope = netlink.Scope(route.Scope)
 		}
 		klog.V(4).Infof("Configuring route %#v", route)
 		if err := nhNs.RouteAdd(&r); err != nil {

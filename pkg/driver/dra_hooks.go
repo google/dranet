@@ -196,18 +196,19 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		}
 		for _, route := range routes {
 			routeCfg := apis.RouteConfig{}
-
-			if route.Gw == nil || route.Dst == nil {
+			// routes need a destination
+			if route.Dst == nil {
 				continue
 			}
-			if !route.Dst.IP.IsGlobalUnicast() {
-				continue
-			}
-			routeCfg.Gateway = route.Gw.String()
 			routeCfg.Destination = route.Dst.String()
+
+			if route.Gw != nil {
+				routeCfg.Gateway = route.Gw.String()
+			}
 			if route.Src != nil {
 				routeCfg.Source = route.Src.String()
 			}
+			routeCfg.Scope = uint8(route.Scope)
 			podCfg.NetNamespaceRoutes = append(podCfg.NetNamespaceRoutes, routeCfg)
 		}
 
