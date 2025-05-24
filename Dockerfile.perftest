@@ -23,23 +23,35 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for CUDA libraries in the builder stage.
-ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
-ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH:-}"
 
 # --- Build linux-rdma/perftest ---
 WORKDIR /usr/src
-RUN git clone https://github.com/linux-rdma/perftest.git
+RUN git clone --depth 1 https://github.com/linux-rdma/perftest.git
 WORKDIR /usr/src/perftest
 RUN ./autogen.sh && \
-    ./configure \
-        CUDA_H_PATH=/usr/local/cuda/include/cuda.h \
-        --enable-cudart && \
+    ./configure --prefix=/usr/local && \
     make -j$(nproc) && \
-    # Make install places binaries in /usr/local/bin. Keep them there in the builder stage.
     make install
 
 # Stage 2: Runtime
 FROM nvidia/cuda:12.9.0-runtime-ubuntu24.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    rdmacm-utils \
+    iproute2 \
+    inetutils-ping \
+    libibverbs1 \
+    libmlx5-1 \
+    libnl-3-200 \
+    libnl-route-3-200 \
+    libpci3 \
+    libnuma1 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for CUDA libraries in the runtime stage.
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
