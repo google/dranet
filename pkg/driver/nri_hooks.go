@@ -70,7 +70,13 @@ func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox,
 	adjust := &api.ContainerAdjustment{}
 	for _, config := range podConfig {
 		for _, dev := range config.RDMADevice.DevChars {
-			adjust.AddDevice(&dev)
+			// TODO check the file permissions and uid and gid fields
+			adjust.AddDevice(&api.LinuxDevice{
+				Path:  dev.Path,
+				Type:  dev.Type,
+				Major: dev.Major,
+				Minor: dev.Minor,
+			})
 		}
 	}
 	return adjust, nil, nil

@@ -19,7 +19,6 @@ package driver
 import (
 	"sync"
 
-	"github.com/containerd/nri/pkg/api"
 	"github.com/google/dranet/pkg/apis"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -49,10 +48,20 @@ type RDMAConfig struct {
 	// corresponds to the allocated network device.
 	LinkDev string
 
-	// DevChars is a list of absolute paths to the user-space RDMA character
+	// DevChars is a list of user-space RDMA character
 	// devices (e.g., "/dev/infiniband/uverbs0", "/dev/infiniband/rdma_cm")
 	// that should be made available to the Pod.
-	DevChars []api.LinuxDevice
+	DevChars []LinuxDevice
+}
+
+type LinuxDevice struct {
+	Path     string
+	Type     string
+	Major    int64
+	Minor    int64
+	FileMode uint32
+	UID      uint32
+	GID      uint32
 }
 
 // PodConfigStore provides a thread-safe, centralized store for all network device configurations

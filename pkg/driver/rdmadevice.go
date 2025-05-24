@@ -21,7 +21,6 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/containerd/nri/pkg/api"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
@@ -81,15 +80,15 @@ func nsDetachRdmadev(containerNsPAth string, ifName string) error {
 
 // GetDeviceInfo retrieves device type, major, and minor numbers for a given path.
 // It returns an error if the path does not exist or if it's not a device file.
-func GetDeviceInfo(path string) (api.LinuxDevice, error) {
+func GetDeviceInfo(path string) (LinuxDevice, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		return api.LinuxDevice{}, fmt.Errorf("failed to stat path %s: %w", path, err)
+		return LinuxDevice{}, fmt.Errorf("failed to stat path %s: %w", path, err)
 	}
 
 	// Check if it's a device file
 	if fileInfo.Mode()&os.ModeDevice == 0 {
-		return api.LinuxDevice{}, fmt.Errorf("path %s is not a device file", path)
+		return LinuxDevice{}, fmt.Errorf("path %s is not a device file", path)
 	}
 
 	// Determine device type ('c' for character, 'b' for block)
@@ -103,14 +102,14 @@ func GetDeviceInfo(path string) (api.LinuxDevice, error) {
 	// Type assert to syscall.Stat_t to get Rdev (raw device number)
 	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
 	if !ok {
-		return api.LinuxDevice{}, fmt.Errorf("failed to assert FileInfo.Sys() to syscall.Stat_t for path %s", path)
+		return LinuxDevice{}, fmt.Errorf("failed to assert FileInfo.Sys() to syscall.Stat_t for path %s", path)
 	}
 
 	// Extract major and minor numbers from Rdev
 	majorVal := unix.Major(statT.Rdev)
 	minorVal := unix.Minor(statT.Rdev)
 
-	return api.LinuxDevice{
+	return LinuxDevice{
 		Path:  path,
 		Type:  deviceType,
 		Major: int64(majorVal),
