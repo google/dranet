@@ -1,4 +1,4 @@
 ---
-title: Design
+title: Concepts
 weight: 3
 ---
