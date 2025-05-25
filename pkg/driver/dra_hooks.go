@@ -39,6 +39,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	rdmaCmPath = "/dev/infiniband/rdma_cm"
+)
+
 // DRA hooks exposes Network Devices to Kubernetes, the Network devices and its attributes are
 // obtained via the netdb to decouple the discovery of the interfaces with the execution.
 // The exposed devices can be allocated to one or mod pods via Claim, the Claim lifecycle is

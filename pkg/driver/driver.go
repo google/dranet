@@ -42,13 +42,8 @@ const (
 )
 
 const (
-	// podUIDIndex is the lookup name for the most common index function, which is to index by the pod UID field.
-	podUIDIndex string = "podUID"
-
 	// maxAttempts indicates the number of times the driver will try to recover itself before failing
 	maxAttempts = 5
-
-	rdmaCmPath = "/dev/infiniband/rdma_cm"
 )
 
 // WithFilter
