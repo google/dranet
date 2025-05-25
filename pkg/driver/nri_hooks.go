@@ -18,7 +18,6 @@ package driver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -103,7 +102,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	np.netdb.AddPodNetns(podKey(pod), ns)
 
 	// Process the configurations of the ResourceClaim
-	errorList := []error{}
 	for deviceName, config := range podConfig {
 		klog.V(4).Infof("RunPodSandbox processing device: %s with config: %#v", deviceName, config)
 		resourceClaimStatus := resourceapply.ResourceClaimStatus()
@@ -130,8 +128,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 					WithMessage(err.Error()).
 					WithLastTransitionTime(metav1.Now()),
 			)
-			errorList = append(errorList, err)
-			continue
+			return fmt.Errorf("error moving network device %s to namespace %s: %v", deviceName, ns, err)
 		}
 
 		resourceClaimStatusDevice.WithConditions(
@@ -157,26 +154,33 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 					WithMessage(err.Error()).
 					WithLastTransitionTime(metav1.Now()),
 			)
-		} else {
+			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
+		}
+		resourceClaimStatusDevice.WithConditions(
+			metav1apply.Condition().
+				WithType("NetworkReady").
+				WithStatus(metav1.ConditionTrue).
+				WithReason("NetworkReady").
+				WithLastTransitionTime(metav1.Now()),
+		)
+
+		// Move the RDMA device to the namespace if the host is in exclusive mode
+		if !np.rdmaSharedMode && config.RDMADevice.LinkDev != "" {
+			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", config.RDMADevice.LinkDev)
+			err := nsAttachRdmadev(config.RDMADevice.LinkDev, ns)
+			if err != nil {
+				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", config.RDMADevice.LinkDev, ns, err)
+				return fmt.Errorf("error moving RDMA device %s to namespace %s: %v", config.RDMADevice.LinkDev, ns, err)
+			}
 			resourceClaimStatusDevice.WithConditions(
 				metav1apply.Condition().
-					WithType("NetworkReady").
+					WithType("RDMALinkReady").
 					WithStatus(metav1.ConditionTrue).
-					WithReason("NetworkReady").
+					WithReason("RDMALinkReady").
 					WithLastTransitionTime(metav1.Now()),
 			)
 		}
-
-		// Move the RDMA device to the namespace if the host is in exclusive mode
-		if !np.rdmaSharedMode {
-			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", ifName)
-			err := nsAttachRdmadev(config.RDMADevice.LinkDev, ns)
-			if err != nil {
-				klog.Infof("RunPodSandbox error getting RDMA device %s to namespace %s: %v", deviceName, ns, err)
-				return err
-			}
-		}
-
+		// Ok
 		resourceClaimStatus.WithDevices(resourceClaimStatusDevice)
 		resourceClaimApply := resourceapply.ResourceClaim(config.Claim.Name, config.Claim.Namespace).WithStatus(resourceClaimStatus)
 		// do not block the handler to update the status
@@ -194,8 +198,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			}
 		}()
 	}
-
-	return errors.Join(errorList...)
+	return nil
 }
 
 // StopPodSandbox tries to move back the devices to the rootnamespace but does not fail
