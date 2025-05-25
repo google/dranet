@@ -45,6 +45,7 @@ RUN apt-get update && \
     rdmacm-utils \
     iproute2 \
     inetutils-ping \
+    ibverbs-utils \
     libibverbs1 \
     libmlx5-1 \
     libnl-3-200 \
