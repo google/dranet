@@ -40,10 +40,10 @@ name = "User Guides"
 title = "User Guides"
 weight = 2
 [[menu.main]]
-identifier = "design"
-url = "/docs/design"
-name = "Design"
-title = "Design"
+identifier = "concepts"
+url = "/docs/concepts"
+name = "Concepts"
+title = "Concepts"
 weight = 5
 [[menu.main]]
 identifier = "contributing"
