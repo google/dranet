@@ -1,35 +1,131 @@
 # DRANET: DRA Kubernetes Network Driver
 
-DRANET is a Kubernetes Network Driver that uses Dynamic Resource Allocation (DRA) to deliver high-performance networking for demanding applications in Kubernetes.
+DRANET is a Kubernetes Network Driver that uses Dynamic Resource Allocation
+(DRA) to deliver high-performance networking for demanding applications in
+Kubernetes.
 
 ## Key Features
 
-- **DRA Integration:** Leverages the power of Kubernetes' Dynamic Resource Allocation.
-- **High-Performance Networking:** Designed for demanding workloads like AI/ML applications.
+- **DRA Integration:** Leverages the power of Kubernetes' Dynamic Resource
+  Allocation.
+- **High-Performance Networking:** Designed for demanding workloads like AI/ML
+  applications.
 - **Simplified Management:** Easy to deploy and manage.
-- **Enhanced Efficiency:** Optimizes resource utilization for improved overall performance.
-- **Cluster-Wide Scalability:**  Effectively manages network resources across a large number of nodes for seamless operation in Kubernetes deployments.
+- **Enhanced Efficiency:** Optimizes resource utilization for improved overall
+  performance.
+- **Cluster-Wide Scalability:**  Effectively manages network resources across a
+  large number of nodes for seamless operation in Kubernetes deployments.
 
 ## How It Works
 
-The networking DRA driver uses GRPC to communicate with the Kubelet via the [DRA API](https://github.com/kubernetes/kubernetes/blob/3bec2450efd29787df0f27415de4e8049979654f/staging/src/k8s.io/kubelet/pkg/apis/dra/v1beta1/api.proto) and the Container Runtime via [NRI](https://github.com/containerd/nri). This architecture facilitates the supportability and reduces the complexity of the solution, it also makes it fully compatible and agnostic of the existing CNI plugins in the cluster.
+The DraNet driver communicates with the Kubelet through the [DRA
+API](https://github.com/kubernetes/kubernetes/blob/3bec2450efd29787df0f27415de4e8049979654f/staging/src/k8s.io/kubelet/pkg/apis/dra/v1beta1/api.proto)
+and with the Container Runtime via [NRI](https://github.com/containerd/nri).
+This architectural approach ensures robust supportability and minimizes
+complexity, making it fully compatible with existing CNI plugins in your
+cluster.
 
-The DRA driver, once the Pod network namespaces has been created, will receive a GRPC call from the Container Runtime via NRI to execute the corresponding configuration. A more detailed diagram can be found in:
+Upon the creation of a Pod's network namespaces, the Container Runtime initiates
+a GRPC call to DraNet via NRI to execute the necessary network configurations.
 
-[![](https://mermaid.ink/img/pako:eNp9UstuwyAQ_JUVp1ZNfoBDpMi-WFXdyLn6gs0mQTXgLtCHovx714nTWoobDgiW2dlhNEfReo1CioDvCV2LuVF7UrZ2wEul6F2yDdLl_pwa7DAul6vVU4nx09Mb5NUacjIfSBJK5toQ9oqwwuATtRgeHi-9pY8InmEw1_naRGUcxAPCtTPrlLF8Y10hgnIaMu92Zj_S3ZAMqpajwvtSrt_gXzDlMBhJS6iS23i95UmN_7pi_wADf1YWEniDdZ6P72VxfpjwMEmxCXPts55VBRy8f5sff981xoMb605ZDL1qGd4jqWi8C_esmiqGG7FTK2eF_eNhRqgi_lbCjI1T6lu4WAiLZJXRHMrj0FwLToXFWkg-atyp1MVa1O7E0CGg22_XChkp4UKkXjPfmGEhd6oLXEVtoqeXS9DPeT_9ABUC_8M?type=png)](https://mermaid.live/edit#pako:eNp9UstuwyAQ_JUVp1ZNfoBDpMi-WFXdyLn6gs0mQTXgLtCHovx714nTWoobDgiW2dlhNEfReo1CioDvCV2LuVF7UrZ2wEul6F2yDdLl_pwa7DAul6vVU4nx09Mb5NUacjIfSBJK5toQ9oqwwuATtRgeHi-9pY8InmEw1_naRGUcxAPCtTPrlLF8Y10hgnIaMu92Zj_S3ZAMqpajwvtSrt_gXzDlMBhJS6iS23i95UmN_7pi_wADf1YWEniDdZ6P72VxfpjwMEmxCXPts55VBRy8f5sff981xoMb605ZDL1qGd4jqWi8C_esmiqGG7FTK2eF_eNhRqgi_lbCjI1T6lu4WAiLZJXRHMrj0FwLToXFWkg-atyp1MVa1O7E0CGg22_XChkp4UKkXjPfmGEhd6oLXEVtoqeXS9DPeT_9ABUC_8M)
+A more detailed diagram illustrating this process can be found in our
+documentation: [How It
+Works](https://google.github.io/dranet/docs/concepts/howitworks.md).
 
-## References
+## Quick Start
 
-- [KEP 3063 - Dynamic Resource Allocation #306](https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/3063-dynamic-resource-allocation/README.md)
-- [KEP 3695 - DRA: structured parameters #438](https://github.com/kubernetes/enhancements/issues/4381)
-- [Extend PodResources to include resources from Dynamic Resource Allocation (DRA)](https://github.com/kubernetes/enhancements/issues/3695)
-- [Working Group Device Management](https://github.com/kubernetes-sigs/wg-device-management)
-- [Kubernetes Network Drivers, Antonio Ojea, Presentation](https://docs.google.com/presentation/d/1Vdr7BhbYXeWjwmLjGmqnUkvJr_eOUdU0x-JxfXWxUT8/edit?usp=sharing)
-- [The Future of Kubernetes Networking - Antonio Ojea, Googe & Dan Winship, Red Hat - Kubernetes Contributor Summit EU 2024](https://sched.co/1aOqO)
-- [Better Together! GPU, TPU and NIC Topological Alignment with DRA - John Belamaric, Google & Patrick Ohly, Intel - Kubecon US 2024](https://sched.co/1i7pv)
+To get started with DraNet, your Kubernetes cluster needs to have [Dynamic
+Resource Allocation (DRA)
+enabled](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/).
+DRA is beta and is disabled by default in Kubernetes v1.32. You will need to
+enable both the [feature gates and the API
+groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation)
+for DRA until it reaches GA.
+
+### Kubernetes Cluster with DRA
+
+#### KIND
+
+If you are using
+[KIND](https://github.com/kubernetes-sigs/kind?tab=readme-ov-file#installation-and-usage),
+you can create a cluster with the following configuration:
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  image: kindest/node:v1.33.1
+- role: worker
+  image: kindest/node:v1.33.1
+- role: worker
+  image: kindest/node:v1.33.1
+featureGates:
+  # Enable the corresponding DRA feature gates
+  DynamicResourceAllocation: true
+  DRAResourceClaimDeviceStatus: true
+runtimeConfig:
+  api/beta : true
+```
+
+Then to create the cluster:
+
+```sh
+kind create cluster --config kind.yaml
+```
+
+#### Google Cloud (GKE)
+
+For instructions on setting up DRA on GKE, refer to the official documentation:
+[Set up Dynamic Resource
+Allocation](https://cloud.google.com/kubernetes-engine/docs/how-to/set-up-dra)
+
+### Installation
+
+Install the latest stable version of DraNet using the provided manifest:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
+```
+
+### How to Use It
+
+Once DraNet is running, you can inspect the network interfaces and their
+attributes published by the drivers. Users can then create `DeviceClasses`,
+`ResourceClaims`, and/or `ResourceClaimTemplates` to schedule pods and allocate
+network devices.
+
+For examples of how to use DraNet with `DeviceClas`s and `ResourceClaim` to
+attach network interfaces to pods, please refer to the [Quick Start
+guide](https://google.github.io/dranet/docs/quick-start.md).
+
+
+## Contributing
+
+We welcome your contributions! Please review our [Contributor License
+Agreement](https://cla.developers.google.com/about) and [Google's Open Source
+Community Guidelines](https://opensource.google/conduct/) before you begin. All
+submissions require review via [GitHub pull
+requests](https://docs.github.com/articles/about-pull-requests).
+
+For detailed development instructions, including local development with KIND and
+troubleshooting tips, see our [Developer
+Guide](https://google.github.io/dranet/docs/contributing/developer-guide.md).
+
+## Further Reading
+
+Explore more concepts and advanced topics:
+
+* **Design:** Understand the architectural choices behind DraNet:
+  [Design](https://google.github.io/dranet/docs/concepts/_index.md)
+* **RDMA:** Learn about RDMA components in Linux and their interplay:
+  [RDMA](https://google.github.io/dranet/docs/concepts/rdma.md)
+* **References:** A list of relevant Kubernetes Enhancement Proposals (KEPs) and
+  presentations:
+  [References](https://google.github.io/dranet/docs/concepts/references.md)
 
 ## Disclaimer
 
-This is not an officially supported Google product. This project is not
-eligible for the [Google Open Source Software Vulnerability Rewards
+This is not an officially supported Google product. This project is not eligible
+for the [Google Open Source Software Vulnerability Rewards
 Program](https://bughunters.google.com/open-source-security).
