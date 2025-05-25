@@ -77,3 +77,15 @@
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
 }
+
+
+@test "test metric server is up and operating on host" {
+  output=$(kubectl \
+    run -i test-metrics \
+    --image registry.k8s.io/e2e-test-images/agnhost:2.39 \
+    --overrides='{"spec": {"hostNetwork": true}}' \
+    --restart=Never \
+    --command \
+    -- sh -c "curl --silent localhost:9177/metrics | grep process_start_time_seconds >/dev/null && echo ok || echo fail")
+  test "$output" = "ok"
+}

@@ -77,6 +77,9 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 
 func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
 	klog.V(2).Infof("PrepareResourceClaims is called: number of claims: %d", len(claims))
+
+	nodePrepareRequestsTotal.Inc()
+
 	if len(claims) == 0 {
 		return nil, nil
 	}

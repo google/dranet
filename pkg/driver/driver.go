@@ -72,6 +72,8 @@ type NetworkDriver struct {
 type Option func(*NetworkDriver)
 
 func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interface, nodeName string, opts ...Option) (*NetworkDriver, error) {
+	registerMetrics()
+
 	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
 	if err != nil {
 		klog.Infof("failed to determine the RDMA subsystem's network namespace mode, assume shared mode: %v", err)
