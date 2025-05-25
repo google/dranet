@@ -120,14 +120,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		networkData, err := nsAttachNetdev(ifName, ns, config.NetDevice)
 		if err != nil {
 			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", deviceName, ns, err)
-			resourceClaimStatusDevice.WithConditions(
-				metav1apply.Condition().
-					WithType("Ready").
-					WithStatus(metav1.ConditionFalse).
-					WithReason("NetworkDeviceError").
-					WithMessage(err.Error()).
-					WithLastTransitionTime(metav1.Now()),
-			)
 			return fmt.Errorf("error moving network device %s to namespace %s: %v", deviceName, ns, err)
 		}
 
@@ -146,14 +138,6 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		err = netnsRouting(ns, config.NetDevice.Name, config.NetNamespaceRoutes)
 		if err != nil {
 			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
-			resourceClaimStatusDevice.WithConditions(
-				metav1apply.Condition().
-					WithType("NetworkReady").
-					WithStatus(metav1.ConditionFalse).
-					WithReason("NetworkReadyError").
-					WithMessage(err.Error()).
-					WithLastTransitionTime(metav1.Now()),
-			)
 			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
 		}
 		resourceClaimStatusDevice.WithConditions(
