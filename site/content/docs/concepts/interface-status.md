@@ -3,100 +3,91 @@ title: "Interface Status"
 date: 2025-05-25T11:30:40Z
 ---
 
-To configure network interfaces in DraNet, users can provide custom configurations through the parameters field of a ResourceClaim or ResourceClaimTemplate. This configuration adheres to the NetworkConfig structure, which defines the desired state for network interfaces and their associated routes.
+### Understanding Interface Status Output
 
-### Network Configuration Overview
+When DraNet allocates a network interface to a Pod via a `ResourceClaim`, it publishes the status of the allocated device within the `ResourceClaim`'s `status` field. This provides crucial insights into the readiness and configuration of the network interface from a Kubernetes perspective, adhering to the standardized device status defined in [KEP-4817](https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/4817-resource-claim-device-status/README.md).
 
-The primary structure for custom network configuration is NetworkConfig. It encompasses settings for the network interface itself and any specific routes to be applied within the Pod's network namespace.
+After a `ResourceClaim` is processed and a network device is allocated, its status is reflected under `ResourceClaim.status.devices`. This section contains `conditions` and `networkData` for each allocated device.
 
-```go
-type NetworkConfig struct {  
-	Interface InterfaceConfig `json:"interface"`
-	Routes    []RouteConfig   `json:"routes"`
-}
-```
+#### Conditions
 
-#### Interface Configuration
+The `conditions` array provides a timeline of the device's state and indicates whether specific aspects of its configuration and readiness have been met. DraNet reports the following conditions:
 
-The InterfaceConfig structure allows you to specify details for a single network interface.
+* **`Ready` (type `NetworkDeviceReady`)**: Indicates that the network device has been successfully moved into the Pod's network namespace and is configured.
+* **`NetworkReady`**: Signifies that the network interface within the Pod has been successfully configured with its IP addresses and routes.
+* **`RDMALinkReady`**: (Applies only when RDMA is used in exclusive mode) Indicates that the associated RDMA link device has been successfully moved into the Pod's network namespace.
 
-```go
-type InterfaceConfig struct {  
-	Name         string   `json:"name,omitempty"`
-	Addresses    []string `json:"addresses,omitempty"`
-	MTU          int32    `json:"mtu,omitempty"`
-	HardwareAddr string   `json:"hardwareAddr,omitempty"`
-}
-```
+Each condition includes:
+* **`lastTransitionTime`**: The timestamp when the condition last changed.
+* **`message`**: A human-readable message about the condition.
+* **`reason`**: A single-word identifier for the reason for the condition's last transition.
+* **`status`**: "True", "False", or "Unknown" indicating the state of the condition.
+* **`type`**: The specific type of condition (e.g., "Ready", "NetworkReady").
 
-* **name** (string, optional): The logical name that the interface will have inside the Pod (e.g., "eth0", "enp0s3"). If not specified, DraNet will keep the original name if compliant.  
-* **addresses** ([]string, optional): A list of IP addresses in CIDR format (e.g., "192.168.1.10/24", "2001:db8::1/64") to be assigned to the interface.  
-* **mtu** (int32, optional): The Maximum Transmission Unit for the interface.  
-* **hardwareAddr** (string, optional, Read-Only): The current hardware (MAC) address of the interface.
+#### Network Data (`networkData`)
 
-#### **Route Configuration (RouteConfig)**
+The `networkData` field provides standardized output about the network interface as it appears inside the Pod. This data is crucial for applications that need to dynamically discover their assigned network interfaces.
 
-The RouteConfig structure defines individual network routes to be added to the Pod's network namespace, associated with the configured interface.
+* **`interfaceName`**: The actual name of the network interface inside the Pod (e.g., "eth0", "eth99").
+* **`hardwareAddress`**: The MAC address of the network interface.
+* **`ips`**: A list of IP addresses (in CIDR format) assigned to the interface.
 
-```go
-type RouteConfig struct {  
-	Destination string `json:"destination,omitempty"`
-	Gateway     string `json:"gateway,omitempty"`
-	Source      string `json:"source,omitempty"`
-	Scope       uint8  `json:"scope,omitempty"`
-}
-```
+### Example Output
 
-* **destination** (string, optional): The destination network in CIDR format (e.g., "0.0.0.0/0" for a default route, "10.0.0.0/8" for a specific subnet).  
-* **gateway** (string, optional): The IP address of the gateway for the route. This field is mandatory for routes with Universe scope (0).  
-* **source** (string, optional): An optional source IP address for policy routing.  
-* **scope** (uint8, optional): The scope of the route. Only Link (253) or Universe (0) are allowed.  
-  * Link (253): Routes directly to a device without a gateway (e.g., for directly connected subnets).  
-  * Universe (0): Routes to a network via a gateway.
-
-### **Example: Customizing a Network Interface and Routes**
-
-Below is an example of a ResourceClaim that allocates a dummy interface, renames it to "eth99", assigns a static IP address, and configures two routes: one to a subnet via a gateway and another link-scoped route.
-
+Here's an example of the `status` section from a `ResourceClaim` named `dummy-interface-static-ip-route`, showing the conditions and network data for an allocated network interface:
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1  
-kind: ResourceClaim  
-metadata:  
-  name: dummy-interface-static-ip-route  
-spec:  
-  devices:  
-    requests:  
-      - name: req-dummy  
-        deviceClassName: dra.net  
-        selectors:  
-          - cel:  
-              expression: device.attributes["dra.net"].type == "dummy"  
-    config:  
-      - opaque:  
-          driver: dra.net  
-          parameters:  
-            interface:  
-              name: "eth99"  
-              addresses:  
-                - "169.254.169.13/32"  
-            routes:  
-              - destination: "169.254.169.0/24"  
-                gateway: "169.254.169.1"  
-              - destination: "169.254.169.1/32"  
-                scope: 253  
----  
-apiVersion: v1  
-kind: Pod  
-metadata:  
-  name: pod3  
-  labels:  
-    app: pod  
-spec:  
-  containers:  
-    - name: ctr1  
-      image: registry.k8s.io/e2e-test-images/agnhost:2.39  
-  resourceClaims:  
-    - name: dummy1  
-      resourceClaimName: dummy-interface-static-ip-route  
+status:
+  allocation:
+    devices:
+      config:
+      - opaque:
+          driver: dra.net
+          parameters:
+            interface:
+              addresses:
+              - 169.254.169.13/32
+              name: eth99
+            routes:
+            - destination: 169.254.169.0/24
+              gateway: 169.254.169.1
+            - destination: 169.254.169.1/32
+              scope: 253
+        source: FromClaim
+      results:
+      - adminAccess: null
+        device: dummy2
+        driver: dra.net
+        pool: dra-worker
+        request: req-dummy
+    nodeSelector:
+      nodeSelectorTerms:
+      - matchFields:
+        - key: metadata.name
+          operator: In
+          values:
+          - dra-worker
+  devices:
+  - conditions:
+    - lastTransitionTime: "2025-05-24T10:25:51Z"
+      message: ""
+      reason: NetworkDeviceReady
+      status: "True"
+      type: Ready
+    - lastTransitionTime: "2025-05-24T10:25:51Z"
+      message: ""
+      reason: NetworkReady
+      status: "True"
+      type: NetworkReady
+    device: dummy2
+    driver: dra.net
+    networkData:
+      hardwareAddress: 86:d7:86:e6:f3:dd
+      interfaceName: eth99
+      ips:
+      - 169.254.169.13/32
+    pool: dra-worker
+  reservedFor:
+  - name: pod3
+    resource: pods
 ```
