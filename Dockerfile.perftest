@@ -31,7 +31,7 @@ WORKDIR /usr/src
 RUN git clone --depth 1 https://github.com/linux-rdma/perftest.git
 WORKDIR /usr/src/perftest
 RUN ./autogen.sh && \
-    ./configure --prefix=/usr/local && \
+    ./configure  CUDA_H_PATH=/usr/local/cuda/include/cuda.h --prefix=/usr/local --enable-cudart && \
     make -j$(nproc) && \
     make install
 
@@ -55,7 +55,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for CUDA libraries in the runtime stage.
-ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH:-}"
 ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH:-}"
 
 COPY --from=builder /usr/local/bin/ib_* /usr/local/bin/
