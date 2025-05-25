@@ -30,7 +30,7 @@ a GRPC call to DraNet via NRI to execute the necessary network configurations.
 
 A more detailed diagram illustrating this process can be found in our
 documentation: [How It
-Works](https://google.github.io/dranet/docs/concepts/howitworks.md).
+Works](https://google.github.io/dranet/docs/concepts/howitworks/).
 
 ## Quick Start
 
@@ -97,7 +97,7 @@ network devices.
 
 For examples of how to use DraNet with `DeviceClas`s and `ResourceClaim` to
 attach network interfaces to pods, please refer to the [Quick Start
-guide](https://google.github.io/dranet/docs/quick-start.md).
+guide](https://google.github.io/dranet/docs/quick-start).
 
 
 ## Contributing
@@ -117,12 +117,12 @@ Guide](https://google.github.io/dranet/docs/contributing/developer-guide.md).
 Explore more concepts and advanced topics:
 
 * **Design:** Understand the architectural choices behind DraNet:
-  [Design](https://google.github.io/dranet/docs/concepts/_index.md)
+  [Design](https://google.github.io/dranet/docs/concepts/howitworks)
 * **RDMA:** Learn about RDMA components in Linux and their interplay:
-  [RDMA](https://google.github.io/dranet/docs/concepts/rdma.md)
+  [RDMA](https://google.github.io/dranet/docs/concepts/rdma)
 * **References:** A list of relevant Kubernetes Enhancement Proposals (KEPs) and
   presentations:
-  [References](https://google.github.io/dranet/docs/concepts/references.md)
+  [References](https://google.github.io/dranet/docs/concepts/references)
 
 ## Disclaimer
 
