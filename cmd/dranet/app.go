@@ -30,6 +30,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"golang.org/x/sys/unix"
 
@@ -75,16 +76,19 @@ func main() {
 		klog.Infof("FLAG: --%s=%q", f.Name, f.Value)
 	})
 
-	healthMux := http.NewServeMux()
-	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	// Add healthz handler
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !ready.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		} else {
 			w.WriteHeader(http.StatusOK)
 		}
 	})
+	// Add metrics handler
+	mux.Handle("/metrics", promhttp.Handler())
 	go func() {
-		_ = http.ListenAndServe(bindAddress, healthMux)
+		_ = http.ListenAndServe(bindAddress, mux)
 	}()
 
 	var config *rest.Config
