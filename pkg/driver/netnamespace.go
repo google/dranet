@@ -80,7 +80,7 @@ func netnsRouting(containerNsPAth string, ifName string, routeConfig []apis.Rout
 			r.Src = net.ParseIP(route.Source)
 		}
 		if err := nhNs.RouteAdd(&r); err != nil {
-			errorList = append(errorList, fmt.Errorf("fail to add route %#v for interface %s on namespace %s: %w", r, ifName, containerNsPAth, err))
+			errorList = append(errorList, fmt.Errorf("fail to add route %s for interface %s on namespace %s: %w", r.String(), ifName, containerNsPAth, err))
 		}
 
 	}
