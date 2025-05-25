@@ -93,6 +93,11 @@ func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*re
 // This happens in the kubelet so it can be a "slow" operation, so we can execute fast in RunPodsandbox, that happens in the
 // container runtime and has strong expectactions to be executed fast (default hook timeout is 2 seconds).
 func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+	klog.V(2).Infof("PrepareResourceClaim Claim %s/%s", claim.Namespace, claim.Name)
+	start := time.Now()
+	defer func() {
+		klog.V(2).Infof("PrepareResourceClaim Claim %s/%s  took %v", claim.Namespace, claim.Name, time.Since(start))
+	}()
 	// TODO: shared devices may allocate the same device to multiple pods, i.e. macvlan, ipvlan, ...
 	podUIDs := []types.UID{}
 	for _, reserved := range claim.Status.ReservedFor {
