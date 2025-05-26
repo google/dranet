@@ -51,7 +51,7 @@ spec:
         name: rdma-perftest
     spec:
       containers:
-      - image: aojea/dranet-rdma-perftest:main
+      - image: ghcr.io/google/dranet-rdma-perftest:stable
         name: dranet-rdma-perftest
         securityContext:
           capabilities:

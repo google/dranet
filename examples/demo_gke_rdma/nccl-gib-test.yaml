@@ -1,0 +1,102 @@
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: DeviceClass
+metadata:
+  name: rdma
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "dra.net"
+    - cel:
+        expression: device.attributes["dra.net"].rdma
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  name: rdma-net-template-gib
+spec:
+  spec:
+    devices:
+      requests:
+      - name: rdma-net-interface
+        deviceClassName: rdma
+        selectors:
+        - cel:
+            expression: device.attributes["dra.net"].ifName == "gpu2rdma0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-gib-test
+spec:
+  selector:
+    name: nccl-gib-test
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nccl-gib-test
+  labels:
+    name: nccl-gib-test
+spec:
+  replicas: 2
+  serviceName: nccl-gib-test
+  selector:
+    matchLabels:
+      name: nccl-gib-test
+  template:
+    metadata:
+      labels:
+        name: nccl-gib-test
+    spec:
+      containers:
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.5
+        name: test
+        resources:
+          requests:
+            cpu: 150m
+        volumeMounts:
+          - name: library-dir-host
+            mountPath: /usr/local/nvidia
+          - name: gib
+            mountPath: /usr/local/gib
+          - name: shared-memory
+            mountPath: /dev/shm
+        env:
+          - name: LD_LIBRARY_PATH
+            value: /usr/local/nvidia/lib64
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            # we use a headless service to identify the workers that has the format <hostname>.<service>.<ns>.svc.<zone>
+            # hence we need to allow to resolve fqdn 
+            echo -e "\norte_keep_fqdn_hostnames=t" >> /etc/openmpi/openmpi-mca-params.conf
+            /scripts/container_entry.sh shell
+            source /usr/local/gib/scripts/set_nccl_env.sh
+            sleep infinity
+      volumes:
+        - name: library-dir-host
+          hostPath:
+            path: /home/kubernetes/bin/nvidia
+        - name: gib
+          hostPath:
+            path: /home/kubernetes/bin/gib
+        - name: shared-memory
+          emptyDir:
+            medium: "Memory"
+            sizeLimit: 250Gi
+      resourceClaims:
+      - name: rdma-net-interface
+        resourceClaimTemplateName: rdma-net-template-gib
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: nccl-gib-test
+            topologyKey: kubernetes.io/hostname
+---
