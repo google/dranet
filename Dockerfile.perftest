@@ -8,6 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git \
     build-essential \
+    wget \
     autoconf \
     automake \
     libtool \
@@ -35,6 +36,20 @@ RUN ./autogen.sh && \
     make -j$(nproc) && \
     make install
 
+# --- Build openmpi ---
+WORKDIR /usr/src
+RUN wget -O- https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-5.0.7.tar.gz | tar xzf -
+WORKDIR /usr/src/openmpi-5.0.7
+RUN ./configure --with-cuda=/usr/local/cuda && \
+    make -j$(nproc) && \
+    make install
+
+# --- Build nvidia/ncc-tests ---
+WORKDIR /usr/src
+RUN git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git
+WORKDIR /usr/src/nccl-tests
+RUN make -j$(nproc) MPI=1 MPI_HOME=/usr/src/openmpi-5.0.7
+
 # Stage 2: Runtime
 FROM nvidia/cuda:12.9.0-runtime-ubuntu24.04 AS runtime
 
@@ -51,18 +66,29 @@ RUN apt-get update && \
     libnl-3-200 \
     libnl-route-3-200 \
     libpci3 \
+    libmnl0 \
+    libelf1 \
+    pciutils \
+    openssh-server \
     libnuma1 && \
     rm -rf /var/lib/apt/lists/*
 
+# mpi-operator mounts the .ssh folder from a Secret. For that to work, we need
+# to disable UserKnownHostsFile to avoid write permissions.
+# Disabling StrictModes avoids directory and files read permission checks.
+RUN echo "    UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config && echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config &&\
+    sed -i 's/#\(StrictModes \).*/\1no/g' /etc/ssh/sshd_config
+RUN mkdir /run/sshd
+
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+COPY --from=builder /usr/local/lib/ /usr/local/lib/
+COPY --from=builder /usr/src/nccl-tests/build/*_perf /usr/local/bin/
+
 # Set environment variables for CUDA libraries in the runtime stage.
-ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH:-}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/nvidia/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 ENV LIBRARY_PATH="/usr/local/cuda/lib64:${LIBRARY_PATH:-}"
-
-COPY --from=builder /usr/local/bin/ib_* /usr/local/bin/
-COPY --from=builder /usr/local/bin/raw_ethernet_* /usr/local/bin/
-
 # Add the installation directory to the PATH for easy execution.
-ENV PATH="/usr/local/bin:${PATH}"
+ENV PATH="/usr/local/bin:/usr/local/nvidia/bin:${PATH}"
 
 # Set the default command to run when the container starts.
 CMD ["/bin/bash"]
