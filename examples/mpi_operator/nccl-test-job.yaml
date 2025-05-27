@@ -1,0 +1,48 @@
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-test-dranet-1gpu-1nic
+spec:
+  slotsPerWorker: 1 # 1 MPI rank per worker Pod
+  mpiImplementation: OpenMPI # Or your preferred MPI
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - image: docker.io/aojea/dranet-perftest:latest@sha256:bfaa20bba4178f20b3c50c2ddd57d3e0488bc94a4d704ea091043c389571fd6e
+            name: test-launcher
+            env:
+              - name: NCCL_DEBUG
+                value: "INFO"
+              - name: LD_LIBRARY_PATH
+                value: "/opt/openmpi/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              echo "--- Environment for mpirun ---"
+              echo "Effective LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+              PATH=/usr/local/bin:/usr/local/nvidia/bin:/opt/openmpi/bin:$PATH
+
+              mpirun --allow-run-as-root -x LD_LIBRARY_PATH -x PATH \
+                bash -c 'hostname'
+            securityContext:
+              capabilities:
+                add: ["IPC_LOCK"]
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          resourceClaims:
+          - name: worker-rdma-nic
+            resourceClaimTemplateName: mpi-worker-rdma-nic-template
+          containers:
+          - image: docker.io/aojea/dranet-perftest:latest@sha256:bfaa20bba4178f20b3c50c2ddd57d3e0488bc94a4d704ea091043c389571fd6e
+            name: mpi-worker
+            securityContext:
+              capabilities:
+                add: ["IPC_LOCK"]
+            resources:
+              limits:
+                nvidia.com/gpu: 1 # Each worker gets 1 GPU

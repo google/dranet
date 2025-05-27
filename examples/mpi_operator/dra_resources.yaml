@@ -1,0 +1,31 @@
+apiVersion: resource.k8s.io/v1beta1
+kind: DeviceClass
+metadata:
+  name: dranet-rdma-for-mpi
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "dra.net"
+    - cel:
+        expression: device.attributes["dra.net"].rdma == true
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  name: mpi-worker-rdma-nic-template
+spec:
+  spec:
+    devices:
+      requests:
+        - name: rdma-nic-for-mpi
+          deviceClassName: dranet-rdma-for-mpi
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].ifName == "gpu2rdma0"
+      config:
+      - opaque:
+          driver: dra.net
+          parameters:
+            interface:
+              name: "dranet0" # NCCL will use this interface
+
