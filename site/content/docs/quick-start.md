@@ -4,7 +4,7 @@ date: 2024-12-17T14:47:05Z
 weight: 1
 ---
 
-DRANET depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in v1.32).
+`DraNet` depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in Kubernetes ∂v1.32).
 
 In order to enable DRA you need to enable both the [feature gates and the API groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation).
 
@@ -19,21 +19,17 @@ Create a cluster using the following configuration.
 ```yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-  # Enable NRI plugins
-- |-
-  [plugins."io.containerd.nri.v1.nri"]
-    disable = false
 nodes:
 - role: control-plane
-  image: kindest/node:v1.32.0
+  image: kindest/node:v1.33.1
 - role: worker
-  image: kindest/node:v1.32.0
+  image: kindest/node:v1.33.1
 - role: worker
-  image: kindest/node:v1.32.0
+  image: kindest/node:v1.33.1
 featureGates:
   # Enable the corresponding DRA feature gates
   DynamicResourceAllocation: true
+  DRAResourceClaimDeviceStatus: true
 runtimeConfig:
   api/beta : true
 ```
@@ -44,42 +40,8 @@ kind create cluster --config kind.yaml --name dra
 
 ### Google Cloud
 
-You can [enable the DRA beta APIs in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis) and it automatically turns on the feature gates.
-
-You need to check that a v1.32 version exist in your zone:
-
-```sh
-$ gcloud container get-server-config  | grep 1.32
-Fetching server config for us-central1-c
-  - 1.32.0-gke.1358000
-  minorVersion: '1.32'
-- 1.32.0-gke.1358000
-- 1.32.0-gke.1358000
-```
-
-And using the version obtained you can create a cluster
-
-```sh
-export PROJECT=dra-proj
-export REGION=us-central1
-export ZONE=us-central1-c
-export CLUSTER=dra-cluster
-export VERSION=1.32.0-gke.1358000
-
-gcloud beta container clusters create ${CLUSTER} \
-    --cluster-version=${VERSION} \
-    --enable-multi-networking \
-    --enable-dataplane-v2 \
-    --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \
-    --no-enable-autorepair \
-    --no-enable-autoupgrade \
-    --zone=${ZONE}
-
-To inspect the contents of your cluster, go to: https://console.cloud.google.com/kubernetes/workload_/gcloud/us-central1-c/aojea-dra?project=aojea-gke-dev
-kubeconfig entry generated for aojea-dra.
-NAME       LOCATION       MASTER_VERSION      MASTER_IP     MACHINE_TYPE  NODE_VERSION        NUM_NODES  STATUS
-aojea-dra  us-central1-c  1.32.0-gke.1358000  X.X.X.X  e2-medium     1.32.0-gke.1358000  3          RUNNING
-```
+For instructions on setting up DRA on GKE, refer to the official documentation:
+[Set up Dynamic Resource Allocation](https://cloud.google.com/kubernetes-engine/docs/how-to/set-up-dra)
 
 A quick and easy way to find if DRA is enabled is by checking the metrics in the kube-apiserver
 
@@ -89,9 +51,9 @@ kubectl get --raw /metrics | grep kubernetes_feature_enabled | grep DynamicResou
 kubernetes_feature_enabled{name="DynamicResourceAllocation",stage="BETA"} 1
 ```
 
-### Installation
+## Installation
 
-You can install the latest stable version using the provided manifest:
+You can install the latest stable version of `DraNet` using the provided manifest:
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
@@ -99,7 +61,7 @@ kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main
 
 ### How to use it
 
-Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers:
+Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers using `kubectl get resourceslices -o yaml`:
 
 ```
 apiVersion: resource.k8s.io/v1beta1
@@ -119,133 +81,49 @@ metadata:
   uid: 535724d7-a573-49e1-8f3b-4e644405375a
 spec:
   devices:
-  - basic:
-      attributes:
-        alias:
-          string: ""
-        cloud_network:
-          string: projects/961828715260/networks/aojea-dra-net-1
-        encapsulation:
-          string: ether
-        ip:
-          string: 192.168.1.2
-        kind:
-          string: network
-        mac:
-          string: 42:01:c0:a8:01:02
-        mtu:
-          int: 8244
-        name:
-          string: eth1
-        numa_node:
-          int: -1
-        pci_address_bus:
-          string: "00"
-        pci_address_device:
-          string: "05"
-        pci_address_domain:
-          string: "0000"
-        pci_address_function:
-          string: "0"
-        pci_vendor:
-          string: Google, Inc.
-        rdma:
-          bool: false
-        sriov:
-          bool: false
-        state:
-          string: up
-        type:
-          string: device
-        virtual:
-          bool: false
-    name: eth1
-  - basic:
-      attributes:
-        alias:
-          string: ""
-        cloud_network:
-          string: projects/961828715260/networks/aojea-dra-net-2
-        encapsulation:
-          string: ether
-        ip:
-          string: 192.168.2.2
-        kind:
-          string: network
-        mac:
-          string: 42:01:c0:a8:02:02
-        mtu:
-          int: 8244
-        name:
-          string: eth2
-        numa_node:
-          int: -1
-        pci_address_bus:
-          string: "00"
-        pci_address_device:
-          string: "06"
-        pci_address_domain:
-          string: "0000"
-        pci_address_function:
-          string: "0"
-        pci_vendor:
-          string: Google, Inc.
-        rdma:
-          bool: false
-        sriov:
-          bool: false
-        state:
-          string: up
-        type:
-          string: device
-        virtual:
-          bool: false
-    name: eth2
-  - basic:
-      attributes:
-        alias:
-          string: ""
-        cloud_network:
-          string: projects/961828715260/networks/aojea-dra-net-3
-        encapsulation:
-          string: ether
-        ip:
-          string: 192.168.3.2
-        kind:
-          string: network
-        mac:
-          string: 42:01:c0:a8:03:02
-        mtu:
-          int: 8244
-        name:
-          string: eth3
-        numa_node:
-          int: -1
-        pci_address_bus:
-          string: "00"
-        pci_address_device:
-          string: "07"
-        pci_address_domain:
-          string: "0000"
-        pci_address_function:
-          string: "0"
-        pci_vendor:
-          string: Google, Inc.
-        rdma:
-          bool: false
-        sriov:
-          bool: false
-        state:
-          string: up
-        type:
-          string: device
-        virtual:
-          bool: false
-    name: eth3
+    - basic:
+        attributes:
+          dra.net/alias:
+            string: ""
+          dra.net/cloudNetwork:
+            string: dra-1-vpc
+          dra.net/encapsulation:
+            string: ether
+          dra.net/ifName:
+            string: gpu7rdma0
+          dra.net/ipv4:
+            string: 10.0.8.8
+          dra.net/mac:
+            string: 9a:41:2e:4f:86:16
+          dra.net/mtu:
+            int: 8896
+          dra.net/numaNode:
+            int: 1
+          dra.net/pciAddressBus:
+            string: c8
+          dra.net/pciAddressDevice:
+            string: "00"
+          dra.net/pciAddressDomain:
+            string: "0000"
+          dra.net/pciAddressFunction:
+            string: "0"
+          dra.net/pciVendor:
+            string: Mellanox Technologies
+          dra.net/rdma:
+            bool: true
+          dra.net/sriov:
+            bool: false
+          dra.net/state:
+            string: up
+          dra.net/type:
+            string: device
+          dra.net/virtual:
+            bool: false
+      name: gpu7rdma0
 ...
 ```
 
-Once the resources are available, users can create DeviceClasses, ResourceClaims and/or ResourceClaimTemplates to schedule pods, see some [examples](https://github.com/google/dranet/tree/main/examples).
+Once the resources are available, users can create `DeviceClasses`, `ResourceClaims` and/or `ResourceClaimTemplates` to schedule pods.
 
 Define a `DeviceClass` that selects all the network interfaces that are connected to a `GCP Network`
 
@@ -259,43 +137,38 @@ spec:
     - cel:
         expression: device.driver == "dra.net"
     - cel:
-        expression: has(device.attributes["dra.net"].cloud_network) 
-  config:
-  - opaque:
-      driver: dra.net
-      parameters:
-        nccl: "true"
+        expression: has(device.attributes["dra.net"].cloudNetwork) 
 ```
 
-Now you can create a `ResourceClaim` that connects to a specific network, in this case `projects/961828715260/networks/aojea-dra-net-3` and reference that claim in a `Pod`:
+Now you can create a `ResourceClaim` that connects to a specific network, in this case `dra-1-vpc` and reference that claim in a `Pod`:
 
 ```yaml
 apiVersion: resource.k8s.io/v1beta1
 kind:  ResourceClaim
 metadata:
-  name: cloud-network-dra-net-3
+  name: cloud-network-dra-net-1
 spec:
   devices:
     requests:
-    - name: req-cloud-net-3
+    - name: req-cloud-net-1
       deviceClassName: dranet-cloud
       selectors:
         - cel:
-            expression: device.attributes["dra.net"].cloud_network == "projects/961828715260/networks/aojea-dra-net-3"
+            expression: device.attributes["dra.net"].cloudNetwork == "dra-1-vpc"
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: pod-dra-net3
+  name: pod-dra-net1
   labels:
-    app: pod-dra-net3
+    app: pod-dra-net1
 spec:
   containers:
   - name: ctr1
     image: registry.k8s.io/e2e-test-images/agnhost:2.39
   resourceClaims:
-  - name: net-3
-    resourceClaimName: cloud-network-dra-net-3
+  - name: net-1
+    resourceClaimName: cloud-network-dra-net-1
 ```
 
 Kubernetes schedules the `Pod` to the corresponding `Node` and attach the network interface to the `Pod`:
@@ -303,12 +176,12 @@ Kubernetes schedules the `Pod` to the corresponding `Node` and attach the networ
 ```sh
 kubectl get pods -o wide
 NAME           READY   STATUS    RESTARTS   AGE   IP            NODE                                    NOMINATED NODE   READINESS GATES
-pod-dra-net3   1/1     Running   0          5s    10.52.3.108   gke-dra-multi-nic-985b8c20-jg5l   <none>           <none>
+pod-dra-net1  1/1     Running   0          5s    10.52.3.108   gke-dra-multi-nic-985b8c20-jg5l   <none>           <none>
 ```
 
 If we execute inside the `Pod` we can see the network interface now is attached:
 ```sh
-kubectl exec -it pod-dra-net3 ip a
+kubectl exec -it pod-dra-net1 ip a
 kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
@@ -318,7 +191,7 @@ kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future versi
     link/ether 86:dc:58:24:55:1a brd ff:ff:ff:ff:ff:ff link-netnsid 0
     inet 10.52.3.108/24 brd 10.52.3.255 scope global eth0
        valid_lft forever preferred_lft forever
-5: eth3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 8244 qdisc fq state UP group default qlen 1000
+5: gpu7rdma0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 8244 qdisc fq state UP group default qlen 1000
     link/ether 42:01:c0:a8:03:02 brd ff:ff:ff:ff:ff:ff
 ```
 
