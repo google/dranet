@@ -21,7 +21,7 @@ A common and reliable way to validate that that our distributed setup is perform
 
 Let's see how we can run this with DraNet and the MPI Operator, focusing on a 1 GPU and 1 NIC per worker configuration.
 
-1. Defining Resources for DraNet:
+#### Defining Resources for DraNet
 
 First, we tell DraNet what kind of NICs we're interested in and how Pods can claim them.
 
@@ -64,7 +64,7 @@ spec:
             name: "dranet0" # NCCL will use this interface
 ```
 
-1. Install the GKE optimized RDMA dependencies
+#### Install the GKE optimized RDMA dependencies
 
 GKE automatically install on the VM some optimized RDMA and NCCL libraries for Google Cloud infrastructure, that can be installed following the instructions on:
 
@@ -98,15 +98,76 @@ containers:
         value: /usr/local/nvidia/lib64
 ```
 
-1. Crafting the MPIJob:
+#### Crafting the MPIJob
 
 The MPIJob specification is where we tie everything together. We'll define a job with two workers, each getting one GPU and one DraNet-managed RDMA NIC.
 
-{{</* highlight yaml */>}}
-{{ readFile "examples/mpi_operator/nccl-test-job.yaml" | safeHTML }}
-{{</* /highlight */>}}
+```yaml
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-test-dranet-1gpu-1nic
+spec:
+  slotsPerWorker: 1 # 1 MPI rank per worker Pod
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - image: mpioperator/openmpi:v0.6.0
+            name: mpi-launcher
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -ex
+              mpirun \
+                --allow-run-as-root \
+                --prefix /opt/openmpi \
+                -np 2 \
+                -bind-to none \
+                -map-by slot \
+                -mca routed direct \
+                -x LD_LIBRARY_PATH=/usr/local/nvidia/lib64 \
+                bash -c \
+                  "source /usr/local/gib/scripts/set_nccl_env.sh; \
+                  /usr/local/bin/all_reduce_perf \
+                    -g 1 -b 1K -e 8G -f 2 \
+                    -w 5 -n 20;"
+            securityContext:
+              capabilities:
+                add: ["IPC_LOCK"]
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          resourceClaims:
+          - name: worker-rdma-nic
+            resourceClaimTemplateName: mpi-worker-rdma-nic-template
+          containers:
+          - image: ghcr.io/google/dranet-rdma-perftest:sha-fb3f932
+            name: mpi-worker
+            securityContext:
+              capabilities:
+                add: ["IPC_LOCK"]
+            resources:
+              limits:
+                nvidia.com/gpu: 1 # Each worker gets 1 GPU
+            volumeMounts:
+              - name: library-dir-host
+                mountPath: /usr/local/nvidia
+              - name: gib
+                mountPath: /usr/local/gib
+          volumes:
+            - name: library-dir-host
+              hostPath:
+                path: /home/kubernetes/bin/nvidia
+            - name: gib
+              hostPath:
+                path: /home/kubernetes/bin/gib
+```
 
-1. Running and Observing:
+#### Running and Observing
 
 Once deployed, the MPI Operator will launch the job. The launcher Pod will execute mpirun, which starts the all_reduce_perf test across the two worker Pods. Each worker Pod will use its dedicated GPU and its dedicated dranet0 (RDMA NIC) for NCCL communications.
 
@@ -180,15 +241,3 @@ support) will be disabled for this port.
 # Out of bounds values : 0 OK
 # Avg bus bandwidth    : 15.5188
 ```
-
-## The Power of Compartmentalization with DraNet
-
-This setup beautifully illustrates the benefits of resource compartmentalization:
-
-- Dedicated Performance: Each MPI worker in this job has exclusive use of one GPU and one high-speed RDMA NIC. This ensures that its communication performance is not impacted by other workloads on the same node.
-
-- Efficient Resource Utilization: If your nodes are powerful (e.g., 8 GPUs and 8 RDMA NICs), running this 2-worker job (consuming 1 GPU/1 NIC on two separate nodes) leaves the remaining resources on those nodes (and other nodes) fully available.
-
-- Concurrent High-Performance Jobs: You can run multiple independent MPI jobs or other DraNet-aware distributed workloads simultaneously. Each job can claim its own subset of GPUs and RDMA NICs, and DraNet ensures that their network traffic is isolated at the NIC level, preventing contention and guaranteeing predictable performance.
-
-By leveraging DraNet with tools like the MPI Operator, teams can confidently deploy network-intensive distributed applications on Kubernetes, achieving performance comparable to bare-metal HPC clusters while benefiting from Kubernetes' orchestration capabilities.
