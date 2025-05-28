@@ -38,8 +38,8 @@ RUN ./autogen.sh && \
 
 # --- Build openmpi ---
 WORKDIR /usr/src
-RUN wget -O- https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-5.0.7.tar.gz | tar xzf -
-WORKDIR /usr/src/openmpi-5.0.7
+RUN wget -O- https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.8.tar.gz | tar xzf -
+WORKDIR /usr/src/openmpi-4.1.8
 RUN ./configure --prefix=/opt/openmpi --with-cuda=/usr/local/cuda && \
     make -j$(nproc) && \
     make install
@@ -70,15 +70,42 @@ RUN apt-get update && \
     libelf1 \
     pciutils \
     openssh-server \
+    openssh-client \
+    libcap2-bin \
     libnuma1 && \
     rm -rf /var/lib/apt/lists/*
 
+
+# mpi-operator mounts the .ssh folder from a Secret. For that to work, we need
+# https://github.com/kubeflow/mpi-operator/issues/580
+ARG port=2222
+# Add priviledge separation directoy to run sshd as root.
+RUN mkdir -p /var/run/sshd
+# Add capability to run sshd as non-root.
+RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
+
+# Allow OpenSSH to talk to containers without asking for confirmation
+# by disabling StrictHostKeyChecking.
 # mpi-operator mounts the .ssh folder from a Secret. For that to work, we need
 # to disable UserKnownHostsFile to avoid write permissions.
 # Disabling StrictModes avoids directory and files read permission checks.
-RUN echo "    UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config && echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config &&\
-    sed -i 's/#\(StrictModes \).*/\1no/g' /etc/ssh/sshd_config
-RUN mkdir /run/sshd
+RUN sed -i "s/[ #]\(.*StrictHostKeyChecking \).*/ \1no/g" /etc/ssh/ssh_config \
+    && echo "    UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config \
+    && sed -i "s/[ #]\(.*Port \).*/ \1$port/g" /etc/ssh/ssh_config \
+    && sed -i "s/#\(StrictModes \).*/\1no/g" /etc/ssh/sshd_config \
+    && sed -i "s/#\(Port \).*/\1$port/g" /etc/ssh/sshd_config
+
+RUN useradd -m mpiuser
+WORKDIR /home/mpiuser
+# Configurations for running sshd as non-root.
+RUN mkdir -p /home/mpiuser/.ssh && \
+    cat <<EOF > /home/mpiuser/sshd_config_custom
+PidFile /home/mpiuser/sshd.pid
+HostKey /home/mpiuser/.ssh/id_rsa
+StrictModes no
+EOF
+
+RUN echo "Port $port" >> /home/mpiuser/.sshd_config
 
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY --from=builder /opt/openmpi/ /opt/openmpi/
