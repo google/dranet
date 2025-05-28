@@ -40,7 +40,7 @@ spec:
           - name: worker-rdma-nic
             resourceClaimTemplateName: mpi-worker-rdma-nic-template
           containers:
-          - image: docker.io/aojea/dranet-perftest:latest@sha256:f9729ddd665ea6c5cb1d99754666465d57a84034d808d23a2126a41a7683938c
+          - image: ghcr.io/google/dranet-rdma-perftest:stable
             name: mpi-worker
             securityContext:
               capabilities:
