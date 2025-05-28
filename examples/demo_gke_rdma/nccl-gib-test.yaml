@@ -22,7 +22,7 @@ spec:
         deviceClassName: rdma
         selectors:
         - cel:
-            expression: device.attributes["dra.net"].ifName == "gpu2rdma0"
+            expression: device.attributes["dra.net"].ifName == "gpu1rdma0"
 ---
 apiVersion: v1
 kind: Service
@@ -54,21 +54,16 @@ spec:
       - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.5
         name: test
         resources:
-          requests:
-            cpu: 150m
+          limits:
+            nvidia.com/gpu: 1
         volumeMounts:
           - name: library-dir-host
             mountPath: /usr/local/nvidia
           - name: gib
             mountPath: /usr/local/gib
-          - name: shared-memory
-            mountPath: /dev/shm
         env:
           - name: LD_LIBRARY_PATH
             value: /usr/local/nvidia/lib64
-        resources:
-          limits:
-            nvidia.com/gpu: 1
         command: ["/bin/bash", "-c"]
         args:
           - |
@@ -85,10 +80,6 @@ spec:
         - name: gib
           hostPath:
             path: /home/kubernetes/bin/gib
-        - name: shared-memory
-          emptyDir:
-            medium: "Memory"
-            sizeLimit: 250Gi
       resourceClaims:
       - name: rdma-net-interface
         resourceClaimTemplateName: rdma-net-template-gib

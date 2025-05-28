@@ -60,6 +60,22 @@ You can validate this by using `kubectl get resourceslices -o yaml` and checking
 ```
 
 
+## GKE RDMA and NCCL
+
+Based on https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute-custom but using only 1 NIC and 1 GPU per Pod to demonstrate how to split workloads to allocate individual resources.
+
+
+### Install the RDMA binary and configure NCCL
+
+This Daemonset does the following:
+
+* Installs RDMA binaries and the NCCL library on the node.
+* Stores the library and the binary in the /home/kubernetes/bin/nvidia/lib64 and the  /home/kubernetes/bin/gib directory on the VM.
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
+```
+
 ## Deploy perf-tests RDMA Pods
 
 Use the following manifest to install two Pods in the same RDMA network,
@@ -130,7 +146,7 @@ Run `rping -s` in one of the Pods and connect from the other to validate the con
 
 ```
  kubectl exec -it rdma-perftest-1 -- bash
-root@rdma-perftest-1:/# LD_LIBRARY_PATH="" rping -c -a 10.0.4.7 -C 3 -v -V
+root@rdma-perftest-1:/# rping -c -a 10.0.4.7 -C 3 -v -V
 ping data: rdma-ping-0: ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqr
 ping data: rdma-ping-1: BCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrs
 ping data: rdma-ping-2: CDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrst
@@ -295,23 +311,8 @@ deallocating GPU buffer 000078e9f8800000
 destroying current CUDA Ctx
 ```
 
-## GKE NCCL
 
-Based on https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute-custom but using only 1 NIC and 1 GPU per Pod to demonstrate how to split workloads to allocate individual resources.
-
-
-### Install the RDMA binary and configure NCCL
-
-This Daemonset does the following:
-
-* Installs RDMA binaries and the NCCL library on the node.
-* Stores the library and the binary in the /home/kubernetes/bin/nvidia/lib64 and the  /home/kubernetes/bin/gib directory on the VM.
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
-```
-
-### Deploy the test workload
+### Deploy the test NCCL workload
 
 The manifest deploys two test pods, each of which runs in a A3 Ultra node.
 
@@ -332,63 +333,61 @@ nccl-gib-test-0        1/1     Running   0          3s
 nccl-gib-test-1        1/1     Running   0          1s
 ```
 
-
-
 ### Run the tests
 
 It is important to pass the right parameters, in this specific example we need to indicate to only use one GPU per node `[-g <gpus_per_node>]`.
 
 ```sh
- kubectl exec nccl-gib-test-0 -it -- /usr/local/gib/scripts/run_nccl_tests.sh -t all_gather -b 1K -g 1 -e 8G nccl-gib-test-0.nccl-gib-test nccl-gib-test-1.nccl-gib-test
+kubectl exec nccl-gib-test-0 -it -- /usr/local/gib/scripts/run_nccl_tests.sh -t all_gather -b 1K -g 1 -e 8G nccl-gib-test-0.nccl-gib-test nccl-gib-test-1.nccl-gib-test
 ```
 
 It should return something like:
 
 ```sh
-
+kubectl exec nccl-gib-test-0 -it -- /usr/local/gib/scripts/run_nccl_tests.sh -t all_gather -b 1K -g 1 -e 8G nccl-gib-test-0.nccl-gib-test nccl-gib-test-1.nccl-gib-test
 Initializing SSH...
+Warning: Permanently added '[nccl-gib-test-0.nccl-gib-test]:222' (ED25519) to the list of known hosts.
 Hello from nccl-gib-test-0.nccl-gib-test
+Warning: Permanently added '[nccl-gib-test-1.nccl-gib-test]:222' (ED25519) to the list of known hosts.
 Hello from nccl-gib-test-1.nccl-gib-test
-+ /usr/local/gib/scripts/gen_hostfiles.sh -p 222 nccl-gib-test-0.nccl-gib-test nccl-gib-test-1.nccl-gib-test
-Generating hostfiles for 2 hosts:
+Generating hostfiles for 2 hosts: 
 nccl-gib-test-0.nccl-gib-test
 nccl-gib-test-1.nccl-gib-test
-+ mpirun --allow-run-as-root --mca btl tcp,self --mca btl_tcp_if_include eth0 --bind-to none -np 2 --hostfile /tmp/hostfiles/hostfile1 -x PATH -x LD_LIBRARY_PATH=/usr/local/gib/lib64:/usr/local/nvidia/lib64 -x NCCL_DEBUG=WARN -x NCCL_DEBUG_SUBSYS=INIT,NET -x NCCL_TESTS_SPLIT_MASK=0x0 bash -c 'source /usr/local/gib/scripts/set_nccl_env.sh;      /third_party/nccl-tests/build/all_gather_perf        -b 1K -e 8G -f 2        -w 50 -n 100;'
 # nThread 1 nGpus 1 minBytes 1024 maxBytes 8589934592 step: 2(factor) warmup iters: 50 iters: 100 agg iters: 1 validation: 1 graph: 0
 #
 # Using devices
-#  Rank  0 Group  0 Pid    235 on nccl-gib-test-0 device  0 [0000:90:00] NVIDIA H200
-#  Rank  1 Group  0 Pid    161 on nccl-gib-test-1 device  0 [0000:90:00] NVIDIA H200
+#  Rank  0 Group  0 Pid     85 on nccl-gib-test-0 device  0 [0000:cc:00] NVIDIA H200
+#  Rank  1 Group  0 Pid     54 on nccl-gib-test-1 device  0 [0000:c4:00] NVIDIA H200
 NCCL version 2.25.1+cuda12.8
 #
-#                                                              out-of-place                       in-place
+#                                                              out-of-place                       in-place          
 #       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong
-#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)
-        1024           128     float    none      -1    20.89    0.05    0.02      0    20.40    0.05    0.03      0
-        2048           256     float    none      -1    20.55    0.10    0.05      0    20.48    0.10    0.05      0
-        4096           512     float    none      -1    20.71    0.20    0.10      0    20.75    0.20    0.10      0
-        8192          1024     float    none      -1    21.49    0.38    0.19      0    21.62    0.38    0.19      0
-       16384          2048     float    none      -1    24.56    0.67    0.33      0    24.55    0.67    0.33      0
-       32768          4096     float    none      -1    25.04    1.31    0.65      0    24.59    1.33    0.67      0
-       65536          8192     float    none      -1    28.59    2.29    1.15      0    28.04    2.34    1.17      0
-      131072         16384     float    none      -1    33.46    3.92    1.96      0    36.83    3.56    1.78      0
-      262144         32768     float    none      -1    47.72    5.49    2.75      0    45.11    5.81    2.91      0
-      524288         65536     float    none      -1    79.13    6.63    3.31      0    76.17    6.88    3.44      0
-     1048576        131072     float    none      -1    71.48   14.67    7.33      0    70.06   14.97    7.48      0
-     2097152        262144     float    none      -1    76.40   27.45   13.72      0    76.41   27.44   13.72      0
-     4194304        524288     float    none      -1    117.9   35.58   17.79      0    117.3   35.77   17.88      0
-     8388608       1048576     float    none      -1    203.4   41.24   20.62      0    204.7   40.98   20.49      0
-    16777216       2097152     float    none      -1    375.1   44.73   22.37      0    371.6   45.14   22.57      0
-    33554432       4194304     float    none      -1    729.7   45.98   22.99      0    728.9   46.04   23.02      0
-    67108864       8388608     float    none      -1   1447.6   46.36   23.18      0   1443.5   46.49   23.25      0
-   134217728      16777216     float    none      -1   2871.7   46.74   23.37      0   2854.1   47.03   23.51      0
-   268435456      33554432     float    none      -1   5699.0   47.10   23.55      0   5666.1   47.38   23.69      0
-   536870912      67108864     float    none      -1    11382   47.17   23.58      0    11026   48.69   24.35      0
-  1073741824     134217728     float    none      -1    22474   47.78   23.89      0    21049   51.01   25.51      0
-  2147483648     268435456     float    none      -1    44241   48.54   24.27      0    39256   54.70   27.35      0
-  4294967296     536870912     float    none      -1    86470   49.67   24.83      0    75081   57.20   28.60      0
-  8589934592    1073741824     float    none      -1   166030   51.74   25.87      0   141444   60.73   30.37      0
+#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)       
+        1024           128     float    none      -1    21.75    0.05    0.02      0    20.94    0.05    0.02      0
+        2048           256     float    none      -1    21.48    0.10    0.05      0    21.40    0.10    0.05      0
+        4096           512     float    none      -1    21.81    0.19    0.09      0    21.91    0.19    0.09      0
+        8192          1024     float    none      -1    22.45    0.36    0.18      0    22.65    0.36    0.18      0
+       16384          2048     float    none      -1    26.28    0.62    0.31      0    25.44    0.64    0.32      0
+       32768          4096     float    none      -1    26.05    1.26    0.63      0    25.64    1.28    0.64      0
+       65536          8192     float    none      -1    29.97    2.19    1.09      0    29.61    2.21    1.11      0
+      131072         16384     float    none      -1    33.05    3.97    1.98      0    32.99    3.97    1.99      0
+      262144         32768     float    none      -1    40.97    6.40    3.20      0    37.59    6.97    3.49      0
+      524288         65536     float    none      -1    50.18   10.45    5.22      0    46.03   11.39    5.70      0
+     1048576        131072     float    none      -1    61.30   17.11    8.55      0    57.32   18.29    9.15      0
+     2097152        262144     float    none      -1    77.15   27.18   13.59      0    77.63   27.01   13.51      0
+     4194304        524288     float    none      -1    119.5   35.09   17.55      0    121.7   34.48   17.24      0
+     8388608       1048576     float    none      -1    206.9   40.55   20.28      0    207.7   40.39   20.20      0
+    16777216       2097152     float    none      -1    371.4   45.17   22.58      0    372.5   45.04   22.52      0
+    33554432       4194304     float    none      -1    695.5   48.25   24.12      0    698.2   48.06   24.03      0
+    67108864       8388608     float    none      -1   1282.5   52.33   26.16      0   1280.4   52.41   26.21      0
+   134217728      16777216     float    none      -1   2395.4   56.03   28.02      0   2548.9   52.66   26.33      0
+   268435456      33554432     float    none      -1   4526.0   59.31   29.65      0   4506.3   59.57   29.78      0
+   536870912      67108864     float    none      -1   8827.7   60.82   30.41      0   8873.5   60.50   30.25      0
+  1073741824     134217728     float    none      -1    17261   62.21   31.10      0    17056   62.95   31.48      0
+  2147483648     268435456     float    none      -1    33952   63.25   31.62      0    33156   64.77   32.38      0
+  4294967296     536870912     float    none      -1    67018   64.09   32.04      0    65577   65.50   32.75      0
+  8589934592    1073741824     float    none      -1   133370   64.41   32.20      0   128890   66.65   33.32      0
 # Out of bounds values : 0 OK
-# Avg bus bandwidth    : 13.132
-
+# Avg bus bandwidth    : 15.0709 
+#
 ```
