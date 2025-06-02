@@ -77,12 +77,43 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(ifName))
 	req.AddData(nameData)
 
-	ifMtu := uint32(attrs.MTU)
-	if interfaceConfig.MTU > 0 {
-		ifMtu = uint32(interfaceConfig.MTU)
+	// Configuration values
+	if interfaceConfig.MTU != nil {
+		ifMtu := uint32(*interfaceConfig.MTU)
+		mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(ifMtu))
+		req.AddData(mtu)
 	}
-	mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(ifMtu))
-	req.AddData(mtu)
+
+	if interfaceConfig.HardwareAddr != nil {
+		if hardwareAddr, err := net.ParseMAC(*interfaceConfig.HardwareAddr); err == nil {
+			hwaddr := nl.NewRtAttr(unix.IFLA_ADDRESS, []byte(hardwareAddr))
+			req.AddData(hwaddr)
+		}
+	}
+
+	if interfaceConfig.GSOMaxSize != nil {
+		gsoMaxSize := uint32(*interfaceConfig.GSOMaxSize)
+		gsoAttr := nl.NewRtAttr(unix.IFLA_GSO_MAX_SIZE, nl.Uint32Attr(gsoMaxSize))
+		req.AddData(gsoAttr)
+	}
+
+	if interfaceConfig.GROMaxSize != nil {
+		groMaxSize := uint32(*interfaceConfig.GROMaxSize)
+		groAttr := nl.NewRtAttr(unix.IFLA_GRO_MAX_SIZE, nl.Uint32Attr(groMaxSize))
+		req.AddData(groAttr)
+	}
+
+	if interfaceConfig.GSOIPv4MaxSize != nil {
+		gsoMaxSize := uint32(*interfaceConfig.GSOIPv4MaxSize)
+		gsoV4Attr := nl.NewRtAttr(unix.IFLA_GSO_IPV4_MAX_SIZE, nl.Uint32Attr(gsoMaxSize))
+		req.AddData(gsoV4Attr)
+	}
+
+	if interfaceConfig.GROIPv4MaxSize != nil {
+		groMaxSize := uint32(*interfaceConfig.GROIPv4MaxSize)
+		groV4Attr := nl.NewRtAttr(unix.IFLA_GRO_IPV4_MAX_SIZE, nl.Uint32Attr(groMaxSize))
+		req.AddData(groV4Attr)
+	}
 
 	val := nl.Uint32Attr(uint32(containerNs))
 	attr := nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)

@@ -16,24 +16,75 @@ limitations under the License.
 
 package apis
 
-// NetworkConfig represents the desired state of all network interfaces and their associated routes.
+// NetworkConfig represents the desired state of all network interfaces and their associated routes,
+// along with ethtool and sysctl configurations to be applied within the Pod's network namespace.
 type NetworkConfig struct {
-	Interface InterfaceConfig `json:"interface"` // Changed to a slice to support multiple interfaces
-	Routes    []RouteConfig   `json:"routes"`
+	// Interface defines core properties of the network interface.
+	// Settings here are typically managed by `ip link` commands.
+	Interface InterfaceConfig `json:"interface"`
+
+	// Routes defines static routes to be configured for this interface.
+	Routes []RouteConfig `json:"routes,omitempty"`
+
+	// Ethtool defines hardware offload features and other settings managed by `ethtool`.
+	Ethtool *EthtoolConfig `json:"ethtool,omitempty"`
 }
 
 // InterfaceConfig represents the configuration for a single network interface.
+// These are fundamental properties, often managed using `ip link` commands.
 type InterfaceConfig struct {
-	Name         string   `json:"name,omitempty"`         // Logical name of the interface (e.g., "eth0", "enp0s3")
-	Addresses    []string `json:"addresses,omitempty"`    // IP addresses and their CIDR masks
-	MTU          int32    `json:"mtu,omitempty"`          // Maximum Transmission Unit, optional
-	HardwareAddr string   `json:"hardwareAddr,omitempty"` // Read-only: Current hardware address (might be useful for GET)
+	// Name is the desired logical name of the interface inside the Pod (e.g., "net0", "eth_app").
+	// If not specified, DraNet may use or derive a name from the original interface.
+	Name string `json:"name,omitempty"`
+
+	// Addresses is a list of IP addresses in CIDR format (e.g., "192.168.1.10/24")
+	// to be assigned to the interface.
+	Addresses []string `json:"addresses,omitempty"`
+
+	// MTU is the Maximum Transmission Unit for the interface.
+	MTU *int32 `json:"mtu,omitempty"`
+
+	// HardwareAddr is the MAC address of the interface.
+	HardwareAddr *string `json:"hardwareAddr,omitempty"`
+
+	// GSOMaxSize sets the maximum Generic Segmentation Offload size for IPv6.
+	// Managed by `ip link set <dev> gso_max_size <val>`. For enabling Big TCP.
+	GSOMaxSize *int32 `json:"gsoMaxSize,omitempty"`
+
+	// GROMaxSize sets the maximum Generic Receive Offload size for IPv6.
+	// Managed by `ip link set <dev> gro_max_size <val>`. For enabling Big TCP.
+	GROMaxSize *int32 `json:"groMaxSize,omitempty"`
+
+	// GSOv4MaxSize sets the maximum Generic Segmentation Offload size.
+	// Managed by `ip link set <dev> gso_ipv4_max_size <val>`. For enabling Big TCP.
+	GSOIPv4MaxSize *int32 `json:"gsoIPv4MaxSize,omitempty"`
+
+	// GROv4MaxSize sets the maximum Generic Receive Offload size.
+	// Managed by `ip link set <dev> gro_ipv4_max_size <val>`. For enabling Big TCP.
+	GROIPv4MaxSize *int32 `json:"groIPv4MaxSize,omitempty"`
 }
 
 // RouteConfig represents a network route configuration.
 type RouteConfig struct {
-	Destination string `json:"destination,omitempty"` // e.g., "0.0.0.0/0" for default, "10.0.0.0/8"
-	Gateway     string `json:"gateway,omitempty"`     // The "gateway" address, e.g., "192.168.1.1"
-	Source      string `json:"source,omitempty"`      // Optional source address for policy routing
-	Scope       uint8  `json:"scope,omitempty"`       // Optional scope of the route, only Link (253) or Universe (0) allowed
+	// Destination is the target network in CIDR format (e.g., "0.0.0.0/0", "10.0.0.0/8").
+	Destination string `json:"destination,omitempty"`
+	// Gateway is the IP address of the gateway for this route.
+	Gateway string `json:"gateway,omitempty"`
+	// Source is an optional source IP address for policy routing.
+	Source string `json:"source,omitempty"`
+	// Scope is the scope of the route (e.g., link, host, global).
+	// Refers to Linux route scopes (e.g., 0 for RT_SCOPE_UNIVERSE, 253 for RT_SCOPE_LINK).
+	Scope uint8 `json:"scope,omitempty"`
+}
+
+// EthtoolConfig defines ethtool-based optimizations for a network interface.
+// These settings correspond to features typically toggled using `ethtool -K <dev> <feature> on|off`.
+type EthtoolConfig struct {
+	// Features is a map of ethtool feature names to their desired state (true for on, false for off).
+	// Example: {"tcp-segmentation-offload": true, "rx-checksum": true}
+	Features map[string]bool `json:"features,omitempty"`
+
+	// PrivateFlags is a map of device-specific private flag names to their desired state.
+	// Example: {"my-custom-flag": true}
+	PrivateFlags map[string]bool `json:"privateFlags,omitempty"`
 }

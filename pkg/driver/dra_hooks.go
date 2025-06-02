@@ -135,9 +135,9 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				continue
 			}
 			// Check if there is a custom configuration
-			conf, err := apis.ValidateConfig(&config.Opaque.Parameters)
-			if err != nil {
-				errorList = append(errorList, err)
+			conf, errs := apis.ValidateConfig(&config.Opaque.Parameters)
+			if len(errs) > 0 {
+				errorList = append(errorList, errs...)
 				continue
 			}
 			// TODO: define a strategy for multiple configs
@@ -152,8 +152,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				Namespace: claim.Namespace,
 				Name:      claim.Name,
 			},
-			NetDevice:          netconf.Interface,
-			NetNamespaceRoutes: netconf.Routes,
+			Network: netconf,
 		}
 		ifName := names.GetOriginalName(result.Device)
 		// Get Network configuration and merge it
@@ -163,12 +162,12 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			continue
 		}
 
-		if podCfg.NetDevice.Name == "" {
-			podCfg.NetDevice.Name = ifName
+		if podCfg.Network.Interface.Name == "" {
+			podCfg.Network.Interface.Name = ifName
 		}
 
 		// If there is no custom addresses then use the existing ones
-		if len(podCfg.NetDevice.Addresses) == 0 {
+		if len(podCfg.Network.Interface.Addresses) == 0 {
 			// get the existing IP addresses
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
 			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
@@ -181,7 +180,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					if address.Scope != unix.RT_SCOPE_UNIVERSE {
 						continue
 					}
-					podCfg.NetDevice.Addresses = append(podCfg.NetDevice.Addresses, address.IPNet.String())
+					podCfg.Network.Interface.Addresses = append(podCfg.Network.Interface.Addresses, address.IPNet.String())
 				}
 			}
 		}
@@ -190,15 +189,45 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		// this may be an interface that uses DHCP, so we bring it up if necessary and do a DHCP
 		// request to gather the network parameters (IPs and Routes) ... but we DO NOT apply them
 		// in the root namespace
-		if len(podCfg.NetDevice.Addresses) == 0 {
+		if len(podCfg.Network.Interface.Addresses) == 0 {
 			klog.V(2).Infof("trying to get network configuration via DHCP")
 			ip, routes, err := getDHCP(ifName)
 			if err != nil {
 				klog.Infof("fail to get configuration via DHCP: %v", err)
 			} else {
-				podCfg.NetDevice.Addresses = []string{ip}
-				podCfg.NetNamespaceRoutes = append(podCfg.NetNamespaceRoutes, routes...)
+				podCfg.Network.Interface.Addresses = []string{ip}
+				podCfg.Network.Routes = append(podCfg.Network.Routes, routes...)
 			}
+		}
+
+		// Obtain the existing supported ethtool features and validate the config
+		if podCfg.Network.Ethtool != nil {
+			client, err := newEthtoolClient(0)
+			if err != nil {
+				errorList = append(errorList, fmt.Errorf("fail to create ethtool client %v", err))
+				continue
+			}
+			defer client.Close()
+
+			ifFeatures, err := client.GetFeatures(ifName)
+			if err != nil {
+				errorList = append(errorList, fmt.Errorf("fail to get ethtool features %v", err))
+				continue
+			}
+
+			// translate features to the actual kernel names
+			ethtoolFeatures := map[string]bool{}
+			for feature, value := range podCfg.Network.Ethtool.Features {
+				aliases := ifFeatures.Get(feature)
+				if len(aliases) == 0 {
+					errorList = append(errorList, fmt.Errorf("feature %s not supported by interface", feature))
+					continue
+				}
+				for _, alias := range aliases {
+					ethtoolFeatures[alias] = value
+				}
+			}
+			podCfg.Network.Ethtool.Features = ethtoolFeatures
 		}
 
 		// Obtain the routes associated to the interface
@@ -229,7 +258,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				routeCfg.Source = route.Src.String()
 			}
 			routeCfg.Scope = uint8(route.Scope)
-			podCfg.NetNamespaceRoutes = append(podCfg.NetNamespaceRoutes, routeCfg)
+			podCfg.Network.Routes = append(podCfg.Network.Routes, routeCfg)
 		}
 
 		// Get RDMA configuration: link and char devices

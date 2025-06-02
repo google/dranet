@@ -13,216 +13,356 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 package apis
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/unix"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 )
 
+// Helper to create a *runtime.RawExtension from a struct
+func newRawExtension(t *testing.T, data interface{}) *runtime.RawExtension {
+	t.Helper()
+	rawJSON, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("Failed to marshal test data: %v", err)
+	}
+	return &runtime.RawExtension{Raw: rawJSON}
+}
+
+// Helper to create a *runtime.RawExtension from a JSON string
+func newRawExtensionFromString(t *testing.T, jsonStr string) *runtime.RawExtension {
+	t.Helper()
+	return &runtime.RawExtension{Raw: []byte(jsonStr)}
+}
+
 func TestValidateConfig(t *testing.T) {
+	validConfig := NetworkConfig{
+		Interface: InterfaceConfig{Name: "eth0", Addresses: []string{"192.168.1.1/24"}, MTU: ptr.To[int32](1500)},
+		Routes: []RouteConfig{
+			{Destination: "0.0.0.0/0", Gateway: "192.168.1.254", Scope: unix.RT_SCOPE_UNIVERSE},
+		},
+		Ethtool: &EthtoolConfig{Features: map[string]bool{"tso": true}},
+	}
+	invalidInterfaceConf := NetworkConfig{Interface: InterfaceConfig{Name: "eth/0"}}
+	invalidRouteConf := NetworkConfig{Interface: InterfaceConfig{Name: "eth0"}, Routes: []RouteConfig{{Destination: "invalid-cidr"}}}
+
 	tests := []struct {
-		name    string
-		raw     *runtime.RawExtension
-		wantErr bool
-		errMsgs []string
+		name        string
+		raw         *runtime.RawExtension
+		expectErr   bool
+		expectedCfg *NetworkConfig
+		errContains []string
 	}{
 		{
-			name: "valid config",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {
-					"name": "eth0",
-					"addresses": ["192.168.1.10/24", "2001:db8::1/64"],
-					"mtu": 1500
-				},
-				"routes": [
-					{
-						"destination": "0.0.0.0/0",
-						"gateway": "192.168.1.1"
-					},
-					{
-						"destination": "2001:db8:abcd::/48",
-						"gateway": "2001:db::1"
-					}
-				]
-			}`)},
-			wantErr: false,
+			name:        "valid full config",
+			raw:         newRawExtension(t, validConfig),
+			expectErr:   false,
+			expectedCfg: &validConfig,
 		},
 		{
-			name:    "nil raw extension",
-			raw:     nil,
-			wantErr: false,
+			name:        "nil raw extension",
+			raw:         nil,
+			expectErr:   false,
+			expectedCfg: nil,
 		},
 		{
-			name:    "nil raw field in raw extension",
-			raw:     &runtime.RawExtension{Raw: nil},
-			wantErr: false,
+			name:        "empty raw data in extension",
+			raw:         &runtime.RawExtension{Raw: []byte{}},
+			expectErr:   false,
+			expectedCfg: nil,
 		},
 		{
-			name:    "empty raw field in raw extension",
-			raw:     &runtime.RawExtension{Raw: []byte{}},
-			wantErr: false,
+			name:        "malformed json",
+			raw:         newRawExtensionFromString(t, `{"interface": {"name": "eth0"`),
+			expectErr:   true,
+			expectedCfg: nil, // Unmarshal itself fails, cfg should be nil or zero
+			errContains: []string{"failed to unmarshal JSON data"},
 		},
 		{
-			name:    "malformed json",
-			raw:     &runtime.RawExtension{Raw: []byte(`{"interface": {"name": "eth0"`)}, // Missing closing brace
-			wantErr: true,
-			errMsgs: []string{"failed to unmarshal JSON data: unexpected end of JSON"},
+			name:        "unknown field (strict unmarshal error)",
+			raw:         newRawExtensionFromString(t, `{"interface": {"name": "eth0", "unknownField": "test"}}`),
+			expectErr:   true,
+			expectedCfg: &NetworkConfig{Interface: InterfaceConfig{Name: "eth0"}}, // sigs.k8s.io/json unmarshals known fields first
+			errContains: []string{"failed to unmarshal strict JSON data", "unknownField"},
 		},
 		{
-			name: "unknown fields",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"gateways": "192.168.1.1"}]
-			}`)}, // use gateways instead gateway
-			wantErr: true,
-			errMsgs: []string{`failed to unmarshal strict JSON data: unknown field "routes[0].gateways"`},
+			name:        "config with interface validation error",
+			raw:         newRawExtension(t, invalidInterfaceConf),
+			expectErr:   true,
+			expectedCfg: &invalidInterfaceConf,
+			errContains: []string{"interface.name: name 'eth/0' cannot contain '/'"},
 		},
 		{
-			name: "invalid interface IP CIDR",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {
-					"name": "eth0",
-					"addresses": ["192.168.1.10/240"]
-				}
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"invalid IP in CIDR format 192.168.1.10/240"},
-		},
-		{
-			name: "route with empty destination",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"gateway": "192.168.1.1"}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: destination cannot be empty"},
-		},
-		{
-			name: "route with invalid destination",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "not-an-ip", "gateway": "192.168.1.1"}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: invalid destination IP or CIDR 'not-an-ip'"},
-		},
-		{
-			name: "route with no gateway",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8"}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: for destination '10.0.0.0/8' must have a gateway"},
-		},
-		{
-			name: "route with invalid gateway IP",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "gateway": "not-a-gateway"}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: invalid gateway IP 'not-a-gateway'"},
-		},
-		{
-			name: "multiple errors",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {
-					"name": "eth0",
-					"addresses": ["192.168.1.10/240", "10.0.0.1/invalid"]
-				},
-				"routes": [
-					{"destination": "", "gateway": "192.168.1.1"},
-					{"destination": "not-an-ip", "gateway": "192.168.1.1"},
-					{"destination": "10.0.0.0/8"},
-					{"destination": "10.0.1.0/24", "gateway": "not-a-gateway"}
-				]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{
-				"invalid IP in CIDR format 192.168.1.10/240",
-				"invalid IP in CIDR format 10.0.0.1/invalid",
-				"route 0: destination cannot be empty",
-				"route 1: invalid destination IP or CIDR 'not-an-ip'",
-				"route 3: invalid gateway IP 'not-a-gateway'",
-			},
-		},
-		{
-			name: "route with valid scope universe (0)",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "gateway": "192.168.1.1", "scope": 0}]
-			}`)},
-			wantErr: false,
-		},
-		{
-			name: "route with valid scope link (253)",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "scope": 253}]
-			}`)},
-			wantErr: false,
-		},
-		{
-			name: "route with invalid scope",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "gateway": "192.168.1.1", "scope": 100}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: invalid scope '100' only Link (253) or Universe (0) allowed"},
-		},
-		{
-			name: "route with link scope and no gateway (valid)",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "scope": 253}]
-			}`)},
-			wantErr: false,
-		},
-		{
-			name: "route with universe scope and no gateway (invalid)",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"name": "eth0", "addresses": ["192.168.1.10/24"]},
-				"routes": [{"destination": "10.0.0.0/8", "scope": 0}]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{"route 0: for destination '10.0.0.0/8' must have a gateway"},
-		},
-		{
-			name: "multiple errors including scope",
-			raw: &runtime.RawExtension{Raw: []byte(`{
-				"interface": {"addresses": ["192.168.1.10/240"]},
-				"routes": [
-					{"destination": "10.0.0.0/8", "gateway": "192.168.1.1", "scope": 100},
-					{"destination": "10.0.1.0/24", "scope": 0}
-				]
-			}`)},
-			wantErr: true,
-			errMsgs: []string{
-				"invalid IP in CIDR format 192.168.1.10/240",
-				"route 0: invalid scope '100' only Link (253) or Universe (0) allowed",
-				"route 1: for destination '10.0.1.0/24' must have a gateway"},
+			name:        "config with route validation error",
+			raw:         newRawExtension(t, invalidRouteConf),
+			expectErr:   true,
+			expectedCfg: &invalidRouteConf,
+			errContains: []string{"routes[0].destination: invalid IP or CIDR format 'invalid-cidr'"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ValidateConfig(tt.raw)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			cfg, errs := ValidateConfig(tt.raw)
+			hasErrs := len(errs) > 0
+
+			if hasErrs != tt.expectErr {
+				t.Errorf("ValidateConfig() error = %v, expectErr %v. Errors: %v", hasErrs, tt.expectErr, errs)
 			}
-			if tt.wantErr {
-				for _, errMsg := range tt.errMsgs {
-					if !strings.Contains(err.Error(), errMsg) {
-						t.Errorf("ValidateConfig() error = %v, want to contain %v", err, errMsg)
+
+			if tt.expectErr {
+				for _, substr := range tt.errContains {
+					found := false
+					for _, err := range errs {
+						if strings.Contains(err.Error(), substr) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("ValidateConfig() expected error to contain '%s', but it didn't. Errors: %v", substr, errs)
 					}
 				}
+			}
+
+			if !reflect.DeepEqual(cfg, tt.expectedCfg) {
+				t.Errorf("ValidateConfig() cfg = %+v, expectedCfg %+v", cfg, tt.expectedCfg)
+			}
+		})
+	}
+}
+
+func TestIsValidLinuxInterfaceName(t *testing.T) {
+	tests := []struct {
+		name      string
+		ifName    string
+		fieldPath string
+		expectErr bool
+	}{
+		{"valid short", "eth0", "iface.name", false},
+		{"valid with hyphen", "my-nic", "iface.name", false},
+		{"valid with underscore", "my_nic", "iface.name", false},
+		{"valid with period", "my.nic", "iface.name", false},
+		{"valid max length", strings.Repeat("a", MaxInterfaceNameLen), "iface.name", false},
+		{"empty name (allowed)", "", "iface.name", false},
+		{"too long", strings.Repeat("a", MaxInterfaceNameLen+1), "iface.name", true},
+		{"contains slash", "eth/0", "iface.name", true},
+		{"contains space", "eth 0", "iface.name", true},
+		{"is dot", ".", "iface.name", true},
+		{"is dotdot", "..", "iface.name", true},
+		{"contains invalid char", "eth!", "iface.name", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := isValidLinuxInterfaceName(tt.ifName, tt.fieldPath)
+			if (len(errs) > 0) != tt.expectErr {
+				t.Errorf("isValidLinuxInterfaceName(%s) expectErr %v, got errors: %v", tt.ifName, tt.expectErr, errs)
+			}
+		})
+	}
+}
+
+func TestValidateInterfaceConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       *InterfaceConfig
+		fieldPath string
+		expectErr bool
+		errCount  int // Expected number of errors
+	}{
+		{
+			name:      "valid",
+			cfg:       &InterfaceConfig{Name: "eth0", Addresses: []string{"10.0.0.1/24"}, MTU: ptr.To[int32](1500), GSOMaxSize: ptr.To[int32](65536)},
+			fieldPath: "iface",
+			expectErr: false,
+		},
+		{
+			name:      "invalid name",
+			cfg:       &InterfaceConfig{Name: "eth/"},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid address",
+			cfg:       &InterfaceConfig{Name: "eth0", Addresses: []string{"10.0.0/24"}},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid MTU (zero)",
+			cfg:       &InterfaceConfig{Name: "eth0", MTU: ptr.To[int32](0)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid MTU (too small)",
+			cfg:       &InterfaceConfig{Name: "eth0", MTU: ptr.To[int32](MinMTU - 1)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid GSO MaxSize",
+			cfg:       &InterfaceConfig{Name: "eth0", GSOMaxSize: ptr.To[int32](0)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid GRO MaxSize",
+			cfg:       &InterfaceConfig{Name: "eth0", GROMaxSize: ptr.To[int32](-1)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid GSO V4 MaxSize",
+			cfg:       &InterfaceConfig{Name: "eth0", GSOIPv4MaxSize: ptr.To[int32](0)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid GRO V4 MaxSize",
+			cfg:       &InterfaceConfig{Name: "eth0", GROIPv4MaxSize: ptr.To[int32](-1)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "valid hardware address",
+			cfg:       &InterfaceConfig{Name: "eth0", HardwareAddr: ptr.To("00:1A:2B:3C:4D:5E")},
+			fieldPath: "iface",
+			expectErr: false,
+		},
+		{
+			name:      "invalid hardware address",
+			cfg:       &InterfaceConfig{Name: "eth0", HardwareAddr: ptr.To("00-1A-2B-3C-4D-5E-XX")},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "multiple errors",
+			cfg:       &InterfaceConfig{Name: "eth/0", Addresses: []string{"badip"}, MTU: ptr.To[int32](0)},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  3,
+		},
+		{
+			name:      "nil config",
+			cfg:       nil,
+			fieldPath: "iface",
+			expectErr: false, // Function should handle nil gracefully
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateInterfaceConfig(tt.cfg, tt.fieldPath)
+			if (len(errs) > 0) != tt.expectErr {
+				t.Errorf("validateInterfaceConfig() expectErr %v, got errors: %v", tt.expectErr, errs)
+			}
+			if tt.expectErr && len(errs) != tt.errCount {
+				t.Errorf("validateInterfaceConfig() expected %d errors, got %d: %v", tt.errCount, len(errs), errs)
+			}
+		})
+	}
+}
+
+func TestValidateRoutes(t *testing.T) {
+	scopeLink := uint8(unix.RT_SCOPE_LINK)
+	scopeUniverse := uint8(unix.RT_SCOPE_UNIVERSE)
+	invalidScope := uint8(100)
+
+	tests := []struct {
+		name      string
+		routes    []RouteConfig
+		fieldPath string
+		expectErr bool
+		errCount  int
+	}{
+		{
+			name:      "valid default route",
+			routes:    []RouteConfig{{Destination: "0.0.0.0/0", Gateway: "192.168.1.1", Scope: scopeUniverse}},
+			fieldPath: "routes",
+			expectErr: false,
+		},
+		{
+			name:      "valid link-local route",
+			routes:    []RouteConfig{{Destination: "169.254.0.0/16", Scope: scopeLink}},
+			fieldPath: "routes",
+			expectErr: false,
+		},
+		{
+			name:      "empty destination",
+			routes:    []RouteConfig{{Gateway: "192.168.1.1"}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid destination CIDR",
+			routes:    []RouteConfig{{Destination: "10.0.0/24", Gateway: "192.168.1.1"}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "universe scope no gateway",
+			routes:    []RouteConfig{{Destination: "10.0.0.0/8", Scope: scopeUniverse}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "default scope (universe) no gateway",
+			routes:    []RouteConfig{{Destination: "10.0.0.0/8"}}, // Scope defaults to Universe
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid gateway IP",
+			routes:    []RouteConfig{{Destination: "0.0.0.0/0", Gateway: "not-an-ip"}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid scope value",
+			routes:    []RouteConfig{{Destination: "10.0.0.0/8", Scope: invalidScope, Gateway: "192.168.1.1"}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid source IP",
+			routes:    []RouteConfig{{Destination: "0.0.0.0/0", Gateway: "192.168.1.1", Source: "not-an-ip"}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateRoutes(tt.routes, tt.fieldPath)
+			if (len(errs) > 0) != tt.expectErr {
+				t.Errorf("validateRoutes() expectErr %v, got errors: %v", tt.expectErr, errs)
+			}
+			if tt.expectErr && len(errs) != tt.errCount {
+				t.Errorf("validateRoutes() expected %d errors, got %d: %v", tt.errCount, len(errs), errs)
 			}
 		})
 	}

@@ -117,7 +117,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
 		// TODO config options to rename the device and pass parameters
 		// use https://github.com/opencontainers/runtime-spec/pull/1271
-		networkData, err := nsAttachNetdev(ifName, ns, config.NetDevice)
+		networkData, err := nsAttachNetdev(ifName, ns, config.Network.Interface)
 		if err != nil {
 			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", deviceName, ns, err)
 			return fmt.Errorf("error moving network device %s to namespace %s: %v", deviceName, ns, err)
@@ -133,9 +133,22 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			WithInterfaceName(networkData.InterfaceName).
 			WithHardwareAddress(networkData.HardwareAddress).
 			WithIPs(networkData.IPs...),
-		)
-		// configure routes
-		err = netnsRouting(ns, config.NetDevice.Name, config.NetNamespaceRoutes)
+		) // End of WithNetworkData
+
+		// The interface name inside the container's namespace.
+		ifNameInNs := networkData.InterfaceName
+
+		// Apply Ethtool configurations
+		if config.Network.Ethtool != nil {
+			err = applyEthtoolConfig(ns, ifNameInNs, config.Network.Ethtool)
+			if err != nil {
+				klog.Infof("RunPodSandbox error applying ethtool config for %s in ns %s: %v", ifNameInNs, ns, err)
+				return fmt.Errorf("error applying ethtool config for %s in ns %s: %v", ifNameInNs, ns, err)
+			}
+		}
+
+		// Configure routes
+		err = applyRoutingConfig(ns, ifNameInNs, config.Network.Routes)
 		if err != nil {
 			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
 			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
@@ -217,7 +230,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	for deviceName, config := range podConfig {
 		ifName := names.GetOriginalName(deviceName)
 
-		if err := nsDetachNetdev(ns, config.NetDevice.Name, ifName); err != nil {
+		if err := nsDetachNetdev(ns, config.Network.Interface.Name, ifName); err != nil {
 			klog.Infof("fail to return network device %s : %v", deviceName, err)
 		}
 

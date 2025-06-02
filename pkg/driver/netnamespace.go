@@ -28,7 +28,7 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-func netnsRouting(containerNsPAth string, ifName string, routeConfig []apis.RouteConfig) error {
+func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []apis.RouteConfig) error {
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
 		return err

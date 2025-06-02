@@ -11,6 +11,8 @@ require (
 	github.com/google/cel-go v0.25.0
 	github.com/google/go-cmp v0.7.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
+	github.com/mdlayher/genetlink v1.3.2
+	github.com/mdlayher/netlink v1.7.2
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6

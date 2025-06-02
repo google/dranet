@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,35 +15,43 @@
 apiVersion: resource.k8s.io/v1beta1
 kind:  ResourceClaim
 metadata:
-  name: dummy-interface-static-ip
+  name: dummy-interface-advanced
 spec:
   devices:
     requests:
-    - name: req-dummy
+    - name: req-dummy-advanced
       deviceClassName: dra.net
       selectors:
         - cel:
-            expression: device.attributes["dra.net"].type == "dummy"
+            expression: device.attributes["dra.net"].ifName == "dummy3"
     config:
     - opaque:
         driver: dra.net
         parameters:
           interface:
-            name: "eth99"
+            name: "dranet0"
             addresses:
-            - "169.254.169.13/24"
+            - "169.254.169.14/24"
+            mtu: 4321
+            hardwareAddr: "00:11:22:33:44:55"
+          ethtool:
+            features:
+              tcp-segmentation-offload: false
+              generic-receive-offload: false
+              large-receive-offload: false
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: pod1
+  name: pod-advanced-cfg
   labels:
     app: pod
 spec:
   containers:
   - name: ctr1
     image: registry.k8s.io/e2e-test-images/agnhost:2.54
+    # Keep the container running
+    command: ["sleep", "infinity"]
   resourceClaims:
   - name: dummy1
-    resourceClaimName: dummy-interface-static-ip
-
+    resourceClaimName: dummy-interface-advanced

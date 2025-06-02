@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,35 +15,45 @@
 apiVersion: resource.k8s.io/v1beta1
 kind:  ResourceClaim
 metadata:
-  name: dummy-interface-static-ip
+  name: dummy-interface-bigtcp
 spec:
   devices:
     requests:
-    - name: req-dummy
+    - name: req-dummy-bigtcp
       deviceClassName: dra.net
       selectors:
         - cel:
-            expression: device.attributes["dra.net"].type == "dummy"
+            expression: device.attributes["dra.net"].ifName == "dummy4"
     config:
     - opaque:
         driver: dra.net
         parameters:
           interface:
-            name: "eth99"
+            name: "dranet1" # Name of the interface inside the pod
             addresses:
-            - "169.254.169.13/24"
+            - "192.168.200.1/24"
+            mtu: 8896
+            gsoMaxSize: 65536
+            groMaxSize: 65536
+            gsoIPv4MaxSize: 65536
+            groIPv4MaxSize: 65536
+          ethtool:
+            features:
+              tcp-segmentation-offload: true
+              generic-receive-offload: true
+              large-receive-offload: false
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: pod1
+  name: pod-bigtcp-test
   labels:
-    app: pod
+    app: bigtcp
 spec:
   containers:
-  - name: ctr1
+  - name: agnhost-bigtcp
     image: registry.k8s.io/e2e-test-images/agnhost:2.54
+    command: ["sleep", "infinity"]
   resourceClaims:
-  - name: dummy1
-    resourceClaimName: dummy-interface-static-ip
-
+  - name: bigtcp-net
+    resourceClaimName: dummy-interface-bigtcp

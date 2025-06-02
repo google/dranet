@@ -28,13 +28,10 @@ import (
 // routes for the Pod's network namespace, and RDMA configurations.
 type PodConfig struct {
 	Claim types.NamespacedName
-	// NetDevice specifies the configuration for the network interface itself,
-	// such as its desired name within the Pod, IP addresses, and MTU.
-	NetDevice apis.InterfaceConfig
 
-	// NetNamespaceRoutes lists the routes to be configured within the Pod's
-	// network namespace, associated with this network device.
-	NetNamespaceRoutes []apis.RouteConfig
+	// Network contains all network-related configurations (interface, routes,
+	// ethtool, sysctl) to be applied for this device in the Pod's namespace.
+	Network apis.NetworkConfig
 
 	// RDMADevice holds RDMA-specific configurations if the network device
 	// has associated RDMA capabilities.
