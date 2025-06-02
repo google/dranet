@@ -3,12 +3,13 @@ module github.com/google/dranet
 go 1.24.0
 
 require (
-	cloud.google.com/go/compute v1.37.0
+	cloud.google.com/go/compute v1.38.0
 	cloud.google.com/go/compute/metadata v0.7.0
 	cloud.google.com/go/container v1.42.4
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/containerd/nri v0.9.0
 	github.com/google/cel-go v0.25.0
+	github.com/google/go-cmp v0.7.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/cobra v1.9.1
@@ -50,7 +51,6 @@ require (
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
