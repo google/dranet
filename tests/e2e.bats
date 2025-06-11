@@ -147,3 +147,31 @@
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_bigtcp.yaml
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
 }
+
+
+# Test case for validating ebpf attributes are exposed via resource slice.
+# TODO use tcx hooks too
+@test "validate bpf filter attributes" {
+  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy5 type dummy"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy5"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc qdisc add dev dummy5 clsact"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter add dev dummy5 ingress bpf direct-action obj dummy_bpf.o sec classifier"
+
+  run docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter show dev dummy5 ingress"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"dummy_bpf.o:[classifier] direct-action"* ]]
+
+  # Wait for the interface to be discovered
+  sleep 5
+
+  # Validate bpf attribute is true
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/ebpf.bool}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "true" ]]
+
+  # Validate bpfName attribute
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcFilterNames.string}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "dummy_bpf.o:[classifier]" ]]
+}

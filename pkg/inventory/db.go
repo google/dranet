@@ -251,6 +251,22 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	device.Basic.Attributes["dra.net/alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
 	device.Basic.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
 
+	// Get eBPF properties from the interface using the legacy tc hooks
+	isEbpf := false
+	filterNames, ok := getTcFilters(link)
+	if ok {
+		isEbpf = true
+		device.Basic.Attributes["dra.net/tcFilterNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(filterNames, ","))}
+	}
+
+	// Get eBPF properties from the interface using the tcx hooks
+	programNames, ok := getTcxFilters(link)
+	if ok {
+		isEbpf = true
+		device.Basic.Attributes["dra.net/tcxProgramNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(programNames, ","))}
+	}
+	device.Basic.Attributes["dra.net/ebpf"] = resourceapi.DeviceAttribute{BoolValue: &isEbpf}
+
 	isRDMA := rdmamap.IsRDmaDeviceForNetdevice(ifName)
 	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
 	// from https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/ed1c14dd4c313c7dd9fe4730a60358fbeffbfdd4/pkg/netdevice/netDeviceProvider.go#L99

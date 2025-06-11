@@ -55,6 +55,37 @@ Waiting for daemon set "dranet" rollout to finish: 1 out of 5 new pods have been
 updated...
 ```
 
+## Accesing nodes
+
+When developing it may be also useful to log into the nodes to be able to debug problems. Just obtain the list of nodes with `kubectl get nodes -o wide`
+
+For Kind clusters use `docker exec -it <name of the node> bash`
+
+```sh
+kubectl get nodes -o wide
+NAME                                            STATUS   ROLES    AGE   VERSION               INTERNAL-IP   EXTERNAL-IP      OS-IMAGE                             KERNEL-VERSION   CONTAINER-RUNTIME
+gke-cluster-tpu-v6-default-pool-3f96de9d-hr87   Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.21   34.162.194.173   Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-cluster-tpu-v6-default-pool-955df71d-zd7b   Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.15   34.162.239.241   Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-cluster-tpu-v6-default-pool-e1c69e67-k0jw   Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.20   34.162.209.25    Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-tpu-de8b9feb-kgdj                           Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.26   34.162.163.69    Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-tpu-de8b9feb-prgf                           Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.24   34.162.144.5     Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-tpu-de8b9feb-sjcp                           Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.27   34.162.117.62    Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+gke-tpu-de8b9feb-z8g1                           Ready    <none>   8d    v1.33.1-gke.1107000   10.202.0.25   34.162.239.83    Container-Optimized OS from Google   6.6.87+          containerd://2.0.4
+```
+
+For GKE or other clusters, you may have restrictions on ssh, so you can use
+
+```sh
+ kubectl debug -it node/gke-tpu-de8b9feb-kgdj --image busybox -- chroot /host
+--profile=legacy is deprecated and will be removed in the future. It is recommended to explicitly specify a profile, for example "--profile=general".
+Creating debugging pod node-debugger-gke-tpu-de8b9feb-kgdj-94xdx with container debugger on node gke-tpu-de8b9feb-kgdj.
+If you don't see a command prompt, try pressing enter.
+gke-tpu-de8b9feb-kgdj / #
+```
+
+If you want to upload some binary, per example `bpftrace` or `pwru` , you can use the streaming capabilities for that:
+
+```
 
 
 ## Troubleshooting

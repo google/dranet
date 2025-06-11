@@ -32,7 +32,7 @@ jobs:
         env:
          BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
          TERM: xterm
-        run: bats -o _artifacts tests/
+        run: bats -o _artifacts --print-output-on-failure tests/
 
       - name: Upload logs
         if: always()
