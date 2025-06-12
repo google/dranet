@@ -292,3 +292,57 @@ func TestPodConfigStore_DeleteClaim(t *testing.T) {
 		})
 	}
 }
+
+func TestPodConfigStore_NoDuplicateDevices(t *testing.T) {
+	store := NewPodConfigStore()
+	podUID := types.UID("test-pod-uid-1")
+	deviceName1 := "eth0"
+	config1 := PodConfig{
+		Network: apis.NetworkConfig{
+			Interface: apis.InterfaceConfig{Name: "eth0-pod"},
+		},
+		RDMADevice: RDMAConfig{
+			LinkDev: "mlx5_0",
+			DevChars: []LinuxDevice{{
+				Path: "/dev/infiniband/rdma_cm",
+			}, {
+				Path: "/dev/infiniband/uverbs1",
+			}},
+		},
+	}
+	deviceName2 := "eth1"
+	config2 := PodConfig{
+		Network: apis.NetworkConfig{
+			Interface: apis.InterfaceConfig{Name: "eth2-pod"},
+		},
+		RDMADevice: RDMAConfig{
+			LinkDev: "mlx5_1",
+			DevChars: []LinuxDevice{{
+				Path: "/dev/infiniband/rdma_cm",
+			}, {
+				Path: "/dev/infiniband/uverbs2",
+			}},
+		},
+	}
+
+	// Set the same device config multiple times
+	store.Set(podUID, deviceName1, config1)
+	store.Set(podUID, deviceName2, config2)
+	store.Set(podUID, deviceName1, config1)
+
+	podConfigs, found := store.GetPodConfigs(podUID)
+	if !found {
+		t.Fatalf("GetPodConfigs() did not find configs for podUID, expected found")
+	}
+
+	if len(podConfigs) != 2 {
+		t.Errorf("Expected 2 device config, but got %d", len(podConfigs))
+	}
+
+	if _, ok := podConfigs[deviceName1]; !ok {
+		t.Errorf("Device %s not found in pod configs", deviceName2)
+	}
+	if _, ok := podConfigs[deviceName2]; !ok {
+		t.Errorf("Device %s not found in pod configs", deviceName2)
+	}
+}

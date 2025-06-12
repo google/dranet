@@ -30,6 +30,7 @@ import (
 	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
 	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1beta1"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/set"
 )
 
 // NRI hooks into the container runtime, the lifecycle of the Pod seen here is local to the runtime
@@ -66,9 +67,15 @@ func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox,
 		return nil, nil, nil
 	}
 	// Containers only cares about the RDMA char devices
+	devPaths := set.Set[string]{}
 	adjust := &api.ContainerAdjustment{}
 	for _, config := range podConfig {
 		for _, dev := range config.RDMADevice.DevChars {
+			// do not insert the same path multiple times
+			if devPaths.Has(dev.Path) {
+				continue
+			}
+			devPaths.Insert(dev.Path)
 			// TODO check the file permissions and uid and gid fields
 			adjust.AddDevice(&api.LinuxDevice{
 				Path:  dev.Path,
