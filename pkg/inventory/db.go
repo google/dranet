@@ -308,6 +308,12 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 		if address.function != "" {
 			device.Attributes["dra.net/pciAddressFunction"] = resourceapi.DeviceAttribute{StringValue: &address.function}
 		}
+		if address.domain != "" && address.bus != "" {
+			// standardized attribute for all dra drivers
+			// ref: https://github.com/kubernetes/enhancements/pull/5316
+			pcieRoot := fmt.Sprintf("pci%s:%s", address.domain, address.bus)
+			device.Attributes["resource.kubernetes.io/pcieRoot"] = resourceapi.DeviceAttribute{StringValue: &pcieRoot}
+		}
 	} else {
 		klog.Infof("could not get pci address : %v", err)
 	}
