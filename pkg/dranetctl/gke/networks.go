@@ -36,12 +36,13 @@ import (
 
 const (
 	// assume total ownership of these networks by dranet
-	wellKnownPrefix = "dranet"
+	wellKnownPrefix = "dranetctl"
 )
 
 var (
 	// extract region and subnet name from URL
-	reSubnets = regexp.MustCompile(`/regions/([^/]+)/subnetworks/([^/]+)$`)
+	reSubnets              = regexp.MustCompile(`/regions/([^/]+)/subnetworks/([^/]+)$`)
+	acceleratorPodNameFlag string
 )
 
 // getRegion get the region part from a location
@@ -92,7 +93,7 @@ func createAcceleratorNetworks(ctx context.Context, acceleratorpodName string, n
 		}
 
 		// Create Subnetwork
-		// get a non overllaping range from the Class E
+		// get a non overlaping range from the Class E
 		// TODO: this needs to be handled better
 		networkURL := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/networks/%s", projectID, networkName)
 		cidr := fmt.Sprintf("255.255.%d.0/24", 20+i)
@@ -311,7 +312,7 @@ func deleteNetwork(ctx context.Context, networkName string) error {
 }
 
 // listNetworks list all dranet networks
-func listNetworks(ctx context.Context) []string {
+func listNetworks(ctx context.Context, acceleratorPodName string) []string {
 	output := []string{}
 	// Prepare the List request.
 	req := &computepb.ListNetworksRequest{
@@ -330,9 +331,18 @@ func listNetworks(ctx context.Context) []string {
 			return output
 		}
 
-		if strings.HasPrefix(*network.Name, wellKnownPrefix) {
-			output = append(output, *network.Name)
+		// it assumes ownership via the well known prefix
+		if !strings.HasPrefix(*network.Name, wellKnownPrefix) {
+			continue
 		}
+		// filter by accelerator pod name if exist
+		if acceleratorPodName != "" &&
+			!strings.Contains(*network.Name, obtainHexHash(acceleratorPodName)) {
+			continue
+		}
+
+		output = append(output, *network.Name)
+
 		klog.V(2).Infof("Name: %s\n", *network.Name)
 		klog.V(2).Infof("  ID: %d\n", network.Id)
 		klog.V(2).Infof("  SelfLink: %s\n", *network.SelfLink)
@@ -358,9 +368,10 @@ var cleanupNetworksCmd = &cobra.Command{
 	Short: "Deletes all Google Cloud networks labeled as managed by DRA-Net",
 	Long: `This command lists all Google Cloud networks in the specified project and deletes those created by dranetctl.
 Use with caution, as this action is irreversible.`,
+	Args: cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context()
-		networks := listNetworks(ctx)
+		networks := listNetworks(ctx, acceleratorPodNameFlag)
 		for _, network := range networks {
 			klog.Infof("deleting network %s\n", network)
 			err := deleteNetwork(ctx, network)
@@ -374,9 +385,10 @@ Use with caution, as this action is irreversible.`,
 var listNetworksCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lists all Google Cloud networks in a project",
+	Args:  cobra.MaximumNArgs(0), // optional the acceleratorpod name as an argument
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context()
-		networks := listNetworks(ctx)
+		networks := listNetworks(ctx, acceleratorPodNameFlag)
 		fmt.Printf("There are %d dranet networks\n", len(networks))
 		fmt.Println("---")
 		for _, network := range networks {
@@ -388,4 +400,5 @@ var listNetworksCmd = &cobra.Command{
 func init() {
 	networksCmd.AddCommand(cleanupNetworksCmd)
 	networksCmd.AddCommand(listNetworksCmd)
+	networksCmd.PersistentFlags().StringVar(&acceleratorPodNameFlag, "acceleratorpod", "", "Name of the accelerator pod to filter networks")
 }

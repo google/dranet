@@ -41,6 +41,7 @@ func init() {
 	acceleratorpodCmd.AddCommand(acceleratorpodCreateCmd)
 	acceleratorpodCmd.AddCommand(acceleratorpodGetCmd)
 	acceleratorpodCmd.AddCommand(acceleratorpodDeleteCmd)
+	acceleratorpodCmd.AddCommand(acceleratorpodListCmd)
 }
 
 var (
@@ -48,6 +49,57 @@ var (
 	nodeCount                   int
 	additionalNetworkInterfaces int
 )
+
+// acceleratorpodListCmd represents the list command for accelerator pods (node pools)
+var acceleratorpodListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List accelerator node pools in a GKE cluster",
+	Long: `Lists all GKE node pools that were created and tagged by dranetctl
+as accelerator pods. It identifies these node pools by looking for the
+'dra.net/acceleratorpod: "true"' label.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if clusterName == "" {
+			return fmt.Errorf("cluster name not explicitly provided")
+		}
+		// Try to get the nodepool from the cluster
+		if location == "-" {
+			return fmt.Errorf("location for cluster %s not specified", clusterName)
+		}
+		ctx := context.Background()
+
+		// Get the cluster to list the node pools
+		req := &containerpb.GetClusterRequest{
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, location, clusterName),
+		}
+
+		cluster, err := ContainersClient.GetCluster(ctx, req)
+		if err != nil {
+			return fmt.Errorf("failed to get cluster: %w", err)
+		}
+
+		var acceleratorNodePools []string
+		for _, np := range cluster.NodePools {
+			if np.Config != nil && np.Config.Labels != nil {
+				if val, ok := np.Config.Labels["dra.net/acceleratorpod"]; ok && val == "true" {
+					acceleratorNodePools = append(acceleratorNodePools, np.Name)
+				}
+			}
+		}
+
+		if len(acceleratorNodePools) == 0 {
+			fmt.Printf("No accelerator node pools found in cluster %s with label dra.net/acceleratorpod: \"true\".\n", clusterName)
+			return nil
+		}
+
+		fmt.Printf("There are %d dranet accelerator node pools in cluster %s:\n", len(acceleratorNodePools), clusterName)
+		fmt.Println("---")
+		for _, name := range acceleratorNodePools {
+			fmt.Println(name)
+		}
+
+		return nil
+	},
+}
 
 // acceleratorpodCreateCmd represents the create subcommand for acceleratorpod
 var acceleratorpodCreateCmd = &cobra.Command{
@@ -109,7 +161,9 @@ network-aware placement. This group of machines is referred to as an accelerator
 			Config: &containerpb.NodeConfig{
 				MachineType: machineType,
 				// TODO allow to set labels and taints
-				Labels: map[string]string{"dra.net/acceleratorpod": "true"}},
+				Labels:         map[string]string{"dra.net/acceleratorpod": "true"},
+				ResourceLabels: map[string]string{"dra.net/acceleratorpod": "true"},
+			},
 			NetworkConfig: &containerpb.NodeNetworkConfig{
 				AdditionalNodeNetworkConfigs: additionalNetworkConfigs,
 			},
@@ -160,7 +214,6 @@ func init() {
 	// Mark required flags for the create command
 	_ = acceleratorpodCreateCmd.MarkFlagRequired("machine-type")
 	_ = acceleratorpodCreateCmd.MarkFlagRequired("node-count")
-	_ = acceleratorpodCreateCmd.MarkFlagRequired("additional-network-interfaces")
 }
 
 // acceleratorpodGetCmd represents the get subcommand for acceleratorpod
