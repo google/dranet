@@ -20,7 +20,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 
+	"github.com/caarlos0/log"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 	"github.com/google/dranet/pkg/apis"
 
 	"github.com/vishvananda/netlink"
@@ -241,6 +246,109 @@ func nsDetachNetdev(containerNsPAth string, devName string, outName string) erro
 
 	if err = netlink.LinkSetUp(hostDev); err != nil {
 		return fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
+	}
+	return nil
+}
+
+// detachEBPFPrograms detaches all eBPF programs (TC and TCX) from a given network interface.
+// It attempts to remove both classic TC filters and newer TCX programs.
+// Returns an aggregated error if any detachment fails.
+func detachEBPFPrograms(containerNsPAth string, ifName string) error {
+	containerNs, err := netns.GetFromPath(containerNsPAth)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, ifName, err)
+	}
+	defer containerNs.Close()
+	// to avoid golang problem with goroutines we create the socket in the
+	// namespace and use it directly
+	nhNs, err := netlink.NewHandleAt(containerNs)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace handle: %w", err)
+	}
+	defer nhNs.Close()
+
+	device, err := nhNs.LinkByName(ifName)
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+	// Detach TC filters (legacy)
+	klog.V(2).Infof("Attempting to detach TC filters from interface %s", device.Attrs().Name)
+	for _, parent := range []uint32{netlink.HANDLE_MIN_INGRESS, netlink.HANDLE_MIN_EGRESS} {
+		filters, err := netlink.FilterList(device, parent)
+		if err != nil {
+			klog.V(4).Infof("Could not list TC filters for interface %s (parent %d): %v", device.Attrs().Name, parent, err)
+			continue
+		}
+		for _, f := range filters {
+			if bpfFilter, ok := f.(*netlink.BpfFilter); ok {
+				klog.V(4).Infof("Deleting TC filter %s from interface %s (parent %d)", bpfFilter.Name, device.Attrs().Name, parent)
+				if err := netlink.FilterDel(f); err != nil {
+					errs = append(errs, fmt.Errorf("failed to delete TC filter %s on %s: %w", bpfFilter.Name, device.Attrs().Name, err))
+				}
+			}
+		}
+	}
+
+	// Detach TCX programs
+	klog.V(2).Infof("Attempting to detach TCX programs from interface %s", device.Attrs().Name)
+	for _, attach := range []ebpf.AttachType{ebpf.AttachTCXIngress, ebpf.AttachTCXEgress} {
+		result, err := link.QueryPrograms(link.QueryOptions{
+			Target: int(device.Attrs().Index),
+			Attach: attach,
+		})
+		if err != nil {
+			// It's common for there to be no programs of a certain attach type
+			continue
+		}
+		for _, p := range result.Programs {
+			prog, err := ebpf.NewProgramFromID(p.ID)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to get eBPF program with ID %d: %w", p.ID, err))
+				continue
+			}
+			defer prog.Close() // Ensure the program handle is closed
+
+			prog.Close()
+
+			klog.V(4).Infof("Detaching TCX program %s (ID: %d) from interface %s", prog.Info().Name, prog.ID(), device.Attrs().Name)
+			if _, err := link.DetachProgram(prog); err != nil {
+				errs = append(errs, fmt.Errorf("failed to detach eBPF program %s (ID %d) from %s: %w", prog.Info().Name, prog.ID(), device.Attrs().Name, err))
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// detachTCX attempts to open the link at progName in bpffsDir and unpins it.
+// Only returns unrecoverable errors. Returns nil if the link doesn't exist or
+// if removal was successful.
+func detachTCX(bpffsDir, progName string) error {
+	pin := filepath.Join(bpffsDir, progName)
+	err := unpinLink(pin)
+	if err == nil {
+		log.Infof("Removed tcx link at %s", pin)
+		return nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+
+	// The pinned link exists, something went wrong unpinning it.
+	return fmt.Errorf("unpinning tcx link: %w", err)
+}
+
+func unpinLink(pin string) error {
+	l, err := link.LoadPinnedLink(pin, &ebpf.LoadPinOptions{})
+	if err != nil {
+		return fmt.Errorf("opening pinned link %s: %w", pin, err)
+	}
+	defer l.Close()
+
+	if err := l.Unpin(); err != nil {
+		return fmt.Errorf("unpinning link %s: %w", pin, err)
 	}
 	return nil
 }
