@@ -62,6 +62,10 @@ type InterfaceConfig struct {
 	// GROv4MaxSize sets the maximum Generic Receive Offload size.
 	// Managed by `ip link set <dev> gro_ipv4_max_size <val>`. For enabling Big TCP.
 	GROIPv4MaxSize *int32 `json:"groIPv4MaxSize,omitempty"`
+
+	// DisableEBPFPrograms, if true, attempts to detach all eBPF programs
+	// (both TC and TCX) from the network interface assigned to the Pod.
+	DisableEBPFPrograms *bool `json:"disableEbpfPrograms,omitempty"`
 }
 
 // RouteConfig represents a network route configuration.
