@@ -154,6 +154,16 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			}
 		}
 
+		// Check if the ebpf programs should be disabled
+		if config.Network.Interface.DisableEBPFPrograms != nil &&
+			*config.Network.Interface.DisableEBPFPrograms {
+			err = detachEBPFPrograms(ns, ifNameInNs)
+			if err != nil {
+				klog.Infof("error disabling ebpf programs for %s in ns %s: %v", ifNameInNs, ns, err)
+				return fmt.Errorf("error disabling ebpf programs for %s in ns %s: %v", ifNameInNs, ns, err)
+			}
+		}
+
 		// Configure routes
 		err = applyRoutingConfig(ns, ifNameInNs, config.Network.Routes)
 		if err != nil {
