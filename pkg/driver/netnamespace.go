@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"syscall"
 
 	"github.com/google/dranet/pkg/apis"
 
@@ -79,7 +80,7 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 		if route.Source != "" {
 			r.Src = net.ParseIP(route.Source)
 		}
-		if err := nhNs.RouteAdd(&r); err != nil {
+		if err := nhNs.RouteAdd(&r); err != nil && !errors.Is(err, syscall.EEXIST) {
 			errorList = append(errorList, fmt.Errorf("fail to add route %s for interface %s on namespace %s: %w", r.String(), ifName, containerNsPAth, err))
 		}
 
