@@ -42,6 +42,8 @@ enable both the [feature gates and the API
 groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation)
 for DRA until it reaches GA.
 
+![](site/static/images/dranet.gif)
+
 ### Kubernetes Cluster with DRA
 
 #### KIND

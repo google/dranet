@@ -6,6 +6,8 @@ weight: 1150
 
 DraNet is a Kubernetes Network Driver that uses Dynamic Resource Allocation (DRA) to deliver high-performance networking for demanding applications in Kubernetes.
 
+![](/images/dranet.gif)
+
 ## Key Features
 
 - **DRA Integration:** Leverages the power of Kubernetes' Dynamic Resource Allocation.
