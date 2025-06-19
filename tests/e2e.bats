@@ -175,3 +175,24 @@
   [ "$status" -eq 0 ]
   [[ "$output" == "dummy_bpf.o:[classifier]" ]]
 }
+
+@test "verify resourceslices are cleaned up after driver removed" {
+  namespace="kube-system"
+  ds_name="dranet"
+
+  # Scale down the DraNet driver
+  run kubectl scale ds "$ds_name" -n "$namespace" --replicas=0
+  [ "$status" -eq 0 ]
+
+  # Wait for the DraNet driver pods to be deleted
+  run kubectl wait --for=delete pod -l app=dranet -n "$namespace" --timeout=60s
+  [ "$status" -eq 0 ]
+
+  # Ensure no DraNet pods remain
+  run kubectl get pods -n "$namespace" -l app=dranet --no-headers
+  [ "$status" -ne 0 ] || [ -z "$output" ]
+
+  # Check if any ResourceSlices remain
+  run kubectl get resourceslices -A --no-headers
+  [[ "$output" != *"dranet"* ]]
+}
