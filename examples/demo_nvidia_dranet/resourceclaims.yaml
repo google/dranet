@@ -1,0 +1,50 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  name: 2-gpu
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        deviceClassName: gpu.nvidia.com
+        count: 2
+        selectors:
+        - cel:
+            expression: |
+                device.attributes["gpu.nvidia.com"].index < 2
+        
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  name: 2-nic
+spec:
+  spec:
+    devices:
+      requests:
+      - name: nic
+        deviceClassName: dranet
+        count: 2
+        selectors:
+        - cel:
+            expression: device.attributes["dra.net"].rdma == true &&
+              (
+                (device.attributes["dra.net"].ifName.startsWith("gpu") &&
+                 device.attributes["dra.net"].ifName.endsWith("rdma0") &&
+                 int(device.attributes["dra.net"].ifName.substring(3, 4)) < 2)
+              )
