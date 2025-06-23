@@ -129,8 +129,7 @@ spec:
             cpu: "100m"
             memory: "50Mi"
         securityContext:
-          capabilities:
-            add: ["NET_ADMIN", "SYS_ADMIN"]
+          privileged: true
         readinessProbe:
           httpGet:
             path: /healthz
@@ -147,6 +146,9 @@ spec:
           mountPropagation: HostToContainer
         - name: infiniband
           mountPath: /dev/infiniband
+          mountPropagation: HostToContainer
+        - name: bpf-programs
+          mountPath: /sys/fs/bpf
           mountPropagation: HostToContainer
       volumes:
       - name: device-plugin
@@ -167,4 +169,7 @@ spec:
       - name: etc
         hostPath:
           path: /etc
+      - name: bpf-programs
+        hostPath:
+          path: /sys/fs/bpf
 ---

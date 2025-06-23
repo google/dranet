@@ -278,6 +278,17 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			}
 		}
 
+		// Remove the pinned programs before the NRI hooks since it
+		// has to walk the entire bpf virtual filesystem and is slow
+		// TODO: check if there is some other way to do this
+		if podCfg.Network.Interface.DisableEBPFPrograms != nil &&
+			*podCfg.Network.Interface.DisableEBPFPrograms {
+			err := unpinBPFPrograms(ifName)
+			if err != nil {
+				klog.Infof("error unpinning ebpf programs for %s : %v", ifName, err)
+			}
+		}
+
 		device := kubeletplugin.Device{
 			Requests:   []string{result.Request},
 			PoolName:   result.Pool,
