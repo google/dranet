@@ -23,9 +23,9 @@ require (
 	golang.org/x/time v0.12.0
 	google.golang.org/api v0.237.0
 	google.golang.org/protobuf v1.36.6
-	k8s.io/api v0.33.1
-	k8s.io/apimachinery v0.33.1
-	k8s.io/client-go v0.33.1
+	k8s.io/api v0.33.2
+	k8s.io/apimachinery v0.33.2
+	k8s.io/client-go v0.33.2
 	k8s.io/cloud-provider-gcp v0.0.0-20250326051131-7056e3facd39
 	k8s.io/component-helpers v0.33.1
 	k8s.io/dynamic-resource-allocation v0.33.1
