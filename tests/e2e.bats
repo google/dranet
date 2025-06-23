@@ -150,7 +150,6 @@
 
 
 # Test case for validating ebpf attributes are exposed via resource slice.
-# TODO use tcx hooks too
 @test "validate bpf filter attributes" {
   docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy5 type dummy"
@@ -162,6 +161,36 @@
   [ "$status" -eq 0 ]
   [[ "$output" == *"dummy_bpf.o:[classifier] direct-action"* ]]
 
+  for attempt in {1..4}; do
+    run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/ebpf.bool}'
+    if [ "$status" -eq 0 ] && [[ "$output" == "true" ]]; then
+      break
+    fi
+    if (( attempt < 4 )); then
+      sleep 5
+    fi
+  done
+  [ "$status" -eq 0 ]
+  [[ "$output" == "true" ]]
+
+  # Validate bpfName attribute
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcFilterNames.string}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "dummy_bpf.o:[classifier]" ]]
+}
+
+# This reuses previous test
+@test "validate tcx bpf filter attributes" {
+  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf_tcx.o "$CLUSTER_NAME"-worker2:/dummy_bpf_tcx.o
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "chmod +x bpftool"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool prog load dummy_bpf_tcx.o /sys/fs/bpf/dummy_prog_tcx"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net attach tcx_ingress pinned /sys/fs/bpf/dummy_prog_tcx dev dummy5"
+
+  run docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net show dev dummy5"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tcx/ingress handle_ingress prog_id"* ]]
+
   # Wait for the interface to be discovered
   sleep 5
 
@@ -171,7 +200,25 @@
   [[ "$output" == "true" ]]
 
   # Validate bpfName attribute
-  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcFilterNames.string}'
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcxProgramNames.string}'
   [ "$status" -eq 0 ]
-  [[ "$output" == "dummy_bpf.o:[classifier]" ]]
+  [[ "$output" == "handle_ingress" ]]
+}
+
+# This reuses previous test
+@test "validate bpf programs are removed" {
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
+  kubectl wait --for=condition=ready pod/pod-ebpf --timeout=300s
+
+  run kubectl exec pod-ebpf -- ash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz && chmod +x bpftool"
+  [ "$status" -eq 0 ]
+
+  run kubectl exec pod-ebpf -- ash -c "./bpftool net show dev dummy5"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"tcx/ingress handle_ingress prog_id"* ]]
+  [[ "$output" != *"dummy_bpf.o:[classifier]"* ]]
+
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
 }
