@@ -1,0 +1,369 @@
+<!doctype html><html itemscope itemtype=http://schema.org/WebPage lang=en class=no-js><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><link rel="shortcut icon" href=/favicons/favicon.ico><link rel=apple-touch-icon href=/favicons/apple-touch-icon-180x180.png sizes=180x180><link rel=icon type=image/png href=/favicons/favicon-16x16.png sizes=16x16><link rel=icon type=image/png href=/favicons/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/favicons/android-36x36.png sizes=36x36><link rel=icon type=image/png href=/favicons/android-48x48.png sizes=48x48><link rel=icon type=image/png href=/favicons/android-72x72.png sizes=72x72><link rel=icon type=image/png href=/favicons/android-96x96.png sizes=96x96><link rel=icon type=image/png href=/favicons/android-144x144.png sizes=144x144><link rel=icon type=image/png href=/favicons/android-192x192.png sizes=192x192><title>GKE with NVIDIA DRA and DraNEt | DraNet</title>
+<meta name=description content='To get started, create a GKE cluster with DRA support and the corresponding VPC and subnets
+It should look like
+PROJECT="gke-dranet" CLUSTER="dranet-dranet" REGION="us-west8" ZONE="us-west8-c" GVNIC_NETWORK_PREFIX="dranet-gvnic" RDMA_NETWORK_PREFIX="dranet-rdma" VERSION="1.33" gcloud container clusters create "${CLUSTER}" \ --cluster-version="${VERSION}" \ --enable-multi-networking \ --enable-dataplane-v2 \ --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \ --no-enable-autorepair \ --no-enable-autoupgrade \ --zone="${ZONE}" \ --project="${PROJECT}" # Create a VPC for the additional Google Titanium CPU NIC gcloud compute --project=${PROJECT?} \ networks create \ ${GVNIC_NETWORK_PREFIX?}-net \ --subnet-mode=custom gcloud compute --project=${PROJECT?'><meta property="og:url" content="https://dranet.dev/docs/user/nvidia-dranet/"><meta property="og:site_name" content="DraNet"><meta property="og:title" content="GKE with NVIDIA DRA and DraNEt"><meta property="og:description" content='To get started, create a GKE cluster with DRA support and the corresponding VPC and subnets
+It should look like
+PROJECT="gke-dranet" CLUSTER="dranet-dranet" REGION="us-west8" ZONE="us-west8-c" GVNIC_NETWORK_PREFIX="dranet-gvnic" RDMA_NETWORK_PREFIX="dranet-rdma" VERSION="1.33" gcloud container clusters create "${CLUSTER}" \ --cluster-version="${VERSION}" \ --enable-multi-networking \ --enable-dataplane-v2 \ --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \ --no-enable-autorepair \ --no-enable-autoupgrade \ --zone="${ZONE}" \ --project="${PROJECT}" # Create a VPC for the additional Google Titanium CPU NIC gcloud compute --project=${PROJECT?} \ networks create \ ${GVNIC_NETWORK_PREFIX?}-net \ --subnet-mode=custom gcloud compute --project=${PROJECT?'><meta property="og:locale" content="en-us"><meta property="og:type" content="article"><meta property="article:section" content="docs"><meta property="article:published_time" content="2025-06-20T10:10:40+00:00"><meta property="article:modified_time" content="2025-06-20T10:10:40+00:00"><meta itemprop=name content="GKE with NVIDIA DRA and DraNEt"><meta itemprop=description content='To get started, create a GKE cluster with DRA support and the corresponding VPC and subnets
+It should look like
+PROJECT="gke-dranet" CLUSTER="dranet-dranet" REGION="us-west8" ZONE="us-west8-c" GVNIC_NETWORK_PREFIX="dranet-gvnic" RDMA_NETWORK_PREFIX="dranet-rdma" VERSION="1.33" gcloud container clusters create "${CLUSTER}" \ --cluster-version="${VERSION}" \ --enable-multi-networking \ --enable-dataplane-v2 \ --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \ --no-enable-autorepair \ --no-enable-autoupgrade \ --zone="${ZONE}" \ --project="${PROJECT}" # Create a VPC for the additional Google Titanium CPU NIC gcloud compute --project=${PROJECT?} \ networks create \ ${GVNIC_NETWORK_PREFIX?}-net \ --subnet-mode=custom gcloud compute --project=${PROJECT?'><meta itemprop=datePublished content="2025-06-20T10:10:40+00:00"><meta itemprop=dateModified content="2025-06-20T10:10:40+00:00"><meta itemprop=wordCount content="1961"><meta name=twitter:card content="summary"><meta name=twitter:title content="GKE with NVIDIA DRA and DraNEt"><meta name=twitter:description content='To get started, create a GKE cluster with DRA support and the corresponding VPC and subnets
+It should look like
+PROJECT="gke-dranet" CLUSTER="dranet-dranet" REGION="us-west8" ZONE="us-west8-c" GVNIC_NETWORK_PREFIX="dranet-gvnic" RDMA_NETWORK_PREFIX="dranet-rdma" VERSION="1.33" gcloud container clusters create "${CLUSTER}" \ --cluster-version="${VERSION}" \ --enable-multi-networking \ --enable-dataplane-v2 \ --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \ --no-enable-autorepair \ --no-enable-autoupgrade \ --zone="${ZONE}" \ --project="${PROJECT}" # Create a VPC for the additional Google Titanium CPU NIC gcloud compute --project=${PROJECT?} \ networks create \ ${GVNIC_NETWORK_PREFIX?}-net \ --subnet-mode=custom gcloud compute --project=${PROJECT?'><link rel=preload href=/scss/main.min.48c25d0a5a23a1e8cae94d6c5e7622061e5345cf098171b1d6ee41d8e309e6c8.css as=style integrity="sha256-SMJdClojoejK6U1sXnYiBh5TRc8JgXGx1u5B2OMJ5sg=" crossorigin=anonymous><link href=/scss/main.min.48c25d0a5a23a1e8cae94d6c5e7622061e5345cf098171b1d6ee41d8e309e6c8.css rel=stylesheet integrity="sha256-SMJdClojoejK6U1sXnYiBh5TRc8JgXGx1u5B2OMJ5sg=" crossorigin=anonymous><script src=https://code.jquery.com/jquery-3.7.1.min.js integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin=anonymous></script><script async src="https://www.googletagmanager.com/gtag/js?id=G-YH3W884R6Z"></script><script>var dnt,doNotTrack=!1;if(!1&&(dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes"),!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-YH3W884R6Z")}</script></head><body class=td-page><header><nav class="td-navbar js-navbar-scroll" data-bs-theme=dark><div class="container-fluid flex-column flex-md-row"><a class=navbar-brand href=/><span class="navbar-brand__logo navbar-logo"></span><span class=navbar-brand__name>DraNet</span></a><div class="td-navbar-nav-scroll ms-md-auto" id=main_navbar><ul class=navbar-nav><li class=nav-item><a class=nav-link href=/docs><span>Home</span></a></li><li class=nav-item><a class=nav-link href=/docs/user><span>User Guides</span></a></li><li class=nav-item><a class=nav-link href=/docs/concepts><span>Concepts</span></a></li><li class=nav-item><a class=nav-link href=/docs/contributing><span>Contributing</span></a></li></ul></div><div class="d-none d-lg-block"><div class=td-search><div class=td-search__icon></div><input type=search class="td-search__input form-control td-search-input" placeholder="Search this site…" aria-label="Search this site…" autocomplete=off></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><aside class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none"><div id=td-sidebar-menu class=td-sidebar__inner><form class="td-sidebar__search d-flex align-items-center"><div class=td-search><div class=td-search__icon></div><input type=search class="td-search__input form-control td-search-input" placeholder="Search this site…" aria-label="Search this site…" autocomplete=off></div><button class="btn btn-link td-sidebar__toggle d-md-none p-0 ms-3 fas fa-bars" type=button data-bs-toggle=collapse data-bs-target=#td-section-nav aria-controls=td-section-nav aria-expanded=false aria-label="Toggle section navigation"></button></form><nav class="td-sidebar-nav collapse" id=td-section-nav><ul class="td-sidebar-nav__section pe-md-3 ul-0"><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id=m-docs-li><a href=/docs/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section tree-root" id=m-docs><span>DraNet</span></a><ul class=ul-1><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsquick-start-li><a href=/docs/quick-start/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsquick-start><span>Quick Start</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id=m-docsuser-li><a href=/docs/user/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id=m-docsuser><span>User Guides</span></a><ul class="ul-2 foldable"><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id=m-docsusernvidia-dranet-li><a href=/docs/user/nvidia-dranet/ class="align-left ps-0 active td-sidebar-link td-sidebar-link__page" id=m-docsusernvidia-dranet><span class=td-sidebar-nav-active-item>GKE with NVIDIA DRA and DraNEt</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsusergke-rdma-li><a href=/docs/user/gke-rdma/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsusergke-rdma><span>GKE and GPUDirect RDMA with DRA</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsusermpi-operator-li><a href=/docs/user/mpi-operator/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsusermpi-operator><span>MPI Operator on GKE and GPUDirect RDMA</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsuserinterface-configuration-li><a href=/docs/user/interface-configuration/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsuserinterface-configuration><span>Interface Configuration</span></a></li></ul></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id=m-docsconcepts-li><a href=/docs/concepts/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id=m-docsconcepts><span>Concepts</span></a><ul class="ul-2 foldable"><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptslinux-network-interfaces-li><a href=/docs/concepts/linux-network-interfaces/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptslinux-network-interfaces><span>Linux Network Namespaces and Interfaces</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptsflexible-networks-li><a href=/docs/concepts/flexible-networks/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptsflexible-networks><span>Making Networks Flexible</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptsinterface-status-li><a href=/docs/concepts/interface-status/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptsinterface-status><span>Interface Status</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptshardware-efficiency-li><a href=/docs/concepts/hardware-efficiency/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptshardware-efficiency><span>Hardware Efficiency</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptsrdma-li><a href=/docs/concepts/rdma/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptsrdma><span>RDMA</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptsrdma-modes-li><a href=/docs/concepts/rdma-modes/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptsrdma-modes><span>RDMA Device Handling</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptshowitworks-li><a href=/docs/concepts/howitworks/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptshowitworks><span>How It Works</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docsconceptsreferences-li><a href=/docs/concepts/references/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docsconceptsreferences><span>References</span></a></li></ul></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id=m-docscontributing-li><a href=/docs/contributing/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id=m-docscontributing><span>Contributing</span></a><ul class="ul-2 foldable"><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docscontributingdeveloper-guide-li><a href=/docs/contributing/developer-guide/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docscontributingdeveloper-guide><span>Developer Guide</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-docscontributingcontributing-li><a href=/docs/contributing/contributing/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-docscontributingcontributing><span>Contributing</span></a></li></ul></li></ul></li></ul></nav></div></aside><aside class="d-none d-xl-block col-xl-2 td-sidebar-toc d-print-none"><div class="td-page-meta ms-2 pb-1 pt-2 mb-0"><a href=https://github.com/google/dranet/tree/main/site/content/docs/user/nvidia-dranet.md class="td-page-meta--view td-page-meta__view" target=_blank rel=noopener><i class="fa-solid fa-file-lines fa-fw"></i> View page source</a>
+<a href=https://github.com/google/dranet/edit/main/site/content/docs/user/nvidia-dranet.md class="td-page-meta--edit td-page-meta__edit" target=_blank rel=noopener><i class="fa-solid fa-pen-to-square fa-fw"></i> Edit this page</a>
+<a href="https://github.com/google/dranet/new/main/site/content/docs/user?filename=change-me.md&amp;value=---%0Atitle%3A+%22Long+Page+Title%22%0AlinkTitle%3A+%22Short+Nav+Title%22%0Aweight%3A+100%0Adescription%3A+%3E-%0A+++++Page+description+for+heading+and+indexes.%0A---%0A%0A%23%23+Heading%0A%0AEdit+this+template+to+create+your+new+page.%0A%0A%2A+Give+it+a+good+name%2C+ending+in+%60.md%60+-+e.g.+%60getting-started.md%60%0A%2A+Edit+the+%22front+matter%22+section+at+the+top+of+the+page+%28weight+controls+how+its+ordered+amongst+other+pages+in+the+same+directory%3B+lowest+number+first%29.%0A%2A+Add+a+good+commit+message+at+the+bottom+of+the+page+%28%3C80+characters%3B+use+the+extended+description+field+for+more+detail%29.%0A%2A+Create+a+new+branch+so+you+can+preview+your+new+file+and+request+a+review+via+Pull+Request.%0A" class="td-page-meta--child td-page-meta__child" target=_blank rel=noopener><i class="fa-solid fa-pen-to-square fa-fw"></i> Create child page</a>
+<a href="https://github.com/google/dranet/issues/new?title=GKE%20with%20NVIDIA%20DRA%20and%20DraNEt" class="td-page-meta--issue td-page-meta__issue" target=_blank rel=noopener><i class="fa-solid fa-list-check fa-fw"></i> Create documentation issue</a></div><div class=td-toc><nav id=TableOfContents><ul><li><ul><li></li></ul></li></ul></nav></div></aside><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><nav aria-label=breadcrumb class=td-breadcrumbs><ol class=breadcrumb><li class=breadcrumb-item><a href=/docs/>DraNet</a></li><li class=breadcrumb-item><a href=/docs/user/>User Guides</a></li><li class="breadcrumb-item active" aria-current=page>GKE with NVIDIA DRA and DraNEt</li></ol></nav><div class=td-content><h1>GKE with NVIDIA DRA and DraNEt</h1><header class=article-meta></header><p>To get started, create a <a href=https://cloud.google.com/kubernetes-engine/docs/how-to/set-up-dra>GKE cluster with DRA support</a> and the corresponding <a href=https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute-custom#create-vpcs-and-subnets>VPC and subnets</a></p><p>It should look like</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>PROJECT=<span style=color:#a31515>&#34;gke-dranet&#34;</span>
+</span></span><span style=display:flex><span>CLUSTER=<span style=color:#a31515>&#34;dranet-dranet&#34;</span>
+</span></span><span style=display:flex><span>REGION=<span style=color:#a31515>&#34;us-west8&#34;</span>
+</span></span><span style=display:flex><span>ZONE=<span style=color:#a31515>&#34;us-west8-c&#34;</span>
+</span></span><span style=display:flex><span>GVNIC_NETWORK_PREFIX=<span style=color:#a31515>&#34;dranet-gvnic&#34;</span>
+</span></span><span style=display:flex><span>RDMA_NETWORK_PREFIX=<span style=color:#a31515>&#34;dranet-rdma&#34;</span>
+</span></span><span style=display:flex><span>VERSION=<span style=color:#a31515>&#34;1.33&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>gcloud container clusters create <span style=color:#a31515>&#34;</span><span style=color:#a31515>${</span>CLUSTER<span style=color:#a31515>}</span><span style=color:#a31515>&#34;</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --cluster-version=<span style=color:#a31515>&#34;</span><span style=color:#a31515>${</span>VERSION<span style=color:#a31515>}</span><span style=color:#a31515>&#34;</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --enable-multi-networking <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --enable-dataplane-v2 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --no-enable-autorepair <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --no-enable-autoupgrade <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --zone=<span style=color:#a31515>&#34;</span><span style=color:#a31515>${</span>ZONE<span style=color:#a31515>}</span><span style=color:#a31515>&#34;</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --project=<span style=color:#a31515>&#34;</span><span style=color:#a31515>${</span>PROJECT<span style=color:#a31515>}</span><span style=color:#a31515>&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:green># Create a VPC for the additional Google Titanium CPU NIC</span>
+</span></span><span style=display:flex><span>gcloud compute --project=<span style=color:#a31515>${</span>PROJECT?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  networks create <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  <span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX?<span style=color:#a31515>}</span>-net <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --subnet-mode=custom
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>gcloud compute --project=<span style=color:#a31515>${</span>PROJECT?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  networks subnets create <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  <span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX?<span style=color:#a31515>}</span>-sub <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --network=<span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX?<span style=color:#a31515>}</span>-net <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --region=<span style=color:#a31515>${</span>REGION?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --range=192.168.0.0/24
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>gcloud compute --project=<span style=color:#a31515>${</span>PROJECT?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  firewall-rules create <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  <span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX?<span style=color:#a31515>}</span>-internal <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --network=<span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX?<span style=color:#a31515>}</span>-net <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --action=ALLOW <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --rules=tcp:0-65535,udp:0-65535,icmp <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --source-ranges=192.168.0.0/16
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:green># Create HPC VPC for the RDMA NICs with 8 subnets.</span>
+</span></span><span style=display:flex><span>gcloudcompute --project=<span style=color:#a31515>${</span>PROJECT?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  networks create <span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX?<span style=color:#a31515>}</span>-net <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --network-profile=<span style=color:#a31515>${</span>ZONE?<span style=color:#a31515>}</span>-vpc-roce <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --subnet-mode=custom
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:green># Create subnets for the HPC VPC.</span>
+</span></span><span style=display:flex><span><span style=color:#00f>for</span> N in <span style=color:#00f>$(</span>seq 0 7<span style=color:#00f>)</span>; <span style=color:#00f>do</span>
+</span></span><span style=display:flex><span>  gcloud compute --project=<span style=color:#a31515>${</span>PROJECT?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    networks subnets create <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    <span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX?<span style=color:#a31515>}</span>-sub-$N <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX?<span style=color:#a31515>}</span>-net <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --region=<span style=color:#a31515>${</span>REGION?<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>    --range=192.168.<span style=color:#00f>$((</span>N+1<span style=color:#00f>))</span>.0/24 &amp;  <span style=color:green># offset to avoid overlap with gvnics</span>
+</span></span><span style=display:flex><span><span style=color:#00f>done</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>gcloud container node-pools create dranet-a4 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --cluster <span style=color:#a31515>${</span>CLUSTER<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --project <span style=color:#a31515>${</span>PROJECT<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --zone <span style=color:#a31515>${</span>ZONE<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --node-locations <span style=color:#a31515>${</span>ZONE<span style=color:#a31515>}</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --machine-type a4-highgpu-8g<span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --accelerator <span style=color:#a31515>&#34;type=nvidia-b200,count=8,gpu-driver-version=default&#34;</span> --num-nodes <span style=color:#a31515>&#34;2&#34;</span> <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>GVNIC_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-0 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-1 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-2 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-3 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-4 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-5 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-6 <span style=color:#a31515>\
+</span></span></span><span style=display:flex><span><span style=color:#a31515></span>  --additional-node-network network=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-net,subnetwork=<span style=color:#a31515>${</span>RDMA_NETWORK_PREFIX<span style=color:#a31515>}</span>-sub-7
+</span></span></code></pre></div><p>Apply the following DaemonSet to install the RDMA binaries and the NCCL library on the node. The RDMA binaries are stored in <code>/home/kubernetes/bin/gib</code> directory and the NCCL library is stored in <code>/home/kubernetes/bin/nvidia/lib64</code> directory on the VM:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
+</span></span></code></pre></div><p>Install DRANet</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
+</span></span></code></pre></div><h4 id=installing-nvidia-dra-drivers>Installing Nvidia DRA Drivers</h4><p>In order to install the NVIDIA DRA Drivers you will need to clone the <a href=https://github.com/NVIDIA/k8s-dra-driver-gpu>NVIDIA DRA</a> repo. Ensure you have <a href=https://helm.sh/docs/intro/install/>helm</a> installed.</p><pre tabindex=0><code>helm upgrade -i --create-namespace --namespace nvidia-dra-driver-gpu nvidia-dra-driver-gpu ./k8s-dra-driver-gpu/deployments/helm/nvidia-dra-driver-gpu --set gpuResourcesEnabledOverride=true --set nvidiaDriverRoot=/home/kubernetes/bin/nvidia --wait 
+</code></pre><p>Once this is done, you can run</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>kubectl get pods -n nvidia-dra-driver-gpu
+</span></span><span style=display:flex><span>NAME                                                READY   STATUS     RESTARTS   AGE
+</span></span><span style=display:flex><span>nvidia-dra-driver-gpu-controller-66696889cd-86m8f   1/1     Running    0          13m
+</span></span></code></pre></div><p>If you only see the controller like above, you will need to label the nodes with GPUs on them in order to get the kubelet plugin running.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>kubectl label node -l cloud.google.com/gke-nodepool=&lt;nodepool-name&gt; --overwrite nvidia.com/gpu.present=true
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>kubectl get pods -n nvidia-dra-driver-gpu
+</span></span><span style=display:flex><span>NAME                                                READY   STATUS     RESTARTS   AGE
+</span></span><span style=display:flex><span>nvidia-dra-driver-gpu-controller-66696889cd-86m8f   1/1     Running    0          12m
+</span></span><span style=display:flex><span>nvidia-dra-driver-gpu-kubelet-plugin-ffzgx          2/2     Running    0          34s
+</span></span><span style=display:flex><span>nvidia-dra-driver-gpu-kubelet-plugin-qsp2d          2/2     Running    0          33s
+</span></span></code></pre></div><p>Once you see all these pods, the NVIDIA DRA plugin is working as expected</p><h4 id=pci-attributes-and-gpu-indices>PCI Attributes and GPU Indices</h4><p><a href=https://github.com/kubernetes/enhancements/pull/5316>KEP #4381</a> proposes the standard PCI Root attribute. This is an important field to have for devices since the alignment of multiple devices on the PCI bus can have major implications of how fast the devices can communicate with each other.</p><p>At the moment since the KEP just got merged, many drivers do not implement it. In the meantime, the GPU Index can be used for NVIDIA and GKE also provides a numerical index on the NIC itself to show whether it is aligned with the GPU or not.</p><h4 id=creating-a-gpu-workload>Creating a GPU workload</h4><p>We can create a <code>ResourceClaimTemplate</code> to specify what GPUs we want. We currently don&rsquo;t have PCI attributes yet in the NVIDIA driver library so we will want to specify the index for the time being. This isn&rsquo;t too important for this section but will come into relevance once we start pairing NICs to the nodes.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1beta1
+</span></span><span style=display:flex><span>kind: ResourceClaimTemplate
+</span></span><span style=display:flex><span>metadata:
+</span></span><span style=display:flex><span>  name: 2-gpu
+</span></span><span style=display:flex><span>spec:
+</span></span><span style=display:flex><span>  spec:
+</span></span><span style=display:flex><span>    devices:
+</span></span><span style=display:flex><span>      requests:
+</span></span><span style=display:flex><span>      - name: gpu
+</span></span><span style=display:flex><span>        deviceClassName: gpu.nvidia.com
+</span></span><span style=display:flex><span>        count: 2
+</span></span><span style=display:flex><span>        selectors:
+</span></span><span style=display:flex><span>        - cel:
+</span></span><span style=display:flex><span>            expression: |<span style=color:#a31515>
+</span></span></span><span style=display:flex><span><span style=color:#a31515>                device.attributes[&#34;gpu.nvidia.com&#34;].index &lt; 2</span>                
+</span></span></code></pre></div><p>Create a statefulset which claims these resources.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: apps/v1
+</span></span><span style=display:flex><span>kind: StatefulSet
+</span></span><span style=display:flex><span>metadata:
+</span></span><span style=display:flex><span>  name: nccl-gib-test
+</span></span><span style=display:flex><span>  labels:
+</span></span><span style=display:flex><span>    name: nccl-gib-test
+</span></span><span style=display:flex><span>spec:
+</span></span><span style=display:flex><span>  replicas: 2
+</span></span><span style=display:flex><span>  serviceName: nccl-gib-test
+</span></span><span style=display:flex><span>  selector:
+</span></span><span style=display:flex><span>    matchLabels:
+</span></span><span style=display:flex><span>      name: nccl-gib-test
+</span></span><span style=display:flex><span>  template:
+</span></span><span style=display:flex><span>    metadata:
+</span></span><span style=display:flex><span>      labels:
+</span></span><span style=display:flex><span>        name: nccl-gib-test
+</span></span><span style=display:flex><span>    spec:
+</span></span><span style=display:flex><span>      containers:
+</span></span><span style=display:flex><span>      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
+</span></span><span style=display:flex><span>        name: test
+</span></span><span style=display:flex><span>        securityContext:
+</span></span><span style=display:flex><span>          capabilities:
+</span></span><span style=display:flex><span>            add: [<span style=color:#a31515>&#34;IPC_LOCK&#34;</span>]
+</span></span><span style=display:flex><span>        volumeMounts:
+</span></span><span style=display:flex><span>          - name: gib
+</span></span><span style=display:flex><span>            mountPath: /usr/local/gib
+</span></span><span style=display:flex><span>          - name: shared-memory
+</span></span><span style=display:flex><span>            mountPath: /dev/shm
+</span></span><span style=display:flex><span>        env:
+</span></span><span style=display:flex><span>          - name: LD_LIBRARY_PATH
+</span></span><span style=display:flex><span>            value: /usr/local/nvidia/lib64
+</span></span><span style=display:flex><span>        command: [<span style=color:#a31515>&#34;/bin/bash&#34;</span>, <span style=color:#a31515>&#34;-c&#34;</span>]
+</span></span><span style=display:flex><span>        args:
+</span></span><span style=display:flex><span>          - |<span style=color:#a31515>
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            # we use a headless service to identify the workers that has the format &lt;hostname&gt;.&lt;service&gt;.&lt;ns&gt;.svc.&lt;zone&gt;
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            # hence we need to allow to resolve fqdn 
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            nvidia-smi -L
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            echo -e &#34;\norte_keep_fqdn_hostnames=t&#34; &gt;&gt; /etc/openmpi/openmpi-mca-params.conf
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            /scripts/container_entry.sh shell
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            source /usr/local/gib/scripts/set_nccl_env.sh
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            sleep infinity</span>            
+</span></span><span style=display:flex><span>        resources:
+</span></span><span style=display:flex><span>          claims:
+</span></span><span style=display:flex><span>          - name: gpu            
+</span></span><span style=display:flex><span>      volumes:
+</span></span><span style=display:flex><span>        - name: gib
+</span></span><span style=display:flex><span>          hostPath:
+</span></span><span style=display:flex><span>            path: /home/kubernetes/bin/gib
+</span></span><span style=display:flex><span>        - name: shared-memory
+</span></span><span style=display:flex><span>          emptyDir:
+</span></span><span style=display:flex><span>            medium: <span style=color:#a31515>&#34;Memory&#34;</span>
+</span></span><span style=display:flex><span>            sizeLimit: 250Gi
+</span></span><span style=display:flex><span>      resourceClaims:
+</span></span><span style=display:flex><span>        - name: gpu
+</span></span><span style=display:flex><span>          resourceClaimTemplateName: 2-gpu
+</span></span><span style=display:flex><span>      tolerations:
+</span></span><span style=display:flex><span>      - key: <span style=color:#a31515>&#34;nvidia.com/gpu&#34;</span>
+</span></span><span style=display:flex><span>        operator: <span style=color:#a31515>&#34;Equal&#34;</span>
+</span></span><span style=display:flex><span>        value: <span style=color:#a31515>&#34;present&#34;</span>
+</span></span><span style=display:flex><span>        effect: <span style=color:#a31515>&#34;NoSchedule&#34;</span>
+</span></span></code></pre></div><p>Note how unlike the other examples, we don&rsquo;t use the resources field in the spec to allocate GPUs, nor do we manually mount the Nvidia libraries. This is all handled by the DRA driver that Nvidia provides. Execing into one of these nodes and listing the gpus shows that two B200 GPUs were allocated.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/usr/bin# nvidia-smi -L
+</span></span><span style=display:flex><span>GPU 0: NVIDIA B200 (UUID: GPU-00261f28-8bd7-afb7-c2d9-897ff3f13706)
+</span></span><span style=display:flex><span>GPU 1: NVIDIA B200 (UUID: GPU-f538682c-7be3-18c8-91b6-5a3fc69143d0)
+</span></span></code></pre></div><p>Let&rsquo;s try running NCCL!</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/diagnostic# /usr/local/gib/scripts/run_nccl_tests.sh   -t all_gather -b 1K -e 8G   nccl-gib-test-0  -g 2
+</span></span><span style=display:flex><span>Initializing SSH...
+</span></span><span style=display:flex><span>Warning: Permanently added <span style=color:#a31515>&#39;[nccl-gib-test-0]:222,[10.68.3.42]:222&#39;</span> (ECDSA) to the list of known hosts.
+</span></span><span style=display:flex><span>Hello from nccl-gib-test-0
+</span></span><span style=display:flex><span>Generating hostfiles <span style=color:#00f>for</span> 1 hosts:
+</span></span><span style=display:flex><span>nccl-gib-test-0
+</span></span><span style=display:flex><span><span style=color:green># nThread 1 nGpus 1 minBytes 1024 maxBytes 8589934592 step: 2(factor) warmup iters: 50 iters: 100 agg iters: 1 validation: 1 graph: 0</span>
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green># Using devices</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  0 Group  0 Pid   2114 on nccl-gib-test-0 device  0 [0000:8f:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  1 Group  0 Pid   2113 on nccl-gib-test-0 device  1 [0000:90:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span>NCCL version 2.26.6+cuda12.8
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green>#                                                              out-of-place                       in-place</span>
+</span></span><span style=display:flex><span><span style=color:green>#       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong</span>
+</span></span><span style=display:flex><span><span style=color:green>#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)</span>
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>    67108864       8388608     float    none      -1    100.1  670.29  335.14      0    92.39  726.37  363.19      0
+</span></span><span style=display:flex><span>   134217728      16777216     float    none      -1    179.7  746.86  373.43      0    168.0  798.94  399.47      0
+</span></span><span style=display:flex><span>   268435456      33554432     float    none      -1    334.1  803.41  401.71      0    300.3  893.87  446.94      0
+</span></span><span style=display:flex><span>   536870912      67108864     float    none      -1    626.8  856.57  428.29      0    568.4  944.47  472.23      0
+</span></span><span style=display:flex><span>  1073741824     134217728     float    none      -1   1186.1  905.28  452.64      0   1079.9  994.30  497.15      0
+</span></span><span style=display:flex><span>  2147483648     268435456     float    none      -1   2287.5  938.78  469.39      0   2045.4  1049.90  524.95      0
+</span></span><span style=display:flex><span>  4294967296     536870912     float    none      -1   4490.1  956.53  478.27      0   3920.0  1095.65  547.83      0
+</span></span><span style=display:flex><span>  8589934592    1073741824     float    none      -1   8897.6  965.42  482.71      0   7613.3  1128.28  564.14      0
+</span></span></code></pre></div><p>It works on the single pod. Now let&rsquo;s try between the two pods.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/usr/bin# /usr/local/gib/scripts/run_nccl_tests.sh   -t all_gather -b 1K -e 8G   nccl-gib-test-0 10.68.5.39 -g 2
+</span></span><span style=display:flex><span>Initializing SSH...
+</span></span><span style=display:flex><span>Hello from nccl-gib-test-0
+</span></span><span style=display:flex><span>Warning: Permanently added <span style=color:#a31515>&#39;[10.68.5.39]:222&#39;</span> (ECDSA) to the list of known hosts.
+</span></span><span style=display:flex><span>Hello from 10.68.5.39
+</span></span><span style=display:flex><span>Generating hostfiles <span style=color:#00f>for</span> 2 hosts:
+</span></span><span style=display:flex><span>nccl-gib-test-0
+</span></span><span style=display:flex><span>10.68.5.39
+</span></span><span style=display:flex><span><span style=color:green># nThread 1 nGpus 1 minBytes 1024 maxBytes 8589934592 step: 2(factor) warmup iters: 50 iters: 100 agg iters: 1 validation: 1 graph: 0</span>
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green># Using devices</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  0 Group  0 Pid  25060 on nccl-gib-test-0 device  0 [0000:cb:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  1 Group  0 Pid  25055 on nccl-gib-test-0 device  1 [0000:cc:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  2 Group  0 Pid   2078 on nccl-gib-test-1 device  0 [0000:97:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  3 Group  0 Pid   2055 on nccl-gib-test-1 device  1 [0000:c4:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span>NCCL version 2.26.6+cuda12.8
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green>#                                                              out-of-place                       in-place</span>
+</span></span><span style=display:flex><span><span style=color:green>#       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong</span>
+</span></span><span style=display:flex><span><span style=color:green>#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)</span>
+</span></span></code></pre></div><p>Uh oh! We can gather the info between the pods but we can&rsquo;t run data? Running <code>ip a</code> shows us the issue.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/diagnostic# ip a
+</span></span><span style=display:flex><span>1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+</span></span><span style=display:flex><span>    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+</span></span><span style=display:flex><span>    inet 127.0.0.1/8 scope host lo
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span><span style=display:flex><span>2: eth0@if44: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1460 qdisc noqueue state UP group default qlen 1000
+</span></span><span style=display:flex><span>    link/ether b6:76:b9:08:9c:e5 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+</span></span><span style=display:flex><span>    inet 10.68.3.40/24 brd 10.68.3.255 scope global eth0
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span></code></pre></div><p>There are no NICs to transmit the data. This is where DraNet can help!</p><h4 id=nvidia-dra--dranet>Nvidia DRA + DraNet</h4><p>We create one more <code>ResourceClaimTemplate</code>, for the RDMA devices on the node, along with a <code>DeviceClass</code> for the RDMA device.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1beta1
+</span></span><span style=display:flex><span>kind: DeviceClass
+</span></span><span style=display:flex><span>metadata:
+</span></span><span style=display:flex><span>  name: dranet
+</span></span><span style=display:flex><span>spec:
+</span></span><span style=display:flex><span>  selectors:
+</span></span><span style=display:flex><span>    - cel:
+</span></span><span style=display:flex><span>        expression: device.driver == &#34;dra.net&#34;
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1beta1
+</span></span><span style=display:flex><span>kind: ResourceClaimTemplate
+</span></span><span style=display:flex><span>metadata:
+</span></span><span style=display:flex><span>  name: 2-nic
+</span></span><span style=display:flex><span>spec:
+</span></span><span style=display:flex><span>  spec:
+</span></span><span style=display:flex><span>    devices:
+</span></span><span style=display:flex><span>      requests:
+</span></span><span style=display:flex><span>      - name: nic
+</span></span><span style=display:flex><span>        deviceClassName: dranet
+</span></span><span style=display:flex><span>        count: 2
+</span></span><span style=display:flex><span>        selectors:
+</span></span><span style=display:flex><span>        - cel:
+</span></span><span style=display:flex><span>            expression: device.attributes[&#34;dra.net&#34;].rdma == true &amp;&amp;
+</span></span><span style=display:flex><span>              (
+</span></span><span style=display:flex><span>                (device.attributes[&#34;dra.net&#34;].ifName.startsWith(&#34;gpu&#34;) &amp;&amp;
+</span></span><span style=display:flex><span>                 device.attributes[&#34;dra.net&#34;].ifName.endsWith(&#34;rdma0&#34;) &amp;&amp;
+</span></span><span style=display:flex><span>                 int(device.attributes[&#34;dra.net&#34;].ifName.substring(3, 4)) &lt; 2)
+</span></span></code></pre></div><p>Add this resourceclaim to the statefulset</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: apps/v1
+</span></span><span style=display:flex><span>kind: StatefulSet
+</span></span><span style=display:flex><span>metadata:
+</span></span><span style=display:flex><span>  name: nccl-gib-test
+</span></span><span style=display:flex><span>  labels:
+</span></span><span style=display:flex><span>    name: nccl-gib-test
+</span></span><span style=display:flex><span>spec:
+</span></span><span style=display:flex><span>  replicas: 2
+</span></span><span style=display:flex><span>  serviceName: nccl-gib-test
+</span></span><span style=display:flex><span>  selector:
+</span></span><span style=display:flex><span>    matchLabels:
+</span></span><span style=display:flex><span>      name: nccl-gib-test
+</span></span><span style=display:flex><span>  template:
+</span></span><span style=display:flex><span>    metadata:
+</span></span><span style=display:flex><span>      labels:
+</span></span><span style=display:flex><span>        name: nccl-gib-test
+</span></span><span style=display:flex><span>    spec:
+</span></span><span style=display:flex><span>      containers:
+</span></span><span style=display:flex><span>      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
+</span></span><span style=display:flex><span>        name: test
+</span></span><span style=display:flex><span>        securityContext:
+</span></span><span style=display:flex><span>          capabilities:
+</span></span><span style=display:flex><span>            add: [<span style=color:#a31515>&#34;IPC_LOCK&#34;</span>]
+</span></span><span style=display:flex><span>        volumeMounts:
+</span></span><span style=display:flex><span>          <span style=color:green># - name: library-dir-host</span>
+</span></span><span style=display:flex><span>          <span style=color:green>#   mountPath: /usr/local/nvidia</span>
+</span></span><span style=display:flex><span>          - name: gib
+</span></span><span style=display:flex><span>            mountPath: /usr/local/gib
+</span></span><span style=display:flex><span>          - name: shared-memory
+</span></span><span style=display:flex><span>            mountPath: /dev/shm
+</span></span><span style=display:flex><span>        env:
+</span></span><span style=display:flex><span>          - name: LD_LIBRARY_PATH
+</span></span><span style=display:flex><span>            value: /usr/local/nvidia/lib64
+</span></span><span style=display:flex><span>        command: [<span style=color:#a31515>&#34;/bin/bash&#34;</span>, <span style=color:#a31515>&#34;-c&#34;</span>]
+</span></span><span style=display:flex><span>        args:
+</span></span><span style=display:flex><span>          - |<span style=color:#a31515>
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            # we use a headless service to identify the workers that has the format &lt;hostname&gt;.&lt;service&gt;.&lt;ns&gt;.svc.&lt;zone&gt;
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            # hence we need to allow to resolve fqdn 
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            nvidia-smi -L
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            echo -e &#34;\norte_keep_fqdn_hostnames=t&#34; &gt;&gt; /etc/openmpi/openmpi-mca-params.conf
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            /scripts/container_entry.sh shell
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            source /usr/local/gib/scripts/set_nccl_env.sh
+</span></span></span><span style=display:flex><span><span style=color:#a31515>            sleep infinity</span>            
+</span></span><span style=display:flex><span>        resources:
+</span></span><span style=display:flex><span>          claims:
+</span></span><span style=display:flex><span>          - name: gpu            
+</span></span><span style=display:flex><span>      volumes:
+</span></span><span style=display:flex><span>        - name: library-dir-host
+</span></span><span style=display:flex><span>          hostPath:
+</span></span><span style=display:flex><span>            path: /home/kubernetes/bin/nvidia
+</span></span><span style=display:flex><span>        - name: gib
+</span></span><span style=display:flex><span>          hostPath:
+</span></span><span style=display:flex><span>            path: /home/kubernetes/bin/gib
+</span></span><span style=display:flex><span>        - name: shared-memory
+</span></span><span style=display:flex><span>          emptyDir:
+</span></span><span style=display:flex><span>            medium: <span style=color:#a31515>&#34;Memory&#34;</span>
+</span></span><span style=display:flex><span>            sizeLimit: 250Gi
+</span></span><span style=display:flex><span>      resourceClaims:
+</span></span><span style=display:flex><span>        - name: gpu
+</span></span><span style=display:flex><span>          resourceClaimTemplateName: 2-gpu
+</span></span><span style=display:flex><span>        - name: nic
+</span></span><span style=display:flex><span>          resourceClaimTemplateName: 2-nic
+</span></span><span style=display:flex><span>      tolerations:
+</span></span><span style=display:flex><span>      - key: <span style=color:#a31515>&#34;nvidia.com/gpu&#34;</span>
+</span></span><span style=display:flex><span>        operator: <span style=color:#a31515>&#34;Equal&#34;</span>
+</span></span><span style=display:flex><span>        value: <span style=color:#a31515>&#34;present&#34;</span>
+</span></span><span style=display:flex><span>        effect: <span style=color:#a31515>&#34;NoSchedule&#34;</span>
+</span></span></code></pre></div><p>Now exec into the same pod.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/usr/bin# ip a
+</span></span><span style=display:flex><span>1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+</span></span><span style=display:flex><span>    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+</span></span><span style=display:flex><span>    inet 127.0.0.1/8 scope host lo
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span><span style=display:flex><span>2: eth0@if45: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1460 qdisc noqueue state UP group default qlen 1000
+</span></span><span style=display:flex><span>    link/ether 26:20:2c:53:5e:20 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+</span></span><span style=display:flex><span>    inet 10.68.3.41/24 brd 10.68.3.255 scope global eth0
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span><span style=display:flex><span>4: gpu0rdma0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 8896 qdisc mq state UP group default qlen 1000
+</span></span><span style=display:flex><span>    link/ether 06:c4:a0:25:7e:01 brd ff:ff:ff:ff:ff:ff
+</span></span><span style=display:flex><span>    inet 192.168.1.5/32 scope global gpu0rdma0
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span><span style=display:flex><span>5: gpu1rdma0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 8896 qdisc mq state UP group default qlen 1000
+</span></span><span style=display:flex><span>    link/ether e2:f1:94:78:7e:04 brd ff:ff:ff:ff:ff:ff
+</span></span><span style=display:flex><span>    inet 192.168.2.5/32 scope global gpu1rdma0
+</span></span><span style=display:flex><span>       valid_lft forever preferred_lft forever
+</span></span></code></pre></div><p>And now we run NCCL again.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>root@nccl-gib-test-0:/diagnostic# /usr/local/gib/scripts/run_nccl_tests.sh   -t all_gather -b 1K -e 8G   nccl-gib-test-0 10.68.5.40 -g 2
+</span></span><span style=display:flex><span>Initializing SSH...
+</span></span><span style=display:flex><span>Hello from nccl-gib-test-0
+</span></span><span style=display:flex><span>Warning: Permanently added <span style=color:#a31515>&#39;[10.68.5.40]:222&#39;</span> (ECDSA) to the list of known hosts.
+</span></span><span style=display:flex><span>Hello from 10.68.5.40
+</span></span><span style=display:flex><span>Generating hostfiles <span style=color:#00f>for</span> 2 hosts:
+</span></span><span style=display:flex><span>nccl-gib-test-0
+</span></span><span style=display:flex><span>10.68.5.40
+</span></span><span style=display:flex><span><span style=color:green># nThread 1 nGpus 1 minBytes 1024 maxBytes 8589934592 step: 2(factor) warmup iters: 50 iters: 100 agg iters: 1 validation: 1 graph: 0</span>
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green># Using devices</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  0 Group  0 Pid   3521 on nccl-gib-test-0 device  0 [0000:8f:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  1 Group  0 Pid   3514 on nccl-gib-test-0 device  1 [0000:90:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  2 Group  0 Pid   2071 on nccl-gib-test-1 device  0 [0000:8f:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span><span style=color:green>#  Rank  3 Group  0 Pid   2076 on nccl-gib-test-1 device  1 [0000:90:00] NVIDIA B200</span>
+</span></span><span style=display:flex><span>NCCL version 2.26.6+cuda12.8
+</span></span><span style=display:flex><span><span style=color:green>#</span>
+</span></span><span style=display:flex><span><span style=color:green>#                                                              out-of-place                       in-place</span>
+</span></span><span style=display:flex><span><span style=color:green>#       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong</span>
+</span></span><span style=display:flex><span><span style=color:green>#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)</span>
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>   268435456      16777216     float    none      -1   3059.9   87.73   65.80      0   3134.1   85.65   64.24      0
+</span></span><span style=display:flex><span>   536870912      33554432     float    none      -1   5886.9   91.20   68.40      0   6082.2   88.27   66.20      0
+</span></span><span style=display:flex><span>  1073741824      67108864     float    none      -1    12452   86.23   64.67      0    11550   92.97   69.73      0
+</span></span><span style=display:flex><span>  2147483648     134217728     float    none      -1    24426   87.92   65.94      0    23694   90.63   67.97      0
+</span></span><span style=display:flex><span>  4294967296     268435456     float    none      -1    47420   90.57   67.93      0    47000   91.38   68.54      0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  8589934592     536870912     float    none      -1    96100   89.39   67.04      0    94047   91.34   68.50      0
+</span></span></code></pre></div><p>They now connect!</p><h4 id=conclusion>Conclusion</h4><p>Using both DRANet and the Nvidia DRA libraries in combination is a way to quickly allocate both GPUs and RDMA devices in order to create interconnected workloads that can span multiple nodes. This can be used the create workloads that span multiple nodes and take advantage of spare resources on nodes.</p><p>For instance, consider that you have 2 nodes with 8 GPUs apiece. If you ran 2 training jobs that took 6 GPUs each then you would have 4 GPUs idle. By enabling DRANet you could take advantage of those remaining 4 for another training job. Without providing the RDMA devics, these GPUs would only be able to communicate within the same node.</p></div></main></div></div><footer class="td-footer row d-print-none"><div class=container-fluid><div class="row mx-md-2"><div class="td-footer__left col-6 col-sm-4 order-sm-1"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title="SIG Network mailing list" aria-label="SIG Network mailing list"><a target=_blank rel=noopener href=https://groups.google.com/forum/#!forum/kubernetes-sig-network aria-label="SIG Network mailing list"><i class="fa fa-envelope"></i></a></li></ul></div><div class="td-footer__right col-6 col-sm-4 order-sm-3"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title=GitHub aria-label=GitHub><a target=_blank rel=noopener href=https://github.com/google/dranet aria-label=GitHub><i class="fab fa-github"></i></a></li><li class=td-footer__links-item data-bs-toggle=tooltip title=Slack aria-label=Slack><a target=_blank rel=noopener href=https://kubernetes.slack.com/messages/sig-network aria-label=Slack><i class="fab fa-slack"></i></a></li></ul></div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2"><span class=td-footer__copyright>&copy;
+2024&ndash;2025
+<span class=td-footer__authors>Google LLC | <a href=https://creativecommons.org/licenses/by/4.0>CC BY 4.0</a> |</span></span><span class=td-footer__all_rights_reserved>All Rights Reserved</span><span class=ms-2><a href=https://policies.google.com/privacy target=_blank rel=noopener>Privacy Policy</a></span></div></div></div></footer></div><script src=/js/main.min.d9615597e83c4193e3ab1e6816bad5c8741894e92c5b5c17a8d1d4be6d9af8a2.js integrity="sha256-2WFVl+g8QZPjqx5oFrrVyHQYlOksW1wXqNHUvm2a+KI=" crossorigin=anonymous></script><script defer src=/js/click-to-copy.min.73478a7d4807698aed7e355eb23f9890ca18fea3158604c8471746d046702bad.js integrity="sha256-c0eKfUgHaYrtfjVesj+YkMoY/qMVhgTIRxdG0EZwK60=" crossorigin=anonymous></script><script src=/js/tabpane-persist.js></script></body></html>
