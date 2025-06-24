@@ -5,7 +5,9 @@
 
 2. Install `kind` https://kind.sigs.k8s.io/
 
-3. Run `bats tests/`
+3. Ensure git submodules have been initialized: `git submodule update --init --recursive`
+
+4. Run `bats tests/`
 
 # Best practices for writing integration tests
 
