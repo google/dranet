@@ -1,4 +1,4 @@
-# Integration tests
+# Running integration tests
 
 
 1. Install `bats` https://bats-core.readthedocs.io/en/stable/installation.html
@@ -7,6 +7,12 @@
 
 3. Run `bats tests/`
 
+# Best practices for writing integration tests
+
+* For clear and debuggable test failures, prefer using a suitable helper
+  assertion from https://github.com/bats-core/bats-assert. These functions
+  automatically show "got" (actual) and "want" (expected) outputs, making it
+  easier to write tests and pinpoint issues.
 
 ## eBPF programs
 
