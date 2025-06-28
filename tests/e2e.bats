@@ -255,3 +255,38 @@ load 'test_helper/bats-assert/load'
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate_double.yaml
 }
+
+@test "reapply pod with dummy resource claim" {
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy8 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dummy8"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy8"
+
+  # Apply the resource claim template and deployment
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+  kubectl wait --timeout=30s --for=condition=ready pods -l app=reapplyApp
+  POD_NAME=$(kubectl get pods -l app=reapplyApp -o name)
+  run kubectl exec $POD_NAME -- ip addr show dummy8
+  assert_success
+  assert_output --partial "169.254.169.14"
+  # TODO list the specific resourceclaim and the networkdata
+  run kubectl get resourceclaims -o yaml
+  assert_success
+  assert_output --partial "169.254.169.14"
+
+  # Delete the deployment and wait for the resource claims to be removed
+  kubectl delete deployment/server-deployment-reapply --wait --timeout=30s
+
+  # Reapply the deployment, should reclaim the device
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+  kubectl wait --timeout=30s --for=condition=ready pods -l app=reapplyApp
+  POD_NAME=$(kubectl get pods -l app=MyApp -o name)
+  run kubectl exec $POD_NAME -- ip addr show dummy8
+  assert_success
+  assert_output --partial "169.254.169.14"
+  # TODO list the specific resourceclaim and the networkdata
+  run kubectl get resourceclaims -o yaml
+  assert_success
+  assert_output --partial "169.254.169.14"
+
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+}
