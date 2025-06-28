@@ -41,6 +41,10 @@ type InterfaceConfig struct {
 	// to be assigned to the interface.
 	Addresses []string `json:"addresses,omitempty"`
 
+	// DHCP, if true, indicates that the interface should be configured via DHCP.
+	// This is mutually exclusive with the 'addresses' field.
+	DHCP *bool `json:"dhcp,omitempty"`
+
 	// MTU is the Maximum Transmission Unit for the interface.
 	MTU *int32 `json:"mtu,omitempty"`
 

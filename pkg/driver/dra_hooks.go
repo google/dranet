@@ -166,12 +166,25 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			podCfg.Network.Interface.Name = ifName
 		}
 
-		// If there is no custom addresses then use the existing ones
-		if len(podCfg.Network.Interface.Addresses) == 0 {
+		// If DHCP is requested, do a DHCP request to gather the network parameters (IPs and Routes)
+		// ... but we DO NOT apply them in the root namespace
+		if podCfg.Network.Interface.DHCP != nil && *podCfg.Network.Interface.DHCP {
+			klog.V(2).Infof("trying to get network configuration via DHCP")
+			contextCancel, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			ip, routes, err := getDHCP(contextCancel, ifName)
+			if err != nil {
+				errorList = append(errorList, fmt.Errorf("fail to get configuration via DHCP for %s: %w", ifName, err))
+			} else {
+				podCfg.Network.Interface.Addresses = []string{ip}
+				podCfg.Network.Routes = append(podCfg.Network.Routes, routes...)
+			}
+		} else if len(podCfg.Network.Interface.Addresses) == 0 {
+			// If there is no custom addresses and no DHCP, then use the existing ones
 			// get the existing IP addresses
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
 			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-				klog.Infof("fail to get ip addresses for interface %s : %v", ifName, err)
+				errorList = append(errorList, fmt.Errorf("fail to get ip addresses for interface %s : %w", ifName, err))
 			} else {
 				for _, address := range nlAddresses {
 					// Only move IP addresses with global scope because those are not host-specific, auto-configured,
@@ -182,21 +195,6 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					}
 					podCfg.Network.Interface.Addresses = append(podCfg.Network.Interface.Addresses, address.IPNet.String())
 				}
-			}
-		}
-
-		// If there are no addresses configured on the interface and the user is not setting them
-		// this may be an interface that uses DHCP, so we bring it up if necessary and do a DHCP
-		// request to gather the network parameters (IPs and Routes) ... but we DO NOT apply them
-		// in the root namespace
-		if len(podCfg.Network.Interface.Addresses) == 0 {
-			klog.V(2).Infof("trying to get network configuration via DHCP")
-			ip, routes, err := getDHCP(ifName)
-			if err != nil {
-				klog.Infof("fail to get configuration via DHCP: %v", err)
-			} else {
-				podCfg.Network.Interface.Addresses = []string{ip}
-				podCfg.Network.Routes = append(podCfg.Network.Routes, routes...)
 			}
 		}
 
