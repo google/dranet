@@ -27,7 +27,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-func getDHCP(ifName string) (ip string, routes []apis.RouteConfig, err error) {
+func getDHCP(ctx context.Context, ifName string) (ip string, routes []apis.RouteConfig, err error) {
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
 		return "", nil, err
@@ -43,7 +43,7 @@ func getDHCP(ifName string) (ip string, routes []apis.RouteConfig, err error) {
 	}
 	defer dhclient.Close()
 
-	lease, err := dhclient.Request(context.Background())
+	lease, err := dhclient.Request(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("fail to obtain DHCP lease on interface %s  up: %v", ifName, err)
 	}

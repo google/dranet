@@ -128,6 +128,10 @@ func validateInterfaceConfig(cfg *InterfaceConfig, fieldPath string) (allErrors 
 		}
 	}
 
+	if cfg.DHCP != nil && *cfg.DHCP && len(cfg.Addresses) > 0 {
+		allErrors = append(allErrors, fmt.Errorf("%s: dhcp and addresses are mutually exclusive", fieldPath))
+	}
+
 	if cfg.MTU != nil {
 		if *cfg.MTU < MinMTU {
 			allErrors = append(allErrors, fmt.Errorf("%s.mtu: must be at least %d, got %d", fieldPath, MinMTU, *cfg.MTU))

@@ -254,6 +254,25 @@ func TestValidateInterfaceConfig(t *testing.T) {
 			errCount:  1,
 		},
 		{
+			name:      "valid with dhcp",
+			cfg:       &InterfaceConfig{Name: "eth0", DHCP: ptr.To(true)},
+			fieldPath: "iface",
+			expectErr: false,
+		},
+		{
+			name:      "invalid with dhcp and addresses",
+			cfg:       &InterfaceConfig{Name: "eth0", DHCP: ptr.To(true), Addresses: []string{"10.0.0.1/24"}},
+			fieldPath: "iface",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "valid with dhcp false and addresses",
+			cfg:       &InterfaceConfig{Name: "eth0", DHCP: ptr.To(false), Addresses: []string{"10.0.0.1/24"}},
+			fieldPath: "iface",
+			expectErr: false,
+		},
+		{
 			name:      "multiple errors",
 			cfg:       &InterfaceConfig{Name: "eth/0", Addresses: []string{"badip"}, MTU: ptr.To[int32](0)},
 			fieldPath: "iface",
