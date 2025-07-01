@@ -1,0 +1,1 @@
+Jul 01 02:26:36 dranet-test-cluster-control-plane systemd[1]: kubelet.service - kubelet: The Kubernetes Node Agent was skipped because of an unmet condition check (ConditionPathExists=/var/lib/kubelet/config.yaml).

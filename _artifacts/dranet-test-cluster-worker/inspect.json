@@ -1,0 +1,235 @@
+[
+    {
+        "Id": "efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426",
+        "Created": "2025-07-01T02:26:19.154324463Z",
+        "Path": "/usr/local/bin/entrypoint",
+        "Args": [
+            "/sbin/init"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 7134,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2025-07-01T02:26:34.227889428Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:050072256b9a903bd914c0b2866828150cb229cea0efe5892e2b644d5dd3b34f",
+        "ResolvConfPath": "/var/lib/docker/containers/efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426/hostname",
+        "HostsPath": "/var/lib/docker/containers/efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426/hosts",
+        "LogPath": "/var/lib/docker/containers/efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426/efc81ca850253760082e39cf4a98273b611bcc50d8efd4e145aa9d768a617426-json.log",
+        "Name": "/dranet-test-cluster-worker",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": [
+            "daa777d580272ac1c688d4ae1954bb7983d22058a16bb64642457681f7c0d47e",
+            "7a7d5a153bfab9c1dc081e4b8efc0a3f8e06cf652ce2d255ebf60e42cb8ceef1",
+            "b995360fe7350fcd6a2dc4fdcfe3075bc59abd3e41d1ef1826526cf009c2c3ec",
+            "242b9736aec2c8e6a24e6f42ccba90c1b65818ff80cd814cc88d4c12021b61e4"
+        ],
+        "HostConfig": {
+            "Binds": [
+                "/lib/modules:/lib/modules:ro"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "kind",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "on-failure",
+                "MaximumRetryCount": 1
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": true,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [
+                "seccomp=unconfined",
+                "apparmor=unconfined",
+                "label=disable"
+            ],
+            "Tmpfs": {
+                "/run": "",
+                "/tmp": ""
+            },
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": null,
+            "ReadonlyPaths": null,
+            "Init": false
+        },
+        "GraphDriver": {
+            "Data": null,
+            "Name": "overlayfs"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/lib/modules",
+                "Destination": "/lib/modules",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "volume",
+                "Name": "9a79d058bb08a0d8ebe9fce4286d28ab8a9c2abc8bd7f8c8b9a303a9da8e0b2e",
+                "Source": "/var/lib/docker/volumes/9a79d058bb08a0d8ebe9fce4286d28ab8a9c2abc8bd7f8c8b9a303a9da8e0b2e/_data",
+                "Destination": "/var",
+                "Driver": "local",
+                "Mode": "",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "dranet-test-cluster-worker",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": true,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "KIND_EXPERIMENTAL_CONTAINERD_SNAPSHOTTER",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "container=docker",
+                "HTTP_PROXY=",
+                "HTTPS_PROXY=",
+                "NO_PROXY="
+            ],
+            "Cmd": null,
+            "Image": "kindest/node:v1.33.1",
+            "Volumes": {
+                "/var": {}
+            },
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "/usr/local/bin/entrypoint",
+                "/sbin/init"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "io.x-k8s.kind.cluster": "dranet-test-cluster",
+                "io.x-k8s.kind.role": "worker"
+            },
+            "StopSignal": "SIGRTMIN+3"
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "42b13eb346c189784b103ee733ac0f85d06f41256eb23ab1bd9f5b771f30d27b",
+            "SandboxKey": "/var/run/docker/netns/42b13eb346c1",
+            "Ports": {},
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "",
+            "Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "MacAddress": "",
+            "Networks": {
+                "kind": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "f6:8a:86:d2:7d:93",
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "ea4dfa34cc579041262500bf72b900fc6d5e11b97349ea617d934cafda8d5bb4",
+                    "EndpointID": "0057b3fb06321290e9570e4fbdbc828b96645b8f6503ebbdc2c7f4681a58b6c1",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.4",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "fc00:f853:ccd:e793::1",
+                    "GlobalIPv6Address": "fc00:f853:ccd:e793::4",
+                    "GlobalIPv6PrefixLen": 64,
+                    "DNSNames": [
+                        "dranet-test-cluster-worker",
+                        "efc81ca85025"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+            "digest": "sha256:cfea27c21c338b9948ea55c413b9c9e2549f3df89a89424889a1fd3ecb0c8951",
+            "size": 743,
+            "platform": {
+                "architecture": "arm64",
+                "os": "linux"
+            }
+        }
+    }
+]

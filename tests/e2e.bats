@@ -1,23 +1,9 @@
 #!/usr/bin/env bats
 
-# Define global variables (for use in teardown)
-setup() {
-  namespace="kube-system"
-  ds_name="dranet"
-  node_selector_key="disable"
-  node_selector_value="true"
+# Constants
+namespace="kube-system"
+ds_name="dranet"
 
-  # Save the original nodeSelector
-  original_selector=$(kubectl get ds "$ds_name" -n "$namespace" -o jsonpath='{.spec.template.spec.nodeSelector}' | jq -c .)
-}
-
-# Always run this after the test (pass or fail)
-teardown() {
-  # Restore the original nodeSelector
-  kubectl patch ds "$ds_name" -n "$namespace" \
-    --type='merge' \
-    -p="{\"spec\": {\"template\": {\"spec\": {\"nodeSelector\": $original_selector}}}}"
-}
 
 @test "dummy interface with IP addresses ResourceClaim" {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
@@ -197,21 +183,26 @@ teardown() {
 
 
 @test "verify resourceslices are cleaned up after driver removed" {
-  # Patch the DaemonSet with a dummy nodeSelector to disable it
-  run kubectl patch ds "$ds_name" -n "$namespace" \
-    --type='merge' \
-    -p="{\"spec\": {\"template\": {\"spec\": {\"nodeSelector\": {\"$node_selector_key\": \"$node_selector_value\"}}}}}"
-  [ "$status" -eq 0 ]
+  # Save original nodeSelector
+  original_selector=$(kubectl get ds "$ds_name" -n "$namespace" -o json | jq '.spec.template.spec.nodeSelector // {}')
 
-  # Wait for pods to be deleted
+  # Disable the driver by patching DaemonSet
+  kubectl patch ds "$ds_name" -n "$namespace" --type='merge' \
+    -p='{"spec":{"template":{"spec":{"nodeSelector":{"disable":"true"}}}}}'
+
+  # Wait for pods to be removed
   run kubectl wait --for=delete pod -l app=dranet -n "$namespace" --timeout=60s
   [ "$status" -eq 0 ]
 
-  # Confirm no DraNet pods left
+  # Assert no DraNet pods left
   run kubectl get pods -n "$namespace" -l app=dranet --no-headers
-  [ "$status" -ne 0 ] || [ -z "$output" ]
+  [[ "$output" == "" ]]
 
-  # Confirm ResourceSlices are gone
-  run kubectl get resourceslices -A --no-headers
+  # Assert ResourceSlices are cleaned up
+  run kubectl get resourceslices --no-headers
   [[ "$output" != *"dranet"* ]]
+
+  # Restore DaemonSet to original state
+  patch_payload=$(jq -n --argjson sel "$original_selector" '{spec: {template: {spec: {nodeSelector: $sel}}}}')
+  kubectl patch ds "$ds_name" -n "$namespace" --type='merge' -p="$patch_payload"
 }
