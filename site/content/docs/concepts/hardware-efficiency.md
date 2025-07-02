@@ -25,7 +25,12 @@ Different parts of a complex application, such as a calculation worker or a data
 
 Consider a server equipped with 8 GPUs and 8 RDMA network interfaces. Instead of a single large job claiming all these resources, DraNet enables a more flexible assignment. For example, a distributed training task might need two workers, each using one GPU and one dedicated RDMA interface.
 
-This precise assignment leaves the remaining 6 GPUs and 6 RDMA interfaces on that server available for other tasks. Such detailed control is central to scaling out: it allows for running multiple, smaller, concurrent workloads, each with the appropriate hardware. This marks a change from older models where an entire powerful server might be largely underused if a job didn't need its full capacity.
+Our [research](/docs/kubernetes_network_driver_model_dranet_paper.pdf) validates this approach with concrete data. In tests comparing a topologically aligned setup (enabled by DraNet and DRA) against a traditional, non-aligned one, the results were conclusive:
+
+- **All-Gather Performance:** The aligned configuration achieved **46.59 GB/s** on large messages, a **59.6% increase** over the unaligned setup's 29.20 GB/s.
+- **All-Reduce Performance:** Similarly, the aligned configuration hit **46.93 GB/s**, a **58.1% improvement** over the unaligned 29.68 GB/s.
+
+This precise assignment leaves the remaining 7 GPUs and 7 RDMA interfaces on that server available for other tasks. Such detailed control is central to scaling out: it allows for running multiple, smaller, concurrent workloads, each with the appropriate hardware. This marks a change from older models where an entire powerful server might be largely underused if a job didn't need its full capacity.
 
 ##### Running More Jobs and Improving Cost-Effectiveness
 

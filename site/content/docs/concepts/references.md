@@ -3,6 +3,7 @@ title: "References"
 date: 2024-12-19T11:20:46Z
 ---
 
+- [The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking](/docs/kubernetes_network_driver_model_dranet_paper.pdf) - This paper introduces the Kubernetes Network Driver model and provides a detailed performance evaluation of DraNet, demonstrating significant bandwidth improvements for AI/ML workloads.
 - [KEP 3063 - Dynamic Resource Allocation #306](https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/3063-dynamic-resource-allocation/README.md)
 - [KEP 3695 - DRA: structured parameters #438](https://github.com/kubernetes/enhancements/issues/4381)
 - [Extend PodResources to include resources from Dynamic Resource Allocation (DRA)](https://github.com/kubernetes/enhancements/issues/3695)
