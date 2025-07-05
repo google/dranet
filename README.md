@@ -103,6 +103,14 @@ Install the latest stable version of DraNet using the provided manifest:
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
 ```
 
+### Development
+
+To build your own image for testing. Here is an example with a custom registry `ghcr.io/converged-computing`:
+
+```sh
+REGISTRY=ghcr.io/converged-computing make image
+```
+
 ### How to Use It
 
 Once DraNet is running, you can inspect the network interfaces and their
