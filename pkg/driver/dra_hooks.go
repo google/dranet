@@ -125,6 +125,16 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 	var errorList []error
 	charDevices := sets.New[string]()
 	for _, result := range claim.Status.Allocation.Devices.Results {
+		// A single ResourceClaim can have devices managed by distinct DRA
+		// drivers. One common use case for this is device topology alignment
+		// (think NIC and GPU alignment). In such cases, we should ignore the
+		// devices which are not managed by our driver.
+		//
+		// TODO: Test running a different driver alongside DraNet in e2e. This
+		//   requires an easy way to spin up a mock DRA driver.
+		if result.Driver != np.driverName {
+			continue
+		}
 		requestName := result.Request
 		netconf := apis.NetworkConfig{}
 		for _, config := range claim.Status.Allocation.Devices.Config {
