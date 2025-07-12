@@ -34,7 +34,7 @@ spec:
         deviceClassName: multinic
         selectors:
         - cel:
-            expression: device.attributes["dra.net"].ifName == "dummy6" || device.attributes["dra.net"].ifName == "dummy7"
+            expression: device.attributes["dra.net"].ifName == "dummy0" || device.attributes["dra.net"].ifName == "dummy1"
 ---
 apiVersion: apps/v1
 kind: Deployment
