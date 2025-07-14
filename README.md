@@ -27,7 +27,7 @@ The key findings include:
 - **Up to 60% Bandwidth Increase:** By enabling topology-aware scheduling of GPUs and NICs, DraNet boosts bus bandwidth by up to 59.6% for `all_gather` and 58.1% for `all_reduce` operations in distributed AI/ML workloads.
 - **Operational Simplicity:** The paper demonstrates how the KND model used by DraNet drastically simplifies the management of high-performance hardware, replacing fragile, multi-component chains with a clean, composable architecture.
 
-**[Read the full research paper here!](/docs/kubernetes_network_driver_model_dranet_paper.pdf)**
+**[Read the full research paper here!](/site/static/docs/kubernetes_network_driver_model_dranet_paper.pdf)**
 
 ## How It Works
 

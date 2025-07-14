@@ -3,7 +3,7 @@ module github.com/google/dranet
 go 1.24.0
 
 require (
-	cloud.google.com/go/compute v1.39.0
+	cloud.google.com/go/compute v1.40.0
 	cloud.google.com/go/compute/metadata v0.7.0
 	cloud.google.com/go/container v1.43.0
 	github.com/Mellanox/rdmamap v1.1.0
@@ -19,9 +19,9 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.34.0
 	golang.org/x/time v0.12.0
-	google.golang.org/api v0.239.0
+	google.golang.org/api v0.241.0
 	google.golang.org/protobuf v1.36.6
 	k8s.io/api v0.33.2
 	k8s.io/apimachinery v0.33.2

@@ -95,12 +95,16 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 			klog.Infof("could not get network interfaces on GCE ... retrying: %v", err)
 			return false, nil
 		}
+		// Physical location of VM is not always available. We don't fail if
+		// it's not available.
+		//
+		// Ref. https://cloud.google.com/compute/docs/instances/use-compact-placement-policies#verify-vm-location
 		gceTopologyAttributes, err := metadata.GetWithContext(ctx, "instance/attributes/physical_host")
 		if err != nil {
-			klog.Infof("could not get physical host on GCE ... retrying: %v", err)
-			return false, nil
+			klog.Warningf("Failed to retrieve physical host for GCE VM %q, this maybe normal since not all VMs and VM types have this populated: %v", instanceName, err)
+		} else {
+			instance.Topology = gceTopologyAttributes
 		}
-		instance.Topology = gceTopologyAttributes
 		return true, nil
 	})
 	if err != nil {
