@@ -17,30 +17,54 @@ limitations under the License.
 package inventory
 
 import (
+	"net"
 	"testing"
 
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/google/go-cmp/cmp"
+	"github.com/vishvananda/netlink"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/utils/ptr"
 )
 
+type mockLink struct {
+	attrs *netlink.LinkAttrs
+}
+
+func (m *mockLink) Attrs() *netlink.LinkAttrs {
+	return m.attrs
+}
+
+func (m *mockLink) Type() string {
+	return "mock"
+}
+
 func TestGetProviderAttributes(t *testing.T) {
 	tests := []struct {
 		name     string
-		mac      string
+		link     netlink.Link
 		instance *cloudprovider.CloudInstance
 		want     map[resourceapi.QualifiedName]resourceapi.DeviceAttribute
 	}{
 		{
-			name:     "nil instance",
-			mac:      "00:11:22:33:44:55",
+			name: "nil instance",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: nil,
 			want:     nil,
 		},
 		{
 			name: "instance with no interfaces",
-			mac:  "00:11:22:33:44:55",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider:   cloudprovider.CloudProviderGCE,
 				Interfaces: []cloudprovider.NetworkInterface{},
@@ -49,7 +73,12 @@ func TestGetProviderAttributes(t *testing.T) {
 		},
 		{
 			name: "MAC not found in instance interfaces",
-			mac:  "00:11:22:33:44:FF", // MAC that won't be found
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0xff},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
 				Interfaces: []cloudprovider.NetworkInterface{
@@ -60,7 +89,12 @@ func TestGetProviderAttributes(t *testing.T) {
 		},
 		{
 			name: "GCE provider, MAC found, valid network",
-			mac:  "00:11:22:33:44:55",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
 				Interfaces: []cloudprovider.NetworkInterface{
@@ -79,7 +113,12 @@ func TestGetProviderAttributes(t *testing.T) {
 		},
 		{
 			name: "GCE provider, MAC found, invalid network string for GCE parsing",
-			mac:  "00:11:22:33:44:55",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
 				Interfaces: []cloudprovider.NetworkInterface{
@@ -90,7 +129,12 @@ func TestGetProviderAttributes(t *testing.T) {
 		},
 		{
 			name: "GCE provider, MAC found, valid network, invalid topology",
-			mac:  "00:11:22:33:44:55",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
 				Interfaces: []cloudprovider.NetworkInterface{
@@ -106,7 +150,12 @@ func TestGetProviderAttributes(t *testing.T) {
 		},
 		{
 			name: "Unsupported provider, MAC found",
-			mac:  "00:11:22:33:44:55",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "eth0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderAWS, // Unsupported provider
 				Interfaces: []cloudprovider.NetworkInterface{
@@ -115,11 +164,53 @@ func TestGetProviderAttributes(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "GCE provider, gpuXrdmaY name, no other attributes",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "gpu0rdma0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0xaa},
+				},
+			},
+			instance: &cloudprovider.CloudInstance{
+				Provider: cloudprovider.CloudProviderGCE,
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
+				},
+			},
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"index": {IntValue: ptr.To(int64(0))},
+			},
+		},
+		{
+			name: "GCE provider, gpuXrdmaY name, with other attributes",
+			link: &mockLink{
+				attrs: &netlink.LinkAttrs{
+					Name:         "gpu1rdma0",
+					HardwareAddr: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+				},
+			},
+			instance: &cloudprovider.CloudInstance{
+				Provider: cloudprovider.CloudProviderGCE,
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
+				},
+				Topology: "/block/subblock/host",
+			},
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"index":                            {IntValue: ptr.To(int64(1))},
+				"gce.dra.net/networkName":          {StringValue: ptr.To("test-network")},
+				"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(int64(12345))},
+				"gce.dra.net/block":                {StringValue: ptr.To("block")},
+				"gce.dra.net/subblock":             {StringValue: ptr.To("subblock")},
+				"gce.dra.net/host":                 {StringValue: ptr.To("host")},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getProviderAttributes(tt.mac, tt.instance)
+			got := getProviderAttributes(tt.link, tt.instance)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("getProviderAttributes() got = %v, want %v", got, tt.want)
 			}

@@ -18,15 +18,26 @@ package inventory
 
 import (
 	"context"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"cloud.google.com/go/compute/metadata"
 
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/google/dranet/pkg/cloudprovider/gce"
+	"github.com/vishvananda/netlink"
 	resourceapi "k8s.io/api/resource/v1beta1"
+)
+
+var (
+	// gceGpuNicRegex is used to parse the GPU index from GCE NICs that follow the
+	// gpu<index>rdma<index> naming convention.
+	// Ref: https://github.com/GoogleCloudPlatform/guest-configs/pull/84
+	gceGpuNicRegex = regexp.MustCompile(`^gpu(\d+)rdma`)
 )
 
 // getInstanceProperties get the instace properties and stores them in a global variable to be used in discovery
@@ -48,7 +59,7 @@ func getInstanceProperties(ctx context.Context) *cloudprovider.CloudInstance {
 }
 
 // getProviderAttributes retrieves cloud provider-specific attributes for a network interface
-func getProviderAttributes(mac string, instance *cloudprovider.CloudInstance) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+func getProviderAttributes(link netlink.Link, instance *cloudprovider.CloudInstance) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	if instance == nil {
 		klog.Warningf("instance metadata is nil, cannot get provider attributes.")
 		return nil
@@ -57,13 +68,44 @@ func getProviderAttributes(mac string, instance *cloudprovider.CloudInstance) ma
 		klog.Warningf("cloud provider %q is not supported", instance.Provider)
 		return nil
 	}
+
+	ifName := link.Attrs().Name
+	mac := link.Attrs().HardwareAddr.String()
+
+	var attributes map[resourceapi.QualifiedName]resourceapi.DeviceAttribute
+	foundMac := false
 	for _, cloudInterface := range instance.Interfaces {
 		if cloudInterface.Mac == mac {
-			return gce.GetGCEAttributes(cloudInterface.Network, instance.Topology)
+			attributes = gce.GetGCEAttributes(cloudInterface.Network, instance.Topology)
+			foundMac = true
+			break
 		}
 	}
-	klog.Warningf("no matching cloud interface found for mac %s", mac)
-	return nil
+
+	// GCE uses a naming convention for NICs associated with GPUs.
+	// The format is gpu<GPU Index>rdma<RDMA NIC Index>.
+	// We can extract the GPU index and expose it as an attribute for selection.
+	matches := gceGpuNicRegex.FindStringSubmatch(ifName)
+	if len(matches) == 2 {
+		if gpuIndex, err := strconv.ParseInt(matches[1], 10, 32); err == nil {
+			if attributes == nil {
+				attributes = make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
+			}
+			// This is required for compatibility with the nvidia-gpu-dra-driver so that
+			// NICs can be selected based on the same index as the GPUs.
+			// TODO: migrate to resource.kubernetes.io/pcieRoot once is widely implemented.
+			attributes["index"] = resourceapi.DeviceAttribute{IntValue: ptr.To(gpuIndex)}
+		}
+	}
+
+	if !foundMac && len(attributes) == 0 {
+		klog.Warningf("no matching cloud interface found for mac %s", mac)
+	}
+
+	if len(attributes) == 0 {
+		return nil
+	}
+	return attributes
 }
 
 // getLastSegmentAndTruncate extracts the last segment from a path

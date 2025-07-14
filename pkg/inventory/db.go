@@ -285,8 +285,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 		addPCIAttributes(device.Basic, ifName, sysnetPath)
 	}
 
-	mac := link.Attrs().HardwareAddr.String()
-	for name, attribute := range getProviderAttributes(mac, db.instance) {
+	for name, attribute := range getProviderAttributes(link, db.instance) {
 		device.Basic.Attributes[name] = attribute
 	}
 
