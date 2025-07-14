@@ -19,7 +19,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.34.0
 	golang.org/x/time v0.12.0
 	google.golang.org/api v0.240.0
 	google.golang.org/protobuf v1.36.6
