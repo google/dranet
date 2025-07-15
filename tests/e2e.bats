@@ -295,3 +295,51 @@ load 'test_helper/bats-assert/load'
 
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
 }
+
+@test "driver should gracefully shutdown when terminated" {
+  # node1 will be labeled such that it stops running the dranet pod.
+  node1=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[0].metadata.name}')
+  kubectl label node "${node1}" e2e-test-do-not-schedule=true
+  # node 2 will continue to run the dranet pod.
+  node2=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[1].metadata.name}')
+
+  # Add affinity to only schedule on nodes without the
+  # "e2e-test-do-not-schedule" label. This allows the pods on the specific node
+  # to be deleted (and prevents automatic recreation on it)
+  kubectl patch daemonset dranet -n kube-system --type='merge' --patch-file=<(cat <<EOF
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: e2e-test-do-not-schedule
+                operator: DoesNotExist
+EOF
+)
+  kubectl rollout status ds/dranet --namespace=kube-system
+
+  # After graceful shutdown of the driver from node1, the DRA plugin socket
+  # files should have been deleted.
+  run docker exec "${node1}" test -S /var/lib/kubelet/plugins/dra.net/dra.sock
+  assert_failure
+  run docker exec "${node1}" test -S /var/lib/kubelet/plugins_registry/dra.net-reg.sock
+  assert_failure
+
+  # For comparison, node2 should have the files present since the dranet pod is
+  # still runnning on it.
+  docker exec "${node2}" test -S /var/lib/kubelet/plugins/dra.net/dra.sock
+  docker exec "${node2}" test -S /var/lib/kubelet/plugins_registry/dra.net-reg.sock
+
+  # Remove affinity from DraNet DaemonSet to revert it back to original
+  kubectl patch daemonset dranet -n kube-system --type='merge' --patch-file=<(cat <<EOF
+spec:
+  template:
+    spec:
+      affinity:
+EOF
+)
+  kubectl rollout status ds/dranet --namespace=kube-system
+}
