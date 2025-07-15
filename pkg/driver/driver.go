@@ -178,10 +178,8 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 }
 
 func (np *NetworkDriver) Stop() {
+	// Stop NRI Plugin (it's expected that it returns when fully stopped).
 	np.nriPlugin.Stop()
+	// Stop DRA Plugin (returns only after it has fully stopped).
 	np.draPlugin.Stop()
-}
-
-func (np *NetworkDriver) Shutdown(_ context.Context) {
-	klog.Info("Runtime shutting down...")
 }

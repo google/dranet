@@ -276,6 +276,10 @@ func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox
 	return nil
 }
 
+func (np *NetworkDriver) Shutdown(_ context.Context) {
+	klog.Info("Runtime shutting down...")
+}
+
 func getNetworkNamespace(pod *api.PodSandbox) string {
 	// get the pod network namespace
 	for _, namespace := range pod.Linux.GetNamespaces() {

@@ -26,13 +26,12 @@ import (
 	"reflect"
 	"runtime/debug"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"golang.org/x/sys/unix"
 
 	resourcev1beta1 "k8s.io/api/resource/v1beta1"
 	"k8s.io/client-go/kubernetes"
@@ -119,17 +118,11 @@ func main() {
 		klog.Fatalf("can not obtain the node name, use the hostname-override flag if you want to set it to a specific value: %v", err)
 	}
 
-	// trap Ctrl+C and call cancel on the context
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	// Enable signal handler
-	signalCh := make(chan os.Signal, 2)
-	defer func() {
-		close(signalCh)
-		cancel()
-	}()
-	signal.Notify(signalCh, os.Interrupt, unix.SIGINT)
+	// Trap signals for graceful shutdown.
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
 	opts := []driver.Option{}
 	if celExpression != "" {
@@ -156,16 +149,17 @@ func main() {
 	if err != nil {
 		klog.Fatalf("driver failed to start: %v", err)
 	}
-	defer dranet.Stop()
+	defer dranet.Stop() // Gracefully shutdown at the end.
+
 	ready.Store(true)
 	klog.Info("driver started")
 
 	select {
-	case <-signalCh:
-		klog.Infof("Exiting: received signal")
+	case sig := <-signalCh:
+		klog.Infof("Received shutdown signal: %q. Initiating graceful shutdown...", sig)
 		cancel()
 	case <-ctx.Done():
-		klog.Infof("Exiting: context cancelled")
+		klog.Info("Context cancelled. Initiating graceful shutdown...")
 	}
 }
 
