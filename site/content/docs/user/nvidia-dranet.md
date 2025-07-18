@@ -553,5 +553,5 @@ that span multiple nodes and take advantage of spare resources on nodes.
 For instance, consider that you have 2 nodes with 8 GPUs apiece. If you ran 2
 training jobs that took 6 GPUs each then you would have 4 GPUs idle. By enabling
 DraNet you could take advantage of those remaining 4 for another training job.
-Without providing the RDMA devics, these GPUs would only be able to communicate
+Without providing the RDMA devices, these GPUs would only be able to communicate
 within the same node.
