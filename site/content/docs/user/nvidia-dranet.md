@@ -547,7 +547,7 @@ They now connect!
 
 Using both DraNet and the Nvidia DRA libraries in combination is a way to
 quickly allocate both GPUs and RDMA devices in order to create interconnected
-workloads that can span multiple nodes. This can be used the create workloads
+workloads that can span multiple nodes. This can be used to create workloads
 that span multiple nodes and take advantage of spare resources on nodes.
 
 For instance, consider that you have 2 nodes with 8 GPUs apiece. If you ran 2
