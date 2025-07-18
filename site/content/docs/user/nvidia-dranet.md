@@ -339,7 +339,7 @@ spec:
 
 The `ResourceClaimTemplate` allows to specify multiple devices, in this case 2
 GPUs and 2 NICs and also apply a constraint so the NICs and the GPUs share the
-same pcie root, avoiding the penaly of suboptimal topologies.
+same pcie root, avoiding the penalty of suboptimal topologies.
 
 It is important to indicate that each Pod will obtain a `ResourceClaim` from the
 `ResourceClaimTemplate`, and since your servers may be connected in a [rail
