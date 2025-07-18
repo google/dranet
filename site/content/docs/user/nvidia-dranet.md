@@ -342,7 +342,7 @@ GPUs and 2 NICs and also apply a constraint so the NICs and the GPUs share the
 same pcie root, avoiding the penaly of suboptimal topologies.
 
 It is important to indicate that each Pod will obtain a `ResourceClaim` from the
-`ResourceClaimTemplate`, and since your serves may be connected in a [rail
+`ResourceClaimTemplate`, and since your servers may be connected in a [rail
 optimized
 architecture](https://docs.nvidia.com/networking/display/ibclusterbringupprocedure/setting+the+infiniband+cluster+topology),
 the GPUs requested need to be also aligned across the different servers. In this
