@@ -346,7 +346,7 @@ It is important to indicate that each Pod will obtain a `ResourceClaim` from the
 optimized
 architecture](https://docs.nvidia.com/networking/display/ibclusterbringupprocedure/setting+the+infiniband+cluster+topology),
 the GPUs requested need to be also aligned across the different servers. In this
-example, will request GPU0 and GPU1 of each node.
+example, we will request GPU0 and GPU1 of each node.
 
 ```yaml
 apiVersion: resource.k8s.io/v1beta1
