@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
-	resourcev1beta1 "k8s.io/api/resource/v1beta1"
+	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/utils/ptr"
 )
 
@@ -30,33 +30,29 @@ func Test_filterDevices(t *testing.T) {
 	tests := []struct {
 		name           string
 		celProgram     cel.Program
-		devices        []resourcev1beta1.Device
+		devices        []resourcev1.Device
 		expectedLength int
 	}{
 		{
 			name:           "nil program",
 			celProgram:     nil,
-			devices:        []resourcev1beta1.Device{{Name: "dev1"}},
+			devices:        []resourcev1.Device{{Name: "dev1"}},
 			expectedLength: 1,
 		},
 		{
 			name:       "filter by attribute",
 			celProgram: mustCompileCEL(t, `attributes["kind"].StringValue == "network"`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("network")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("network")},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
 					},
 				},
 			},
@@ -65,23 +61,20 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "filter by multiple attributes",
 			celProgram: mustCompileCEL(t, `attributes["kind"].StringValue == "network" && attributes["name"].StringValue == "eth0"`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("network")},
-							"name": {StringValue: ptr.To("eth0")},
-						},
+
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("network")},
+						"name": {StringValue: ptr.To("eth0")},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-							"name": {StringValue: ptr.To("eth1")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
+						"name": {StringValue: ptr.To("eth1")},
 					},
 				},
 			},
@@ -90,25 +83,23 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "not veth",
 			celProgram: mustCompileCEL(t, `attributes["type"].StringValue  != "veth"`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("network")},
-							"name": {StringValue: ptr.To("eth0")},
-							"type": {StringValue: ptr.To("veth")},
-						},
+
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("network")},
+						"name": {StringValue: ptr.To("eth0")},
+						"type": {StringValue: ptr.To("veth")},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-							"name": {StringValue: ptr.To("eth1")},
-							"type": {StringValue: ptr.To("veth")},
-						},
+
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
+						"name": {StringValue: ptr.To("eth1")},
+						"type": {StringValue: ptr.To("veth")},
 					},
 				},
 			},
@@ -117,27 +108,23 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "not virtual",
 			celProgram: mustCompileCEL(t, `attributes["virtual"].BoolValue`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind":    {StringValue: ptr.To("network")},
-							"name":    {StringValue: ptr.To("eth0")},
-							"type":    {StringValue: ptr.To("veth")},
-							"virtual": {BoolValue: ptr.To(true)},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind":    {StringValue: ptr.To("network")},
+						"name":    {StringValue: ptr.To("eth0")},
+						"type":    {StringValue: ptr.To("veth")},
+						"virtual": {BoolValue: ptr.To(true)},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind":    {StringValue: ptr.To("rdma")},
-							"name":    {StringValue: ptr.To("eth1")},
-							"type":    {StringValue: ptr.To("veth")},
-							"virtual": {BoolValue: ptr.To(true)},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind":    {StringValue: ptr.To("rdma")},
+						"name":    {StringValue: ptr.To("eth1")},
+						"type":    {StringValue: ptr.To("veth")},
+						"virtual": {BoolValue: ptr.To(true)},
 					},
 				},
 			},
@@ -146,27 +133,23 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:           "empty devices",
 			celProgram:     mustCompileCEL(t, `attributes["kind"].StringValue == "network"`),
-			devices:        []resourcev1beta1.Device{},
+			devices:        []resourcev1.Device{},
 			expectedLength: 0,
 		},
 		{
 			name:       "all devices filtered",
 			celProgram: mustCompileCEL(t, `attributes["kind"].StringValue == "network"`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
 					},
 				},
 			},
@@ -175,21 +158,17 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "no filter",
 			celProgram: mustCompileCEL(t, `true`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev1",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("rdma")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("rdma")},
 					},
 				},
 				{
 					Name: "dev2",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"kind": {StringValue: ptr.To("network")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"kind": {StringValue: ptr.To("network")},
 					},
 				},
 			},
@@ -198,29 +177,23 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "eval error - division by zero",
 			celProgram: mustCompileCEL(t, `(1 / attributes["divisor"].IntValue) == 1`), // Program is valid, but data can cause eval error
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev_error_div_zero",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"divisor": {IntValue: ptr.To[int64](0)}, // Causes division by zero during Eval
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"divisor": {IntValue: ptr.To[int64](0)}, // Causes division by zero during Eval
 					},
 				},
 				{
 					Name: "dev_no_error_eval_false",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"divisor": {IntValue: ptr.To[int64](2)},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"divisor": {IntValue: ptr.To[int64](2)},
 					},
 				},
 				{
 					Name: "dev_no_error_eval_true",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"divisor": {IntValue: ptr.To[int64](1)},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"divisor": {IntValue: ptr.To[int64](1)},
 					},
 				},
 			},
@@ -229,29 +202,23 @@ func Test_filterDevices(t *testing.T) {
 		{
 			name:       "eval error - no such key",
 			celProgram: mustCompileCEL(t, `attributes["dra.net/type"].StringValue != "veth"`),
-			devices: []resourcev1beta1.Device{
+			devices: []resourcev1.Device{
 				{
 					Name: "dev_missing_key", // This device will cause "no such key: dra.net/type"
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							"some_other_key": {StringValue: ptr.To("value")},
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						"some_other_key": {StringValue: ptr.To("value")},
 					},
 				},
 				{
 					Name: "dev_key_present_eval_true",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							resourcev1beta1.QualifiedName("dra.net/type"): {StringValue: ptr.To("eth0")}, // != "veth" is true
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						resourcev1.QualifiedName("dra.net/type"): {StringValue: ptr.To("eth0")}, // != "veth" is true
 					},
 				},
 				{
 					Name: "dev_key_present_eval_false",
-					Basic: &resourcev1beta1.BasicDevice{
-						Attributes: map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute{
-							resourcev1beta1.QualifiedName("dra.net/type"): {StringValue: ptr.To("veth")}, // != "veth" is false
-						},
+					Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
+						resourcev1.QualifiedName("dra.net/type"): {StringValue: ptr.To("veth")}, // != "veth" is false
 					},
 				},
 			},
@@ -273,9 +240,9 @@ func mustCompileCEL(t *testing.T, expression string) cel.Program {
 	t.Helper()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
-			reflect.ValueOf(resourcev1beta1.DeviceAttribute{}),
+			reflect.ValueOf(resourcev1.DeviceAttribute{}),
 		),
-		cel.Variable("attributes", cel.MapType(cel.StringType, cel.ObjectType("v1beta1.DeviceAttribute"))),
+		cel.Variable("attributes", cel.MapType(cel.StringType, cel.ObjectType("v1.DeviceAttribute"))),
 	)
 	if err != nil {
 		t.Fatalf("error creating CEL environment: %v", err)

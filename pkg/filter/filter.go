@@ -20,18 +20,18 @@ import (
 	"github.com/google/cel-go/cel"
 	celtypes "github.com/google/cel-go/common/types"
 
-	resourcev1beta1 "k8s.io/api/resource/v1beta1"
+	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/klog/v2"
 )
 
-func FilterDevices(celProgram cel.Program, devices []resourcev1beta1.Device) []resourcev1beta1.Device {
+func FilterDevices(celProgram cel.Program, devices []resourcev1.Device) []resourcev1.Device {
 	if celProgram == nil {
 		return devices
 	}
 	// filter in place
-	var filteredDevices []resourcev1beta1.Device
+	var filteredDevices []resourcev1.Device
 	for _, dev := range devices {
-		out, _, err := celProgram.Eval(map[string]interface{}{"attributes": dev.Basic.Attributes})
+		out, _, err := celProgram.Eval(map[string]interface{}{"attributes": dev.Attributes})
 		if err != nil {
 			klog.Infof("prg.Eval() failed: %v", err)
 			filteredDevices = append(filteredDevices, dev)

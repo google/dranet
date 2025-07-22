@@ -33,7 +33,7 @@ import (
 	"github.com/google/dranet/pkg/driver"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	resourcev1beta1 "k8s.io/api/resource/v1beta1"
+	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -58,7 +58,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
-	flag.StringVar(&celExpression, "filter", `attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1beta1.DeviceAttribute).")
+	flag.StringVar(&celExpression, "filter", `attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1.DeviceAttribute).")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: dranet [options]\n\n")
@@ -128,9 +128,9 @@ func main() {
 	if celExpression != "" {
 		env, err := cel.NewEnv(
 			ext.NativeTypes(
-				reflect.ValueOf(resourcev1beta1.DeviceAttribute{}),
+				reflect.ValueOf(resourcev1.DeviceAttribute{}),
 			),
-			cel.Variable("attributes", cel.MapType(cel.StringType, cel.ObjectType("v1beta1.DeviceAttribute"))),
+			cel.Variable("attributes", cel.MapType(cel.StringType, cel.ObjectType("v1.DeviceAttribute"))),
 		)
 		if err != nil {
 			klog.Fatalf("error creating CEL environment: %v", err)

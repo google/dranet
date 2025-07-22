@@ -30,8 +30,9 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
-	resourceapi "k8s.io/api/resource/v1beta1"
+	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/dynamic-resource-allocation/deviceattribute"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -202,15 +203,13 @@ func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	ifName := link.Attrs().Name
 	device := resourceapi.Device{
-		Basic: &resourceapi.BasicDevice{
-			Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
-			Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
-		},
+		Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
+		Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
 	}
 	// Set the device name. It will be normalized only if necessary.
 	device.Name = names.SetDeviceName(ifName)
 	// expose the real interface name as an attribute in case it is normalized.
-	device.Basic.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	device.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
@@ -218,7 +217,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	// identify the namespace holding the link as the other end of a veth pair
 	netnsid := link.Attrs().NetNsID
 	if podName := db.GetPodName(netnsid); podName != "" {
-		device.Basic.Attributes["dra.net/pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
+		device.Attributes["dra.net/pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
 	}
 
 	v4 := sets.Set[string]{}
@@ -236,76 +235,73 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 			}
 		}
 		if v4.Len() > 0 {
-			device.Basic.Attributes["dra.net/ipv4"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v4.UnsortedList(), ","))}
+			device.Attributes["dra.net/ipv4"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v4.UnsortedList(), ","))}
 		}
 		if v6.Len() > 0 {
-			device.Basic.Attributes["dra.net/ipv6"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v6.UnsortedList(), ","))}
+			device.Attributes["dra.net/ipv6"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(v6.UnsortedList(), ","))}
 		}
 		mac := link.Attrs().HardwareAddr.String()
-		device.Basic.Attributes["dra.net/mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
+		device.Attributes["dra.net/mac"] = resourceapi.DeviceAttribute{StringValue: &mac}
 		mtu := int64(link.Attrs().MTU)
-		device.Basic.Attributes["dra.net/mtu"] = resourceapi.DeviceAttribute{IntValue: &mtu}
+		device.Attributes["dra.net/mtu"] = resourceapi.DeviceAttribute{IntValue: &mtu}
 	}
 
-	device.Basic.Attributes["dra.net/encapsulation"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.EncapType}
+	device.Attributes["dra.net/encapsulation"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.EncapType}
 	operState := linkAttrs.OperState.String()
-	device.Basic.Attributes["dra.net/state"] = resourceapi.DeviceAttribute{StringValue: &operState}
-	device.Basic.Attributes["dra.net/alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
-	device.Basic.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
+	device.Attributes["dra.net/state"] = resourceapi.DeviceAttribute{StringValue: &operState}
+	device.Attributes["dra.net/alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
+	device.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
 
 	// Get eBPF properties from the interface using the legacy tc hooks
 	isEbpf := false
 	filterNames, ok := getTcFilters(link)
 	if ok {
 		isEbpf = true
-		device.Basic.Attributes["dra.net/tcFilterNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(filterNames, ","))}
+		device.Attributes["dra.net/tcFilterNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(filterNames, ","))}
 	}
 
 	// Get eBPF properties from the interface using the tcx hooks
 	programNames, ok := getTcxFilters(link)
 	if ok {
 		isEbpf = true
-		device.Basic.Attributes["dra.net/tcxProgramNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(programNames, ","))}
+		device.Attributes["dra.net/tcxProgramNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(programNames, ","))}
 	}
-	device.Basic.Attributes["dra.net/ebpf"] = resourceapi.DeviceAttribute{BoolValue: &isEbpf}
+	device.Attributes["dra.net/ebpf"] = resourceapi.DeviceAttribute{BoolValue: &isEbpf}
 
 	isRDMA := rdmamap.IsRDmaDeviceForNetdevice(ifName)
-	device.Basic.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
+	device.Attributes["dra.net/rdma"] = resourceapi.DeviceAttribute{BoolValue: &isRDMA}
 	// from https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/ed1c14dd4c313c7dd9fe4730a60358fbeffbfdd4/pkg/netdevice/netDeviceProvider.go#L99
 	isSRIOV := sriovTotalVFs(ifName) > 0
-	device.Basic.Attributes["dra.net/sriov"] = resourceapi.DeviceAttribute{BoolValue: &isSRIOV}
+	device.Attributes["dra.net/sriov"] = resourceapi.DeviceAttribute{BoolValue: &isSRIOV}
 	if isSRIOV {
 		vfs := int64(sriovNumVFs(ifName))
-		device.Basic.Attributes["dra.net/sriovVfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
+		device.Attributes["dra.net/sriovVfs"] = resourceapi.DeviceAttribute{IntValue: &vfs}
 	}
 
 	if isVirtual(ifName, sysnetPath) {
-		device.Basic.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
+		device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	} else {
-		addPCIAttributes(device.Basic, ifName, sysnetPath)
+		addPCIAttributes(&device, ifName, sysnetPath)
 	}
 
 	mac := link.Attrs().HardwareAddr.String()
 	for name, attribute := range getProviderAttributes(mac, db.instance) {
-		device.Basic.Attributes[name] = attribute
+		device.Attributes[name] = attribute
 	}
 
 	return &device, nil
 }
 
-func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path string) {
+func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 	device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(false)}
 
-	root, err := bdfRoot(ifName, path)
-	if err == nil {
-		if root.domain != "" && root.bus != "" {
-			// standardized attribute for all dra drivers
-			// ref: https://github.com/kubernetes/enhancements/pull/5316
-			pcieRoot := fmt.Sprintf("pci%s:%s", root.domain, root.bus)
-			device.Attributes["resource.kubernetes.io/pcieRoot"] = resourceapi.DeviceAttribute{StringValue: &pcieRoot}
-		}
+	address, err := bdfAddress(ifName, path)
+	if err != nil {
+		klog.Infof("Could not get bdf address : %v", err)
 	} else {
-		klog.Infof("could not get pci root : %v", err)
+		if err := setPciRootAttr(device, address); err != nil {
+			klog.Infof("Could not get pci root attribute : %v", err)
+		}
 	}
 
 	entry, err := ids(ifName, path)
@@ -327,4 +323,13 @@ func addPCIAttributes(device *resourceapi.BasicDevice, ifName string, path strin
 	if err == nil {
 		device.Attributes["dra.net/numaNode"] = resourceapi.DeviceAttribute{IntValue: &numa}
 	}
+}
+
+func setPciRootAttr(device *resourceapi.Device, address *pciAddress) error {
+	pcieRootAttr, err := deviceattribute.GetPCIeRootAttributeByPCIBusID(address.bus)
+	if err != nil {
+		return err
+	}
+	device.Attributes[pcieRootAttr.Name] = pcieRootAttr.Value
+	return nil
 }
