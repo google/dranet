@@ -26,6 +26,8 @@ controller:
   priorityClassName: ""
   affinity: null
 
+gpuResourcesEnabledOverride: true # Required to deploy GPU DeviceClasses
+
 kubeletPlugin:
   priorityClassName: ""
   tolerations:

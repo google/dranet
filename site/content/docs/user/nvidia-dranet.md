@@ -115,7 +115,7 @@ Please ensure the GPU Driver image [includes the standard attribute
 so both GPU DRA driver and DraNet can use it for NIC alignment.
 
 ```
-helm upgrade -i --create-namespace --namespace nvidia-dra-driver-gpu nvidia-dra-driver-gpu ./k8s-dra-driver-gpu/deployments/helm/nvidia-dra-driver-gpu --set gpuResourcesEnabledOverride=true --values https://raw.githubusercontent.com/google/dranet/refs/heads/main/examples/demo_nvidia_dranet/values.yaml --wait 
+helm upgrade -i --create-namespace --namespace nvidia-dra-driver-gpu nvidia-dra-driver-gpu ./k8s-dra-driver-gpu/deployments/helm/nvidia-dra-driver-gpu --values https://raw.githubusercontent.com/google/dranet/refs/heads/main/examples/demo_nvidia_dranet/values.yaml --wait
 ```
 
 The values.yaml adds some additional tolerations and removes some priorities
