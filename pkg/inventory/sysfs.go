@@ -174,28 +174,6 @@ func bdfAddress(ifName string, path string) (*pciAddress, error) {
 	return address, nil
 }
 
-// Obtain the root of the pci device for the interface.
-// TODO(@michaelasp): Change this to use k8s helper function when available for consistency with other DRA solutions.
-func bdfRoot(ifName, path string) (*pciRoot, error) {
-	root := &pciRoot{}
-
-	sysfsPath := realpath(ifName, path)
-	bfd := strings.Split(sysfsPath, "/")
-	if len(bfd) < 5 {
-		return nil, fmt.Errorf("could not find corresponding PCI address: %v", bfd)
-	}
-	klog.V(4).Infof("pci root: %s", bfd[3])
-	rootString := strings.Split(bfd[3], ":")
-	switch len(rootString) {
-	case 2:
-		root.domain = strings.TrimPrefix(rootString[0], "pci")
-		root.bus = rootString[1]
-	default:
-		return nil, fmt.Errorf("could not find corresponding PCI root: %v", rootString)
-	}
-	return root, nil
-}
-
 func ids(ifName string, path string) (*pcidb.Entry, error) {
 	// PCI data
 	var device, subsystemVendor, subsystemDevice []byte

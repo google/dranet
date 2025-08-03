@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
-	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1beta1"
+	resourceapply "k8s.io/client-go/applyconfigurations/resource/v1"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/set"
 )
@@ -210,7 +210,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		go func() {
 			ctxStatus, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			_, err := np.kubeClient.ResourceV1beta1().ResourceClaims(claim.Namespace).ApplyStatus(ctxStatus,
+			_, err := np.kubeClient.ResourceV1().ResourceClaims(claim.Namespace).ApplyStatus(ctxStatus,
 				resourceClaimApply,
 				metav1.ApplyOptions{FieldManager: np.driverName, Force: true},
 			)
@@ -274,6 +274,10 @@ func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox
 	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	np.netdb.RemovePodNetns(podKey(pod))
 	return nil
+}
+
+func (np *NetworkDriver) Shutdown(_ context.Context) {
+	klog.Info("Runtime shutting down...")
 }
 
 func getNetworkNamespace(pod *api.PodSandbox) string {

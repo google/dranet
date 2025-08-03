@@ -16,7 +16,7 @@ Kubernetes.
 - **Cluster-Wide Scalability:**  Effectively manages network resources across a
   large number of nodes for seamless operation in Kubernetes deployments.
 
-Our research paper, **"The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking,"** provides a deep dive into the DraNet model and its impact.
+Our research paper, **"[The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking](/site/static/docs/kubernetes_network_driver_model_dranet_paper.pdf)"**, provides a deep dive into the DraNet model and its impact.
 
 <p align="center">
 <img src="site/static/images/nccl_all_gather_results.png" width="400" height="300">   <img src="site/static/images/nccl_all_reduce_results.png" width="400" height="300">
@@ -26,8 +26,6 @@ The key findings include:
 
 - **Up to 60% Bandwidth Increase:** By enabling topology-aware scheduling of GPUs and NICs, DraNet boosts bus bandwidth by up to 59.6% for `all_gather` and 58.1% for `all_reduce` operations in distributed AI/ML workloads.
 - **Operational Simplicity:** The paper demonstrates how the KND model used by DraNet drastically simplifies the management of high-performance hardware, replacing fragile, multi-component chains with a clean, composable architecture.
-
-**[Read the full research paper here!](/site/static/docs/kubernetes_network_driver_model_dranet_paper.pdf)**
 
 ## How It Works
 

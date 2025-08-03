@@ -3,6 +3,30 @@
 load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
 
+teardown() {
+  # Cleanup all dummy devices on worker nodes
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip -br link show type dummy | awk '{print \$1}' | xargs -I {} ip link delete {}"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip -br link show type dummy | awk '{print \$1}' | xargs -I {} ip link delete {}"
+
+  sleep 5
+}
+
+setup_bpf_device() {
+  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc qdisc add dev dummy0 clsact"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter add dev dummy0 ingress bpf direct-action obj dummy_bpf.o sec classifier"
+}
+
+setup_tcx_filter() {
+  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf_tcx.o "$CLUSTER_NAME"-worker2:/dummy_bpf_tcx.o
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "chmod +x bpftool"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool prog load dummy_bpf_tcx.o /sys/fs/bpf/dummy_prog_tcx"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net attach tcx_ingress pinned /sys/fs/bpf/dummy_prog_tcx dev dummy0"
+}
+
 @test "dummy interface with IP addresses ResourceClaim" {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
@@ -41,13 +65,13 @@ load 'test_helper/bats-assert/load'
 }
 
 @test "dummy interface with IP addresses ResourceClaimTemplate" {
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy1 type dummy"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip addr add 169.254.169.14/32 dev dummy1"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip addr add 169.254.169.14/32 dev dummy0"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=MyApp
   POD_NAME=$(kubectl get pods -l app=MyApp -o name)
-  run kubectl exec $POD_NAME -- ip addr show dummy1
+  run kubectl exec $POD_NAME -- ip addr show dummy0
   assert_success
   assert_output --partial "169.254.169.14"
   # TODO list the specific resourceclaim and the networkdata
@@ -59,8 +83,8 @@ load 'test_helper/bats-assert/load'
 }
 
 @test "dummy interface with IP addresses ResourceClaim and routes" {
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy2 type dummy"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy2"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
@@ -95,8 +119,8 @@ load 'test_helper/bats-assert/load'
 
 
 @test "validate advanced network configurations with dummy" {
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy3 type dummy"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy3"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_advanced.yaml
@@ -125,8 +149,8 @@ load 'test_helper/bats-assert/load'
 
 # Test case for validating Big TCP configurations.
 @test "validate big tcp network configurations on dummy interface" {
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy4 type dummy"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy4"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_bigtcp.yaml
@@ -155,18 +179,14 @@ load 'test_helper/bats-assert/load'
 
 # Test case for validating ebpf attributes are exposed via resource slice.
 @test "validate bpf filter attributes" {
-  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy5 type dummy"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy5"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc qdisc add dev dummy5 clsact"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter add dev dummy5 ingress bpf direct-action obj dummy_bpf.o sec classifier"
+  setup_bpf_device
 
-  run docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter show dev dummy5 ingress"
+  run docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter show dev dummy0 ingress"
   assert_success
   assert_output --partial "dummy_bpf.o:[classifier] direct-action"
 
   for attempt in {1..4}; do
-    run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/ebpf.bool}'
+    run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy0")].attributes.dra\.net\/ebpf.bool}'
     if [ "$status" -eq 0 ] && [[ "$output" == "true" ]]; then
       break
     fi
@@ -178,20 +198,17 @@ load 'test_helper/bats-assert/load'
   assert_output "true"
 
   # Validate bpfName attribute
-  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcFilterNames.string}'
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy0")].attributes.dra\.net\/tcFilterNames.string}'
   assert_success
   assert_output "dummy_bpf.o:[classifier]"
 }
 
-# This reuses previous test
 @test "validate tcx bpf filter attributes" {
-  docker cp "$BATS_TEST_DIRNAME"/dummy_bpf_tcx.o "$CLUSTER_NAME"-worker2:/dummy_bpf_tcx.o
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "chmod +x bpftool"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool prog load dummy_bpf_tcx.o /sys/fs/bpf/dummy_prog_tcx"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net attach tcx_ingress pinned /sys/fs/bpf/dummy_prog_tcx dev dummy5"
+  setup_bpf_device
 
-  run docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net show dev dummy5"
+  setup_tcx_filter
+
+  run docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net show dev dummy0"
   assert_success
   assert_output --partial "tcx/ingress handle_ingress prog_id"
 
@@ -199,18 +216,24 @@ load 'test_helper/bats-assert/load'
   sleep 5
 
   # Validate bpf attribute is true
-  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/ebpf.bool}'
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy0")].attributes.dra\.net\/ebpf.bool}'
   assert_success
   assert_output "true"
 
   # Validate bpfName attribute
-  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy5")].attributes.dra\.net\/tcxProgramNames.string}'
+  run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy0")].attributes.dra\.net\/tcxProgramNames.string}'
   assert_success
   assert_output "handle_ingress"
+
+  # Unpin the bpf program
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -Rf /sys/fs/bpf/dummy_prog_tcx"
 }
 
-# This reuses previous test
 @test "validate bpf programs are removed" {
+  setup_bpf_device
+
+  setup_tcx_filter
+
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
   kubectl wait --for=condition=ready pod/pod-ebpf --timeout=300s
@@ -218,33 +241,35 @@ load 'test_helper/bats-assert/load'
   run kubectl exec pod-ebpf -- ash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz && chmod +x bpftool"
   assert_success
 
-  run kubectl exec pod-ebpf -- ash -c "./bpftool net show dev dummy5"
+  run kubectl exec pod-ebpf -- ash -c "./bpftool net show dev dummy0"
   assert_success
   refute_output --partial "tcx/ingress handle_ingress prog_id"
   refute_output --partial "dummy_bpf.o:[classifier]"
 
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  # Unpin the bpf program
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -Rf /sys/fs/bpf/dummy_prog_tcx"
 }
 
 # Test case for validating multiple devices allocated to the same pod.
 @test "2 dummy interfaces with IP addresses ResourceClaimTemplate" {
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy6 type dummy"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy6"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.13/32 dev dummy6"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.13/32 dev dummy0"
 
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy7 type dummy"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy7"
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy7"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy1 type dummy"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy1"
+  docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy1"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate_double.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=MyApp
   POD_NAME=$(kubectl get pods -l app=MyApp -o name)
-  run kubectl exec $POD_NAME -- ip addr show dummy6
+  run kubectl exec $POD_NAME -- ip addr show dummy0
   assert_success
   assert_output --partial "169.254.169.13"
-  run kubectl exec $POD_NAME -- ip addr show dummy7
+  run kubectl exec $POD_NAME -- ip addr show dummy1
   assert_success
   assert_output --partial "169.254.169.14"
   run kubectl get resourceclaims -o=jsonpath='{.items[0].status.devices[*]}'
@@ -294,4 +319,52 @@ load 'test_helper/bats-assert/load'
   assert_output --partial "169.254.169.14"
 
   kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+}
+
+@test "driver should gracefully shutdown when terminated" {
+  # node1 will be labeled such that it stops running the dranet pod.
+  node1=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[0].metadata.name}')
+  kubectl label node "${node1}" e2e-test-do-not-schedule=true
+  # node 2 will continue to run the dranet pod.
+  node2=$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane' -o jsonpath='{.items[1].metadata.name}')
+
+  # Add affinity to only schedule on nodes without the
+  # "e2e-test-do-not-schedule" label. This allows the pods on the specific node
+  # to be deleted (and prevents automatic recreation on it)
+  kubectl patch daemonset dranet -n kube-system --type='merge' --patch-file=<(cat <<EOF
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: e2e-test-do-not-schedule
+                operator: DoesNotExist
+EOF
+)
+  kubectl rollout status ds/dranet --namespace=kube-system
+
+  # After graceful shutdown of the driver from node1, the DRA plugin socket
+  # files should have been deleted.
+  run docker exec "${node1}" test -S /var/lib/kubelet/plugins/dra.net/dra.sock
+  assert_failure
+  run docker exec "${node1}" test -S /var/lib/kubelet/plugins_registry/dra.net-reg.sock
+  assert_failure
+
+  # For comparison, node2 should have the files present since the dranet pod is
+  # still runnning on it.
+  docker exec "${node2}" test -S /var/lib/kubelet/plugins/dra.net/dra.sock
+  docker exec "${node2}" test -S /var/lib/kubelet/plugins_registry/dra.net-reg.sock
+
+  # Remove affinity from DraNet DaemonSet to revert it back to original
+  kubectl patch daemonset dranet -n kube-system --type='merge' --patch-file=<(cat <<EOF
+spec:
+  template:
+    spec:
+      affinity:
+EOF
+)
+  kubectl rollout status ds/dranet --namespace=kube-system
 }

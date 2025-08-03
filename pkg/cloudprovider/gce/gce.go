@@ -29,7 +29,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/google/dranet/pkg/cloudprovider"
-	resourceapi "k8s.io/api/resource/v1beta1"
+	resourceapi "k8s.io/api/resource/v1"
 )
 
 // GPUDirectSupport represents the type of GPUDirect support for a given machine type.

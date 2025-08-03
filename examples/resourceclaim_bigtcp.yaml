@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind:  ResourceClaim
 metadata:
   name: dummy-interface-bigtcp
@@ -20,10 +20,11 @@ spec:
   devices:
     requests:
     - name: req-dummy-bigtcp
-      deviceClassName: dra.net
-      selectors:
-        - cel:
-            expression: device.attributes["dra.net"].ifName == "dummy4"
+      exactly:
+        deviceClassName: dra.net
+        selectors:
+          - cel:
+              expression: device.attributes["dra.net"].ifName == "dummy0"
     config:
     - opaque:
         driver: dra.net

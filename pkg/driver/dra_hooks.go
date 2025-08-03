@@ -31,8 +31,9 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
-	resourceapi "k8s.io/api/resource/v1beta1"
+	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
@@ -339,4 +340,10 @@ func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []k
 func (np *NetworkDriver) unprepareResourceClaim(_ context.Context, claim kubeletplugin.NamespacedObject) error {
 	np.podConfigStore.DeleteClaim(claim.NamespacedName)
 	return nil
+}
+
+func (np *NetworkDriver) HandleError(ctx context.Context, err error, msg string) {
+	// For now we just follow the advice documented in the DRAPlugin API docs.
+	// See: https://pkg.go.dev/k8s.io/apimachinery/pkg/util/runtime#HandleErrorWithContext
+	runtime.HandleErrorWithContext(ctx, err, msg)
 }

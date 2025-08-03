@@ -26,7 +26,7 @@ import (
 
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/google/dranet/pkg/cloudprovider/gce"
-	resourceapi "k8s.io/api/resource/v1beta1"
+	resourceapi "k8s.io/api/resource/v1"
 )
 
 // getInstanceProperties get the instace properties and stores them in a global variable to be used in discovery
