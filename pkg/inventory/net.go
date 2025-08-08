@@ -22,54 +22,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/klog/v2"
 )
-
-func getDefaultGwInterfaces() sets.Set[string] {
-	interfaces := sets.Set[string]{}
-	filter := &netlink.Route{}
-	routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_TABLE)
-	if err != nil {
-		return interfaces
-	}
-
-	for _, r := range routes {
-		if r.Family != netlink.FAMILY_V4 && r.Family != netlink.FAMILY_V6 {
-			continue
-		}
-
-		if r.Dst != nil && !r.Dst.IP.IsUnspecified() {
-			continue
-		}
-
-		// no multipath
-		if len(r.MultiPath) == 0 {
-			if r.Gw == nil {
-				continue
-			}
-			intfLink, err := netlink.LinkByIndex(r.LinkIndex)
-			if err != nil {
-				klog.Infof("Failed to get interface link for route %v : %v", r, err)
-				continue
-			}
-			interfaces.Insert(intfLink.Attrs().Name)
-		}
-
-		for _, nh := range r.MultiPath {
-			if nh.Gw == nil {
-				continue
-			}
-			intfLink, err := netlink.LinkByIndex(r.LinkIndex)
-			if err != nil {
-				klog.Infof("Failed to get interface link for route %v : %v", r, err)
-				continue
-			}
-			interfaces.Insert(intfLink.Attrs().Name)
-		}
-	}
-	klog.V(4).Infof("Found following interfaces for the default gateway: %v", interfaces.UnsortedList())
-	return interfaces
-}
 
 func getTcFilters(link netlink.Link) ([]string, bool) {
 	isTcEBPF := false

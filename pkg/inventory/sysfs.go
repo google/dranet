@@ -18,13 +18,11 @@ package inventory
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/google/dranet/pkg/pcidb"
 	"k8s.io/klog/v2"
 )
 
@@ -37,7 +35,8 @@ const (
 	// that is accessing the directory.  Each of these symbolic
 	// links refers to entries in the /sys/devices directory.
 	// https://man7.org/linux/man-pages/man5/sysfs.5.html
-	sysdevPath = "/sys/devices"
+	sysdevPath           = "/sys/devices"
+	sysBusPciDevicesPath = "/sys/bus/pci/devices"
 )
 
 func realpath(ifName string, syspath string) string {
@@ -94,112 +93,4 @@ func sriovNumVFs(name string) int {
 		return 0
 	}
 	return t
-}
-
-func numaNode(ifName string, syspath string) (int64, error) {
-	// /sys/class/net/<interface>/device/numa_node
-	numeNode, err := os.ReadFile(filepath.Join(syspath, ifName, "device/numa_node"))
-	if err != nil {
-		return 0, err
-	}
-	numa, err := strconv.ParseInt(strings.TrimSpace(string(numeNode)), 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return numa, nil
-}
-
-// pciAddress BDF Notation
-// [domain:]bus:device.function
-// https://wiki.xenproject.org/wiki/Bus:Device.Function_(BDF)_Notation
-type pciAddress struct {
-	// There might be several independent sets of PCI devices
-	// (e.g. several host PCI controllers on a mainboard chipset)
-	domain string
-	bus    string
-	device string
-	// One PCI device (e.g. pluggable card) may implement several functions
-	// (e.g. sound card and joystick controller used to be a common combo),
-	// so PCI provides for up to 8 separate functions on a single PCI device.
-	function string
-}
-
-// The PCI root is the root PCI device, derived from the
-// pciAddress of a device. Spec is defined from the DRA KEP.
-// https://github.com/kubernetes/enhancements/pull/5316
-type pciRoot struct {
-	domain string
-	// The root may have a different host bus than the PCI device.
-	// e.g https://uefi.org/specs/UEFI/2.10/14_Protocols_PCI_Bus_Support.html#server-system-with-four-pci-root-bridges
-	bus string
-}
-
-func bdfAddress(ifName string, path string) (*pciAddress, error) {
-	address := &pciAddress{}
-	// https://docs.kernel.org/PCI/sysfs-pci.html
-	// realpath /sys/class/net/ens4/device
-	// /sys/devices/pci0000:00/0000:00:04.0/virtio1
-	// The topmost element describes the PCI domain and bus number.
-	// PCI domain: 0000 Bus: 00 Device: 04 Function: 0
-	sysfsPath := realpath(ifName, path)
-	bfd := strings.Split(sysfsPath, "/")
-	if len(bfd) < 5 {
-		return nil, fmt.Errorf("could not find corresponding PCI address: %v", bfd)
-	}
-
-	klog.V(4).Infof("pci address: %s", bfd[4])
-	pci := strings.Split(bfd[4], ":")
-	// Simple BDF notation
-	switch len(pci) {
-	case 2:
-		address.bus = pci[0]
-		f := strings.Split(pci[1], ".")
-		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
-		}
-		address.device = f[0]
-		address.function = f[1]
-	case 3:
-		address.domain = pci[0]
-		address.bus = pci[1]
-		f := strings.Split(pci[2], ".")
-		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
-		}
-		address.device = f[0]
-		address.function = f[1]
-	default:
-		return nil, fmt.Errorf("could not find corresponding PCI address: %v", pci)
-	}
-	return address, nil
-}
-
-func ids(ifName string, path string) (*pcidb.Entry, error) {
-	// PCI data
-	var device, subsystemVendor, subsystemDevice []byte
-	vendor, err := os.ReadFile(filepath.Join(path, ifName, "device/vendor"))
-	if err != nil {
-		return nil, err
-	}
-	// device, subsystemVendor and subsystemDevice are best effort
-	device, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/device"))
-	if err == nil {
-		subsystemVendor, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_vendor"))
-		if err == nil {
-			subsystemDevice, _ = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_device"))
-		}
-	}
-
-	// remove the 0x prefix
-	entry, err := pcidb.GetDevice(
-		strings.TrimPrefix(strings.TrimSpace(string(vendor)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(device)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(subsystemVendor)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(subsystemDevice)), "0x"),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-	return entry, nil
 }

@@ -41,6 +41,16 @@ const (
 	GPUDirectRDMA  GPUDirectSupport = "GPUDirect-RDMA"
 )
 
+const (
+	GCEAttrPrefix = "gce.dra.net"
+
+	AttrGCEBlock                = GCEAttrPrefix + "/" + "block"
+	AttrGCESubblock             = GCEAttrPrefix + "/" + "subblock"
+	AttrGCEHost                 = GCEAttrPrefix + "/" + "host"
+	AttrGCENetworkName          = GCEAttrPrefix + "/" + "networkName"
+	AttrGCENetworkProjectNumber = GCEAttrPrefix + "/" + "networkProjectNumber"
+)
+
 var (
 	// https://cloud.google.com/compute/docs/accelerator-optimized-machines#network-protocol
 	// machine types have a one to one mapping to a network protocol in google cloud

@@ -150,6 +150,10 @@ spec:
         - name: bpf-programs
           mountPath: /sys/fs/bpf
           mountPropagation: HostToContainer
+        - name: pci-ids-hwdata
+          mountPath: /usr/share/hwdata/
+        - name: pci-ids-misc
+          mountPath: /usr/share/misc/
       volumes:
       - name: device-plugin
         hostPath:
@@ -172,4 +176,10 @@ spec:
       - name: bpf-programs
         hostPath:
           path: /sys/fs/bpf
+      - name: pci-ids-hwdata
+        hostPath:
+          path: /usr/share/hwdata/
+      - name: pci-ids-misc
+        hostPath:
+          path: /usr/share/misc/
 ---
