@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
-	"github.com/google/dranet/pkg/names"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/vishvananda/netlink"
@@ -165,11 +164,14 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			},
 			Network: netconf,
 		}
-		ifName := names.GetOriginalName(result.Device)
+		ifName, err := np.netdb.GetNetInterfaceName(result.Device)
+		if err != nil {
+			errorList = append(errorList, fmt.Errorf("failed to get network interface %s", ifName))
+		}
 		// Get Network configuration and merge it
 		link, err := nlHandle.LinkByName(ifName)
 		if err != nil {
-			errorList = append(errorList, fmt.Errorf("fail to get network interface %s", ifName))
+			errorList = append(errorList, fmt.Errorf("failed to get netlink to interface %s", ifName))
 			continue
 		}
 
@@ -298,15 +300,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			}
 		}
 
-		device := kubeletplugin.Device{
-			Requests:   []string{result.Request},
-			PoolName:   result.Pool,
-			DeviceName: result.Device,
-		}
 		// TODO: support for multiple pods sharing the same device
 		// we'll create the subinterface here
 		for _, uid := range podUIDs {
-			np.podConfigStore.Set(uid, device.DeviceName, podCfg)
+			np.podConfigStore.Set(uid, result.Device, podCfg)
 		}
 		klog.V(4).Infof("Claim Resources for pods %v : %#v", podUIDs, podCfg)
 	}
