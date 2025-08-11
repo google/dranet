@@ -30,7 +30,7 @@ require (
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/sys v0.35.0
 	golang.org/x/time v0.12.0
-	google.golang.org/api v0.244.0
+	google.golang.org/api v0.246.0
 	google.golang.org/protobuf v1.36.7
 	k8s.io/api v0.34.0-beta.0
 	k8s.io/apimachinery v0.34.0-beta.0
