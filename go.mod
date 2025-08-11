@@ -12,7 +12,7 @@ replace (
 )
 
 require (
-	cloud.google.com/go/compute v1.41.0
+	cloud.google.com/go/compute v1.42.0
 	cloud.google.com/go/compute/metadata v0.7.0
 	cloud.google.com/go/container v1.44.0
 	github.com/Mellanox/rdmamap v1.1.0
@@ -110,7 +110,7 @@ require (
 	golang.org/x/term v0.33.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/grpc v1.74.2 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
