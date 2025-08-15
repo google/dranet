@@ -19,6 +19,7 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"strings"
 	"sync"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/google/dranet/pkg/cloudprovider"
-	"github.com/google/dranet/pkg/names"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/time/rate"
@@ -39,8 +39,9 @@ import (
 
 const (
 	// database poll period
-	minInterval = 5 * time.Second
-	maxInterval = 1 * time.Minute
+	minInterval             = 5 * time.Second
+	simpleDiscoveryInterval = 1 * time.Minute
+	fullDiscoveryInterval   = 5 * time.Minute
 )
 
 var (
@@ -52,21 +53,29 @@ var (
 type DB struct {
 	instance *cloudprovider.CloudInstance
 
-	mu         sync.RWMutex
-	podStore   map[int]string    // key: netnsid path value: Pod namespace/name
-	podNsStore map[string]string // key pod value: netns path
-
+	mu            sync.RWMutex
+	podStore      map[int]string // key: netnsid path value: Pod namespace/name
+	podNsStore    map[string]string
+	deviceStore   map[string]*resourceapi.Device
 	rateLimiter   *rate.Limiter
 	notifications chan []resourceapi.Device
-	hasDevices    bool
+
+	nriSyncCh <-chan struct{}
+
+	fullDiscoveryInterval   time.Duration
+	simpleDiscoveryInterval time.Duration
 }
 
-func New() *DB {
+func New(nriSyncCh <-chan struct{}) *DB {
 	return &DB{
-		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
-		podStore:      map[int]string{},
-		podNsStore:    map[string]string{},
-		notifications: make(chan []resourceapi.Device),
+		rateLimiter:             rate.NewLimiter(rate.Every(minInterval), 1),
+		podStore:                map[int]string{},
+		podNsStore:              map[string]string{},
+		deviceStore:             map[string]*resourceapi.Device{},
+		notifications:           make(chan []resourceapi.Device),
+		nriSyncCh:               nriSyncCh,
+		fullDiscoveryInterval:   fullDiscoveryInterval,
+		simpleDiscoveryInterval: simpleDiscoveryInterval,
 	}
 }
 
@@ -108,28 +117,44 @@ func (db *DB) GetPodName(netnsid int) string {
 	return db.podStore[netnsid]
 }
 
-// GetPodNamespace allows to get the Pod network namespace
-func (db *DB) GetPodNamespace(pod string) string {
+// GetPodNetNamespace returns the network namespace of the pod.
+func (db *DB) GetPodNetNamespace(pod string) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.podNsStore[pod]
 }
 
+func (db *DB) listPodNetNamespaces() map[string]string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return maps.Clone(db.podNsStore)
+}
+
+func (db *DB) GetDevice(deviceName string) (*resourceapi.Device, bool) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	dev, ok := db.deviceStore[deviceName]
+	return dev, ok
+}
+
+// GetInterfaceName returns the interface name for a given normalized device name.
+func (db *DB) GetInterfaceName(deviceName string) (string, bool) {
+	device, ok := db.GetDevice(deviceName)
+	if !ok {
+		return "", false
+	}
+	ifNameAttr, ok := device.Attributes["dra.net/ifName"]
+	if !ok || ifNameAttr.StringValue != nil && *ifNameAttr.StringValue == "" {
+		return "", false
+	}
+	return *ifNameAttr.StringValue, true
+}
+
 func (db *DB) Run(ctx context.Context) error {
 	defer close(db.notifications)
 
-	nlHandle, err := netlink.NewHandle()
-	if err != nil {
-		return fmt.Errorf("error creating netlink handle %v", err)
-	}
-	// Resources are published periodically or if there is a netlink notification
-	// indicating a new interfaces was added or changed
-	nlChannel := make(chan netlink.LinkUpdate)
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-	if err := netlink.LinkSubscribe(nlChannel, doneCh); err != nil {
-		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", maxInterval.String())
-	}
+	// Wait for the NRI plugin to be synchronized
+	<-db.nriSyncCh
 
 	// Obtain data that will not change after the startup
 	db.instance = getInstanceProperties(ctx)
@@ -138,17 +163,94 @@ func (db *DB) Run(ctx context.Context) error {
 	// cases.
 	gwInterfaces := getDefaultGwInterfaces()
 
+	// Run initial full discovery
+	if err := db.discoverDevices(true, gwInterfaces); err != nil {
+		klog.Errorf("Initial full device discovery failed: %v", err)
+	}
+
+	fullDiscoveryTicker := time.NewTicker(db.fullDiscoveryInterval)
+	defer fullDiscoveryTicker.Stop()
+
+	simpleDiscoveryTicker := time.NewTicker(db.simpleDiscoveryInterval)
+	defer simpleDiscoveryTicker.Stop()
+
+	nlChannel := make(chan netlink.LinkUpdate)
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+	if err := netlink.LinkSubscribe(nlChannel, doneCh); err != nil {
+		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", db.simpleDiscoveryInterval.String())
+	}
+
 	for {
 		err := db.rateLimiter.Wait(ctx)
 		if err != nil {
 			klog.Error(err, "unexpected rate limited error trying to get system interfaces")
 		}
 
-		devices := []resourceapi.Device{}
+		select {
+		case <-fullDiscoveryTicker.C:
+			if err := db.discoverDevices(true, gwInterfaces); err != nil {
+				klog.Errorf("full device discovery failed: %v", err)
+			}
+		case <-simpleDiscoveryTicker.C:
+			if err := db.discoverDevices(false, gwInterfaces); err != nil {
+				klog.Errorf("simple device discovery failed: %v", err)
+			}
+		case <-nlChannel:
+			// drain the channel so we only sync once
+			for len(nlChannel) > 0 {
+				<-nlChannel
+			}
+			if err := db.discoverDevices(false, gwInterfaces); err != nil {
+				klog.Errorf("simple device discovery failed: %v", err)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (db *DB) discoverDevices(full bool, gwInterfaces sets.Set[string]) error {
+	var netNamespaces []netns.NsHandle
+	var err error
+
+	// Always scan the host network namespace
+	hostNs, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get host network namespace: %w", err)
+	}
+	netNamespaces = append(netNamespaces, hostNs)
+
+	if full {
+		// In case of full device discovery, also scan the pod's network namespaces.
+		for pod, nsPath := range db.listPodNetNamespaces() {
+			if nsPath == "" {
+				continue
+			}
+			ns, err := netns.GetFromPath(nsPath)
+			if err != nil {
+				klog.Errorf("Failed to get netns handle for pod %q having network namespace %q: %v", pod, nsPath, err)
+				continue
+			}
+			netNamespaces = append(netNamespaces, ns)
+		}
+	}
+
+	newDeviceStore := make(map[string]*resourceapi.Device)
+
+	for _, ns := range netNamespaces {
+		nlHandle, err := netlink.NewHandleAt(ns)
+		if err != nil {
+			klog.Errorf("failed to create netlink handle for netns %v: %v", ns, err)
+			continue
+		}
+
 		ifaces, err := nlHandle.LinkList()
 		if err != nil {
-			klog.Error(err, "unexpected error trying to get system interfaces")
+			klog.Errorf("failed to list links for netns %v: %v", ns, err)
+			continue
 		}
+
 		for _, iface := range ifaces {
 			klog.V(7).InfoS("Checking network interface", "name", iface.Attrs().Name)
 			if gwInterfaces.Has(iface.Attrs().Name) {
@@ -167,49 +269,62 @@ func (db *DB) Run(ctx context.Context) error {
 			}
 
 			// publish this network interface
-			device, err := db.netdevToDRAdev(iface)
+			device, err := db.netdevToDRAdev(nlHandle, iface)
 			if err != nil {
 				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs().Name, err)
 				continue
 			}
-
-			devices = append(devices, *device)
+			if device == nil {
+				continue
+			}
+			newDeviceStore[device.Name] = device
 			klog.V(4).Infof("Found following network interface %s", iface.Attrs().Name)
 		}
 
-		klog.V(4).Infof("Found %d devices", len(devices))
-		if len(devices) > 0 || db.hasDevices {
-			db.hasDevices = len(devices) > 0
-			db.notifications <- devices
-		}
-		select {
-		// trigger a reconcile
-		case <-nlChannel:
-			// drain the channel so we only sync once
-			for len(nlChannel) > 0 {
-				<-nlChannel
-			}
-		case <-time.After(maxInterval):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		ns.Close()
+		nlHandle.Close()
 	}
+
+	klog.V(4).Infof("Found %d devices (full discovery mode: %t)", len(newDeviceStore), full)
+
+	db.mu.Lock()
+	if full {
+		db.deviceStore = newDeviceStore
+	} else {
+		maps.Copy(db.deviceStore, newDeviceStore)
+	}
+	devices := make([]resourceapi.Device, 0, len(db.deviceStore))
+	for _, device := range db.deviceStore {
+		devices = append(devices, *device)
+	}
+	defer db.mu.Unlock()
+
+	db.notifications <- devices
+
+	return nil
 }
 
 func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 	return db.notifications
 }
 
-func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
+func (db *DB) netdevToDRAdev(nlHandle *netlink.Handle, link netlink.Link) (*resourceapi.Device, error) {
+	permMAC := link.Attrs().PermHWAddr.String()
+	if permMAC == "" {
+		return nil, nil // Skip interfaces without a permanent MAC address
+	}
+
 	ifName := link.Attrs().Name
 	device := resourceapi.Device{
 		Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
 		Capacity:   make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity),
 	}
-	// Set the device name. It will be normalized only if necessary.
-	device.Name = names.SetDeviceName(ifName)
-	// expose the real interface name as an attribute in case it is normalized.
+	// Set the device name from the permanent MAC address.
+	device.Name = "mac-" + strings.ReplaceAll(permMAC, ":", "-")
+	// expose the real interface name as an attribute.
 	device.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
+	// expose the permanent MAC address as an attribute.
+	device.Attributes["dra.net/permMac"] = resourceapi.DeviceAttribute{StringValue: &permMAC}
 
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
@@ -222,7 +337,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 
 	v4 := sets.Set[string]{}
 	v6 := sets.Set[string]{}
-	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
+	if ips, err := nlHandle.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
 		for _, address := range ips {
 			if !address.IP.IsGlobalUnicast() {
 				continue
@@ -281,30 +396,26 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	if isVirtual(ifName, sysnetPath) {
 		device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(true)}
 	} else {
-		addPCIAttributes(&device, ifName, sysnetPath)
+		addPCIAttributes(&device, link.Attrs())
 	}
 
-	mac := link.Attrs().HardwareAddr.String()
-	for name, attribute := range getProviderAttributes(mac, db.instance) {
+	for name, attribute := range getProviderAttributes(permMAC, db.instance) {
 		device.Attributes[name] = attribute
 	}
 
 	return &device, nil
 }
 
-func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
+func addPCIAttributes(device *resourceapi.Device, netLinkAttrs *netlink.LinkAttrs) {
 	device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(false)}
 
-	address, err := bdfAddress(ifName, path)
-	if err != nil {
-		klog.Infof("Could not get bdf address : %v", err)
-	} else {
-		if err := setPciRootAttr(device, address); err != nil {
-			klog.Infof("Could not get pci root attribute : %v", err)
-		}
+	if err := setPciRootAttr(device, netLinkAttrs.ParentDev); err != nil {
+		klog.Infof("Could not get pci root attribute : %v", err)
 	}
 
-	entry, err := ids(ifName, path)
+	parentDevicePath := "/sys/bus/" + netLinkAttrs.ParentDevBus + "/devices/" + netLinkAttrs.ParentDev
+
+	entry, err := ids(parentDevicePath)
 	if err == nil {
 		if entry.Vendor != "" {
 			device.Attributes["dra.net/pciVendor"] = resourceapi.DeviceAttribute{StringValue: &entry.Vendor}
@@ -319,14 +430,14 @@ func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 		klog.Infof("could not get pci vendor information : %v", err)
 	}
 
-	numa, err := numaNode(ifName, path)
+	numa, err := numaNode(parentDevicePath)
 	if err == nil {
 		device.Attributes["dra.net/numaNode"] = resourceapi.DeviceAttribute{IntValue: &numa}
 	}
 }
 
-func setPciRootAttr(device *resourceapi.Device, address *pciAddress) error {
-	pcieRootAttr, err := deviceattribute.GetPCIeRootAttributeByPCIBusID(address.bus)
+func setPciRootAttr(device *resourceapi.Device, pciAddr string) error {
+	pcieRootAttr, err := deviceattribute.GetPCIeRootAttributeByPCIBusID(pciAddr)
 	if err != nil {
 		return err
 	}

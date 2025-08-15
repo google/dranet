@@ -36,17 +36,17 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	hostDev, err := netlink.LinkByName(hostIfName)
 	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return nil, err
+		return nil, fmt.Errorf("failed to get link for interface %s: %w", hostIfName, err)
 	}
 
 	// Devices can be renamed only when down
 	if err = netlink.LinkSetDown(hostDev); err != nil {
-		return nil, fmt.Errorf("failed to set %q down: %v", hostDev.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to set %q down: %w", hostDev.Attrs().Name, err)
 	}
 
 	containerNs, err := netns.GetFromPath(containerNsPAth)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get container network namespace %s: %w", containerNsPAth, err)
 	}
 	defer containerNs.Close()
 
@@ -121,14 +121,14 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 
 	_, err = req.Execute(unix.NETLINK_ROUTE, 0)
 	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
-		return nil, err
+		return nil, fmt.Errorf("failed to move interface %s to container namespace %s: %w", hostIfName, containerNsPAth, err)
 	}
 
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
 	nhNs, err := netlink.NewHandleAt(containerNs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get netlink handle in container namespace %s: %w", containerNsPAth, err)
 	}
 	defer nhNs.Close()
 

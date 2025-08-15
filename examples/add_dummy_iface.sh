@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ip link add dummy0 type dummy
+ip link add dummy0 type fake_iface
 ip link set up dev dummy0
 ip addr add 169.254.169.13/32 dev dummy0
 

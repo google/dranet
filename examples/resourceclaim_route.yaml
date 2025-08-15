@@ -24,7 +24,7 @@ spec:
         deviceClassName: dra.net
         selectors:
           - cel:
-              expression: device.attributes["dra.net"].type == "dummy"
+              expression: device.attributes["dra.net"].ifName == "dummy-route"
     config:
     - opaque:
         driver: dra.net
@@ -50,5 +50,5 @@ spec:
   - name: ctr1
     image: registry.k8s.io/e2e-test-images/agnhost:2.54
   resourceClaims:
-  - name: dummy1
+  - name: dummy-claim
     resourceClaimName: dummy-interface-static-ip-route

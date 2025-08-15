@@ -33,8 +33,21 @@ clean:
 test:
 	CGO_ENABLED=1 go test -v -race -count 1 ./...
 
-e2e-test:
+e2e-test: install-fake-iface
 	bats --verbose-run tests/
+	make uninstall-fake-iface
+
+build-fake-iface:
+	$(MAKE) -C tests/fake_iface_driver
+
+install-fake-iface: build-fake-iface
+	sudo insmod tests/fake_iface_driver/build/fake_iface.ko || true
+
+uninstall-fake-iface:
+	sudo rmmod fake_iface || true
+	$(MAKE) -C tests/fake_iface_driver clean
+
+
 
 # code linters
 lint:
@@ -48,7 +61,7 @@ IMAGE_NAME=dranet
 # docker image registry, default to upstream
 REGISTRY?=ghcr.io/google
 # tag based on date-sha
-TAG?=$(shell echo "$$(date +v%Y%m%d)-$$(git describe --always --dirty)")
+TAG?=$(shell echo "$(date +v%Y%m%d)-$(git describe --always --dirty)")
 # the full image tag
 IMAGE?=$(REGISTRY)/$(IMAGE_NAME):$(TAG)
 PLATFORMS?=linux/amd64,linux/arm64
@@ -60,8 +73,8 @@ image:
 	docker build . -t ${IMAGE} --load
 
 image-build:
-	docker buildx build . \
-		--platform="${PLATFORMS}" \
+	docker buildx build .
+		--platform="${PLATFORMS}"
 		--tag="${IMAGE}"
 
 push-image: image

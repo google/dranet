@@ -21,11 +21,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
-	"github.com/google/dranet/pkg/names"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/vishvananda/netlink"
@@ -59,6 +60,9 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
 			klog.V(4).Infof("After filtering %d devices", len(devices))
+			sort.Slice(devices, func(i, j int) bool {
+				return devices[i].Name < devices[j].Name
+			})
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
 					np.nodeName: {Slices: []resourceslice.Slice{{Devices: devices}}}},
@@ -91,6 +95,28 @@ func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*re
 		result[claim.UID] = np.prepareResourceClaim(ctx, claim)
 	}
 	return result, nil
+}
+
+func (np *NetworkDriver) getNetlinkForDevice(nlHandle *netlink.Handle, deviceName string) (netlink.Link, error) {
+	// 1. Try by interface name from cache
+	ifName, ok := np.netdb.GetInterfaceName(deviceName)
+	if ok {
+		link, err := nlHandle.LinkByName(ifName)
+		if err == nil {
+			klog.V(4).Infof("Found link for device %s by interface name %s", deviceName, ifName)
+			return link, nil
+		}
+		klog.V(4).Infof("Could not find link by name %s for device %s, falling back to permanent address. error: %v", ifName, deviceName, err)
+	}
+
+	// 2. Fallback to permanent address
+	permAddr := strings.ReplaceAll(strings.TrimPrefix(deviceName, "mac-"), "-", ":")
+	link, err := getLinkByPermAddr(nlHandle, permAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get link for device %s with permanent address %s: %w", deviceName, permAddr, err)
+	}
+	klog.V(4).Infof("Found link for device %s by permanent address %s", deviceName, permAddr)
+	return link, nil
 }
 
 // prepareResourceClaim gets all the configuration required to be applied at runtime and passes it downs to the handlers.
@@ -165,13 +191,13 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			},
 			Network: netconf,
 		}
-		ifName := names.GetOriginalName(result.Device)
-		// Get Network configuration and merge it
-		link, err := nlHandle.LinkByName(ifName)
+
+		link, err := np.getNetlinkForDevice(nlHandle, result.Device)
 		if err != nil {
-			errorList = append(errorList, fmt.Errorf("fail to get network interface %s", ifName))
+			errorList = append(errorList, err)
 			continue
 		}
+		ifName := link.Attrs().Name
 
 		if podCfg.Network.Interface.Name == "" {
 			podCfg.Network.Interface.Name = ifName
@@ -298,15 +324,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			}
 		}
 
-		device := kubeletplugin.Device{
-			Requests:   []string{result.Request},
-			PoolName:   result.Pool,
-			DeviceName: result.Device,
-		}
 		// TODO: support for multiple pods sharing the same device
 		// we'll create the subinterface here
 		for _, uid := range podUIDs {
-			np.podConfigStore.Set(uid, device.DeviceName, podCfg)
+			np.podConfigStore.Set(uid, result.Device, podCfg)
 		}
 		klog.V(4).Infof("Claim Resources for pods %v : %#v", podUIDs, podCfg)
 	}
@@ -318,6 +339,27 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		}
 	}
 	return kubeletplugin.PrepareResult{}
+}
+
+func getLinkByPermAddr(nlHandle *netlink.Handle, permAddr string) (netlink.Link, error) {
+	links, err := nlHandle.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list interfaces: %w", err)
+	}
+
+	for _, link := range links {
+		if link.Attrs().PermHWAddr.String() == permAddr {
+			return link, nil
+		}
+	}
+
+	// Fallback for interfaces that have been renamed
+	link, err := nlHandle.LinkByName(permAddr)
+	if err == nil {
+		return link, nil
+	}
+
+	return nil, fmt.Errorf("interface with permanent address %s not found", permAddr)
 }
 
 func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {

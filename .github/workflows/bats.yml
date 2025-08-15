@@ -31,6 +31,14 @@ jobs:
         with:
           support-path: ${{ github.workspace }}/tests/test_helper/bats-support
           assert-path: "${{ github.workspace }}/tests/test_helper/bats-assert"
+
+      - name: Build and load fake interface driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-headers-$(uname -r)
+          make -C tests/fake_iface_driver
+          sudo insmod tests/fake_iface_driver/build/fake_iface.ko
+
       - name: Bats tests
         shell: bash
         env:

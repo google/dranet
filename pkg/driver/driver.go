@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -64,6 +65,10 @@ type NetworkDriver struct {
 	netdb      *inventory.DB
 	celProgram cel.Program
 
+	// nriSyncCh is used to signal when the NRI Synchronize hook has been called.
+	nriSyncCh   chan struct{}
+	nriSyncOnce sync.Once
+
 	// Cache the rdma shared mode state
 	rdmaSharedMode bool
 	podConfigStore *PodConfigStore
@@ -88,6 +93,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 		kubeClient:     kubeClient,
 		rdmaSharedMode: rdmaNetnsMode == apis.RdmaNetnsModeShared,
 		podConfigStore: NewPodConfigStore(),
+		nriSyncCh:      make(chan struct{}),
 	}
 
 	for _, o := range opts {
@@ -154,7 +160,7 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	}()
 
 	// register the host network interfaces
-	plugin.netdb = inventory.New()
+	plugin.netdb = inventory.New(plugin.nriSyncCh)
 	go func() {
 		for i := 0; i < maxAttempts; i++ {
 			err = plugin.netdb.Run(ctx)

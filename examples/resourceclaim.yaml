@@ -24,7 +24,7 @@ spec:
         deviceClassName: dra.net
         selectors:
           - cel:
-              expression: device.attributes["dra.net"].type == "dummy"
+              expression: device.attributes["dra.net"].type == "fake_iface"
     config:
     - opaque:
         driver: dra.net

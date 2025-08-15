@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/dranet/pkg/names"
-
 	"github.com/containerd/nri/pkg/api"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,20 +39,24 @@ import (
 // quickly.
 
 func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
-	klog.Infof("Synchronized state with the runtime (%d pods, %d containers)...",
-		len(pods), len(containers))
+	klog.Infof("Synchronizing state with the runtime (%d pods, %d containers)...", len(pods), len(containers))
 
 	for _, pod := range pods {
 		klog.Infof("Synchronize Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
-		klog.V(2).Infof("pod %s/%s: namespace=%s ips=%v", pod.GetNamespace(), pod.GetName(), getNetworkNamespace(pod), pod.GetIps())
+		netNs := getNetworkNamespace(pod)
+		klog.V(2).Infof("pod %s/%s: namespace=%s ips=%v", pod.GetNamespace(), pod.GetName(), netNs, pod.GetIps())
 		// get the pod network namespace
-		ns := getNetworkNamespace(pod)
 		// host network pods are skipped
-		if ns != "" {
+		if netNs != "" {
 			// store the Pod metadata in the db
-			np.netdb.AddPodNetns(podKey(pod), ns)
+			np.netdb.AddPodNetns(podKey(pod), netNs)
 		}
 	}
+
+	klog.Info("NRI plugin finished synchronizing.")
+	np.nriSyncOnce.Do(func() {
+		close(np.nriSyncCh)
+	})
 
 	return nil, nil
 }
@@ -126,15 +128,19 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			WithDriver(np.driverName).
 			WithPool(np.nodeName)
 
-		ifName := names.GetOriginalName(deviceName)
+		ifName, ok := np.netdb.GetInterfaceName(deviceName)
+		if !ok {
+			return fmt.Errorf("failed to get interface name for device %s", deviceName)
+		}
 
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
 		// TODO config options to rename the device and pass parameters
 		// use https://github.com/opencontainers/runtime-spec/pull/1271
 		networkData, err := nsAttachNetdev(ifName, ns, config.Network.Interface)
 		if err != nil {
-			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", deviceName, ns, err)
-			return fmt.Errorf("error moving network device %s to namespace %s: %v", deviceName, ns, err)
+			err = fmt.Errorf("error moving network device %s (interface %s) to namespace %s: %w", deviceName, ifName, ns, err)
+			klog.Infof("RunPodSandbox: %v", err)
+			return err
 		}
 
 		resourceClaimStatusDevice.WithConditions(
@@ -247,7 +253,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		// some version of containerd does not send the network namespace information on this hook so
 		// we workaround it using the local copy we have in the db to associate interfaces with Pods via
 		// the network namespace id.
-		ns = np.netdb.GetPodNamespace(podKey(pod))
+		ns = np.netdb.GetPodNetNamespace(podKey(pod))
 		if ns == "" {
 			klog.Infof("StopPodSandbox pod %s/%s using host network ... skipping", pod.Namespace, pod.Name)
 			return nil
@@ -255,7 +261,11 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	}
 
 	for deviceName, config := range podConfig {
-		ifName := names.GetOriginalName(deviceName)
+		ifName, ok := np.netdb.GetInterfaceName(deviceName)
+		if !ok {
+			klog.Infof("Failed to get interface name for device %q, expect kernel to do the cleanup", deviceName)
+			continue
+		}
 
 		if err := nsDetachNetdev(ns, config.Network.Interface.Name, ifName); err != nil {
 			klog.Infof("fail to return network device %s : %v", deviceName, err)

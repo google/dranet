@@ -24,7 +24,7 @@ spec:
         deviceClassName: dra.net
         selectors:
           - cel:
-              expression: device.attributes["dra.net"].ifName == "dummy0"
+              expression: device.attributes["dra.net"].ifName == "bigtcp"
     config:
     - opaque:
         driver: dra.net
