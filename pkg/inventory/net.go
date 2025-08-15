@@ -97,7 +97,7 @@ func getTcxFilters(device netlink.Link) ([]string, bool) {
 			Target: int(device.Attrs().Index),
 			Attach: attach,
 		})
-		if err != nil {
+		if err != nil || result == nil || len(result.Programs) == 0 {
 			continue
 		}
 

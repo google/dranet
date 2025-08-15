@@ -14,9 +14,9 @@ teardown() {
 setup_bpf_device() {
   docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "tc qdisc add dev dummy0 clsact"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "tc filter add dev dummy0 ingress bpf direct-action obj dummy_bpf.o sec classifier"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
 }
 
 setup_tcx_filter() {
