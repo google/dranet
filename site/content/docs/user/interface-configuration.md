@@ -116,7 +116,7 @@ type EthtoolConfig struct {
 Below is an example of a ResourceClaim that allocates a dummy interface, renames it to "dranet0", assigns a static IP address, and configures two routes: one to a subnet via a gateway and another link-scoped route. It also disables several ethtool features.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaim
 metadata:
   name: dummy-interface-advanced
@@ -124,10 +124,11 @@ spec:
   devices:
     requests:
     - name: req-dummy-advanced
-      deviceClassName: dra.net
-      selectors:
-        - cel:
-            expression: device.attributes["dra.net"].ifName == "dummy3"
+      exactly:
+        deviceClassName: dra.net
+        selectors:
+          - cel:
+              expression: device.attributes["dra.net"].ifName == "dummy3"
     config:
     - opaque:
         driver: dra.net

@@ -12,13 +12,12 @@ REGION="us-west8"
 ZONE="us-west8-c"
 GVNIC_NETWORK_PREFIX="dranet-gvnic"
 RDMA_NETWORK_PREFIX="dranet-rdma"
-VERSION="1.33"
+VERSION="1.34"
 
 gcloud container clusters create "${CLUSTER}" \
     --cluster-version="${VERSION}" \
     --enable-multi-networking \
     --enable-dataplane-v2 \
-    --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \
     --no-enable-autorepair \
     --no-enable-autoupgrade \
     --zone="${ZONE}" \
@@ -131,7 +130,7 @@ First, we tell DraNet what kind of NICs we're interested in and how Pods can cla
 **DeviceClass (dranet):** This selects NICs managed by DraNet.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet
@@ -144,7 +143,7 @@ spec:
 **ResourceClaimTemplate (worker-rdma-nic-template):** This will request 8 RDMA NICs.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: rdma-net-template-gib
@@ -153,11 +152,12 @@ spec:
     devices:
       requests:
       - name: rdma-net-interface
-        deviceClassName: dranet
-        count: 8
-        selectors:
-        - cel:
-            expression: device.attributes["dra.net"].rdma == true
+        exactly:
+          deviceClassName: dranet
+          count: 8
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].rdma == true
 ```
 
 #### Creating the workload
@@ -261,7 +261,7 @@ we can see all NICs on the node are connected to the Pod
 kubectl get resourceclaim -o yaml
 apiVersion: v1
 items:
-- apiVersion: resource.k8s.io/v1beta1
+- apiVersion: resource.k8s.io/v1
   kind: ResourceClaim
   metadata:
     annotations:
@@ -284,12 +284,13 @@ items:
   spec:
     devices:
       requests:
-      - allocationMode: All
-        deviceClassName: dranet
-        name: rdma-net-interface
-        selectors:
-        - cel:
-            expression: device.attributes["dra.net"].rdma == true
+      - name: rdma-net-interface
+        exactly:
+          allocationMode: All
+          deviceClassName: dranet
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].rdma == true
   status:
     allocation:
       devices:
@@ -454,7 +455,7 @@ While a dedicated GPU DRA driver could leverage topological alignment using cons
 We are going to explicitly leverage the GKE naming convention to ensure each worker is allocated either the lower block of 4 NICs (gpu0-3rdma0) or the higher block of 4 NICs (gpu4-7rdma0). This selection logic is embedded directly within the selectors of our `ResourceClaimTemplate` using a CEL expression.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: rdma-net-template-gib-flexible4nics
@@ -463,21 +464,22 @@ spec:
     devices:
       requests:
       - name: rdma-net-interface
-        deviceClassName: dranet
-        count: 4 # Requesting 4 NICs per worker
-        selectors:
-        - cel:
-            expression: |
-              device.attributes["dra.net"].rdma == true &&
-              (
-                (device.attributes["dra.net"].ifName.startsWith("gpu") &&
-                 device.attributes["dra.net"].ifName.endsWith("rdma0") &&
-                 int(device.attributes["dra.net"].ifName.substring(3, 4)) < 4)
-              ||
-                (device.attributes["dra.net"].ifName.startsWith("gpu") &&
-                 device.attributes["dra.net"].ifName.endsWith("rdma0") &&
-                 int(device.attributes["dra.net"].ifName.substring(3, 4)) >= 4)
-              )
+        exactly:
+          deviceClassName: dranet
+          count: 4 # Requesting 4 NICs per worker
+          selectors:
+          - cel:
+              expression: |
+                device.attributes["dra.net"].rdma == true &&
+                (
+                  (device.attributes["dra.net"].ifName.startsWith("gpu") &&
+                  device.attributes["dra.net"].ifName.endsWith("rdma0") &&
+                  int(device.attributes["dra.net"].ifName.substring(3, 4)) < 4)
+                ||
+                  (device.attributes["dra.net"].ifName.startsWith("gpu") &&
+                  device.attributes["dra.net"].ifName.endsWith("rdma0") &&
+                  int(device.attributes["dra.net"].ifName.substring(3, 4)) >= 4)
+                )
 ```
 
 We'll define a StatefulSet with four replicas, each configured to receive 4 GPUs and the 4 requested RDMA NICs.

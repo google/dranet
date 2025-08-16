@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: 2-gpu-nic-aligned
@@ -20,16 +20,18 @@ spec:
     devices:
       requests:
       - name: gpu
-        deviceClassName: gpu.nvidia.com
-        count: 2
-        selectors:
-        - cel:
-            expression: device.attributes["gpu.nvidia.com"].index <= 2
+        exactly:
+          deviceClassName: gpu.nvidia.com
+          count: 2
+          selectors:
+          - cel:
+              expression: device.attributes["gpu.nvidia.com"].index <= 2
       - name: nic
-        deviceClassName: dranet
-        count: 2
-        selectors:
-        - cel:
-            expression: device.attributes["dra.net"].rdma == true
+        exactly:
+          deviceClassName: dranet
+          count: 2
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].rdma == true
       constraints:
       - matchAttribute: "resource.kubernetes.io/pcieRoot"

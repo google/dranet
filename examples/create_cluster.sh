@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Default values
-export VERSION="1.32"
+export VERSION="1.34"
 
 # Initialize variables for flags
 PROJECT=""

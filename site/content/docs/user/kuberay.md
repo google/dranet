@@ -23,7 +23,7 @@ We create one `ResourceClaimTemplate`, for the RDMA devices on the node, along
 with a `DeviceClass` for the RDMA device.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet
@@ -32,7 +32,7 @@ spec:
     - cel:
         expression: device.driver == "dra.net"
 ---
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: all-nic
@@ -41,11 +41,12 @@ spec:
     devices:
       requests:
       - name: nic
-        deviceClassName: dranet
-        count: 8
-        selectors:
-        - cel:
-            expression: device.attributes["dra.net"].rdma == true
+        exactly:
+          deviceClassName: dranet
+          count: 8
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].rdma == true
 ```
 
 Until the official Ray images support NVIDIA B200 with CUDA capability sm_100

@@ -68,7 +68,7 @@ First, we tell DraNet what kind of NICs we're interested in and how Pods can cla
 **DeviceClass (dranet):** This selects NICs managed by DraNet.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet
@@ -85,7 +85,7 @@ Another important factor is the capacity of DraNet to pass Interface configurati
 In addition, if you have GVNIC enabled you can use some private ethtool flags that improve the performance for TCP like [enable-max-rx-buffer-size](enable-max-rx-buffer-size).
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: tpu-net-interfaces
@@ -94,11 +94,12 @@ spec:
     devices:
       requests:
       - name: tpu-net-interface
-        deviceClassName: dranet
-        count: 2
-        selectors:
-        - cel:
-            expression: device.attributes["gce.dra.net"].networkName.startsWith("tpu-net")
+        exactly:
+          deviceClassName: dranet
+          count: 2
+          selectors:
+          - cel:
+              expression: device.attributes["gce.dra.net"].networkName.startsWith("tpu-net")
       config:
       - opaque:
           driver: dra.net

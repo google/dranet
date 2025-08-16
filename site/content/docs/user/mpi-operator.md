@@ -28,7 +28,7 @@ First, we tell DraNet what kind of NICs we're interested in and how Pods can cla
 **DeviceClass (dranet-rdma-for-mpi):** This selects RDMA-capable NICs managed by DraNet.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet-rdma-for-mpi
@@ -43,7 +43,7 @@ spec:
 **ResourceClaimTemplate (mpi-worker-rdma-nic-template):** MPI worker Pods will use this to request one RDMA NIC. DraNet will be instructed to name this interface dranet0 inside the Pod.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: mpi-worker-rdma-nic-template
@@ -52,10 +52,11 @@ spec:
     devices:
       requests:
         - name: rdma-nic-for-mpi
-          deviceClassName: dranet-rdma-for-mpi
-          selectors:
-          - cel:
-              expression: device.attributes["dra.net"].ifName == "gpu2rdma0"
+          exactly:
+            deviceClassName: dranet-rdma-for-mpi
+            selectors:
+            - cel:
+                expression: device.attributes["dra.net"].ifName == "gpu2rdma0"
     config:
     - opaque:
         driver: dra.net
