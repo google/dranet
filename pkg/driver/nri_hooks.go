@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/dranet/pkg/names"
-
 	"github.com/containerd/nri/pkg/api"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +50,7 @@ func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, 
 		// host network pods are skipped
 		if ns != "" {
 			// store the Pod metadata in the db
-			np.netdb.AddPodNetns(podKey(pod), ns)
+			np.netdb.AddPodNetNs(podKey(pod), ns)
 		}
 	}
 
@@ -106,7 +104,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		return fmt.Errorf("RunPodSandbox pod %s/%s using host network can not claim host devices", pod.Namespace, pod.Name)
 	}
 	// store the Pod metadata in the db
-	np.netdb.AddPodNetns(podKey(pod), ns)
+	np.netdb.AddPodNetNs(podKey(pod), ns)
 
 	// Track all the status updates needed for the resource claims of the pod.
 	statusUpdates := map[types.NamespacedName]*resourceapply.ResourceClaimStatusApplyConfiguration{}
@@ -126,7 +124,13 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			WithDriver(np.driverName).
 			WithPool(np.nodeName)
 
-		ifName := names.GetOriginalName(deviceName)
+		ifName, err := np.netdb.GetNetInterfaceName(deviceName)
+		if err != nil {
+			// Tip: We desired, tweak the code here to simply log
+			// this without returning and continue exeuction for cases where the
+			// device has no associated network interface.
+			return fmt.Errorf("failed to get network interface %s", ifName)
+		}
 
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
 		// TODO config options to rename the device and pass parameters
@@ -232,7 +236,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	start := time.Now()
 	defer func() {
-		np.netdb.RemovePodNetns(podKey(pod))
+		np.netdb.RemovePodNetNs(podKey(pod))
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
 	}()
 
@@ -247,7 +251,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 		// some version of containerd does not send the network namespace information on this hook so
 		// we workaround it using the local copy we have in the db to associate interfaces with Pods via
 		// the network namespace id.
-		ns = np.netdb.GetPodNamespace(podKey(pod))
+		ns = np.netdb.GetPodNetNs(podKey(pod))
 		if ns == "" {
 			klog.Infof("StopPodSandbox pod %s/%s using host network ... skipping", pod.Namespace, pod.Name)
 			return nil
@@ -255,10 +259,19 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	}
 
 	for deviceName, config := range podConfig {
-		ifName := names.GetOriginalName(deviceName)
-
-		if err := nsDetachNetdev(ns, config.Network.Interface.Name, ifName); err != nil {
-			klog.Infof("fail to return network device %s : %v", deviceName, err)
+		// TODO(gauravkghildiyal): Interface name here will in most cases be
+		// empty which means we're mostly relying on the fallback of the kernel
+		// having to do this cleanup. That is hopefully not the worst thing
+		// which could happen, but there are easy ways to improve this
+		// behaviour, like detaching the specific network interface which has
+		// the the given PCI address (i.e. deviceName is the normalized PCI address).
+		ifName, err := np.netdb.GetNetInterfaceName(deviceName)
+		if err == nil {
+			if err := nsDetachNetdev(ns, config.Network.Interface.Name, ifName); err != nil {
+				klog.Infof("fail to return network device %s : %v", deviceName, err)
+			}
+		} else {
+			klog.V(2).Infof("Failed to identify network interface for device %s: %v; expecting kernel to do the cleanup", deviceName, err)
 		}
 
 		if !np.rdmaSharedMode && config.RDMADevice.LinkDev != "" {
@@ -272,7 +285,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
-	np.netdb.RemovePodNetns(podKey(pod))
+	np.netdb.RemovePodNetNs(podKey(pod))
 	return nil
 }
 

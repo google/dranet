@@ -25,19 +25,22 @@ import (
 )
 
 const (
-	// NormalizedPrefix is added to device names that had to be encoded
-	// because their original interface name was not DNS-1123 compliant.
-	NormalizedPrefix = "normalized-"
+	// NormalizedInterfacePrefix is prefix used when normalizing a network
+	// interface.
+	NormalizedInterfacePrefix = "net"
+	// NormalizedPCIPrefix is the prefix used when normalizing a PCI Address.
+	NormalizedPCIPrefix = "pci"
 )
 
-// SetDeviceName determines the appropriate name for a device in Kubernetes.
-// If the original interface name (ifName) is already a valid DNS-1123 label,
-// it's returned as is. Otherwise, it's encoded using Base32, prefixed with
-// NormalizedPrefix, and returned.
+// NormalizeInterfaceName determines the appropriate name for an interface in
+// Kubernetes. If the original interface name (ifName) is already a valid
+// DNS-1123 label, it's returned as is. Otherwise, it's encoded using Base32,
+// prefixed with NormalizedPrefix, and returned.
+//
 // Linux interface names (often limited by IFNAMSIZ, typically 16) plus the
 // base32 encoding and the normalized prefix (11) are within the DNS-1123 label,
 // which has a maximum length of 63.
-func SetDeviceName(ifName string) string {
+func NormalizeInterfaceName(ifName string) string {
 	if ifName == "" {
 		return ""
 	}
@@ -47,25 +50,16 @@ func SetDeviceName(ifName string) string {
 
 	klog.V(4).Infof("Interface name '%s' is not DNS-1123 compliant, normalizing.", ifName)
 	encodedPayload := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(ifName))
-	normalizedName := NormalizedPrefix + strings.ToLower(encodedPayload)
+	normalizedName := NormalizedInterfacePrefix + strings.ToLower(encodedPayload)
 
 	return normalizedName
 }
 
-// GetOriginalName retrieves the original interface name from a deviceName.
-// If deviceName was prefixed with NormalizedPrefix (indicating it was encoded),
-// it decodes the name. Otherwise, it assumes deviceName is the original name.
-func GetOriginalName(deviceName string) string {
-	if strings.HasPrefix(deviceName, NormalizedPrefix) {
-		encodedPart := strings.TrimPrefix(deviceName, NormalizedPrefix)
-		encodedPart = strings.ToUpper(encodedPart) // base32 uses uppercase only
-		decodedBytes, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(encodedPart)
-		if err != nil {
-			klog.Warningf("Failed to decode Base32 device name payload '%s' from full name '%s': %v. Returning the full deviceName as fallback.",
-				encodedPart, deviceName, err)
-			return deviceName
-		}
-		return string(decodedBytes)
-	}
-	return deviceName
+// NormalizePCIAddress takes a PCI address and converts it into a DNS-1123
+// acceptable format.
+func NormalizePCIAddress(pciAddress string) string {
+	// Replace ":" and "." with "-" to make it DNS-1123 compliant.
+	// A PCI address like "0000:8a:00.0" becomes "0000-8a-00-0".
+	r := strings.NewReplacer(":", "-", ".", "-")
+	return NormalizedPCIPrefix + "-" + r.Replace(pciAddress)
 }

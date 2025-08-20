@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestSetDeviceName(t *testing.T) {
+func TestNormalizeInterfaceName(t *testing.T) {
 	tests := []struct {
 		name   string
 		ifName string
@@ -29,47 +29,45 @@ func TestSetDeviceName(t *testing.T) {
 	}{
 		{"already compliant", "eth0", "eth0"},
 		{"already compliant with hyphen", "my-device-1", "my-device-1"},
-		{"needs normalization colons", "eth:0", NormalizedPrefix + "mv2gqorq"},
-		{"needs normalization uppercase", "ETH0", NormalizedPrefix + "ivkeqma"},
-		{"needs normalization underscore", "eth_int", NormalizedPrefix + "mv2gqx3jnz2a"},
+		{"needs normalization colons", "eth:0", NormalizedInterfacePrefix + "mv2gqorq"},
+		{"needs normalization uppercase", "ETH0", NormalizedInterfacePrefix + "ivkeqma"},
+		{"needs normalization underscore", "eth_int", NormalizedInterfacePrefix + "mv2gqx3jnz2a"},
 		{"empty string", "", ""},
 		{
 			name:   "long name needs normalization",
 			ifName: "very_long_interface_name_that_is_not_dns_compliant_at_all_and_exceeds_limits",
 			// base32 of the above is much longer, this is just to check prefixing
-			want: NormalizedPrefix + "ozsxe6k7nrxw4z27nfxhizlsmzqwgzk7nzqw2zk7orugc5c7nfzv63tporpwi3ttl5rw63lqnruwc3tul5qxix3bnrwf6ylomrpwk6ddmvswi427nruw22luom",
+			want: NormalizedInterfacePrefix + "ozsxe6k7nrxw4z27nfxhizlsmzqwgzk7nzqw2zk7orugc5c7nfzv63tporpwi3ttl5rw63lqnruwc3tul5qxix3bnrwf6ylomrpwk6ddmvswi427nruw22luom",
 		},
 		{"already compliant max length", strings.Repeat("a", 63), strings.Repeat("a", 63)},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := SetDeviceName(tt.ifName); got != tt.want {
-				t.Errorf("SetDeviceName(%q) = %q, want %q", tt.ifName, got, tt.want)
+			if got := NormalizeInterfaceName(tt.ifName); got != tt.want {
+				t.Errorf("NormalizeInterfaceName(%q) = %q, want %q", tt.ifName, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSetAndGetOriginalName(t *testing.T) {
-	testIfNames := []string{
-		"eth0",
-		"my-nic",
-		"eth:0:1",
-		"veth_pair_A",
-		"UPPERCASE_NIC",
-		"a.b.c.d.e.f",
-		strings.Repeat("a_b", 30), // long non-compliant name
-		"",
+func TestNormalizePCIAddress(t *testing.T) {
+	testCases := []struct {
+		name       string
+		pciAddress string
+		want       string
+	}{
+		{
+			name:       "Standard PCI Address",
+			pciAddress: "0000:8a:00.0",
+			want:       NormalizedPCIPrefix + "-0000-8a-00-0",
+		},
 	}
 
-	for _, ifName := range testIfNames {
-		t.Run(ifName, func(t *testing.T) {
-			deviceName := SetDeviceName(ifName)
-			originalName := GetOriginalName(deviceName)
-			if originalName != ifName {
-				t.Errorf("SetDeviceName -> GetOriginalName round trip failed for %q: SetDeviceName returned %q, GetOriginalName returned %q",
-					ifName, deviceName, originalName)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizePCIAddress(tc.pciAddress); got != tc.want {
+				t.Errorf("NormalizePCIAddress(%v) = %v, want %v", tc.pciAddress, got, tc.want)
 			}
 		})
 	}

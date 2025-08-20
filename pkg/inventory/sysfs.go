@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/dranet/pkg/pcidb"
 	"k8s.io/klog/v2"
 )
 
@@ -99,19 +98,6 @@ func sriovNumVFs(name string) int {
 		return 0
 	}
 	return t
-}
-
-func numaNode(ifName string, syspath string) (int64, error) {
-	// /sys/class/net/<interface>/device/numa_node
-	numeNode, err := os.ReadFile(filepath.Join(syspath, ifName, "device/numa_node"))
-	if err != nil {
-		return 0, err
-	}
-	numa, err := strconv.ParseInt(strings.TrimSpace(string(numeNode)), 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return numa, nil
 }
 
 // pciAddress BDF Notation
@@ -200,34 +186,4 @@ func pciAddressForNetInterface(ifName string) (*pciAddress, error) {
 		return nil, fmt.Errorf("could not find PCI address for interface %q: %w", ifName, err)
 	}
 	return address, nil
-}
-
-func ids(ifName string, path string) (*pcidb.Entry, error) {
-	// PCI data
-	var device, subsystemVendor, subsystemDevice []byte
-	vendor, err := os.ReadFile(filepath.Join(path, ifName, "device/vendor"))
-	if err != nil {
-		return nil, err
-	}
-	// device, subsystemVendor and subsystemDevice are best effort
-	device, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/device"))
-	if err == nil {
-		subsystemVendor, err = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_vendor"))
-		if err == nil {
-			subsystemDevice, _ = os.ReadFile(filepath.Join(sysdevPath, ifName, "device/subsystem_device"))
-		}
-	}
-
-	// remove the 0x prefix
-	entry, err := pcidb.GetDevice(
-		strings.TrimPrefix(strings.TrimSpace(string(vendor)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(device)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(subsystemVendor)), "0x"),
-		strings.TrimPrefix(strings.TrimSpace(string(subsystemDevice)), "0x"),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-	return entry, nil
 }
