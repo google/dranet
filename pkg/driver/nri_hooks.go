@@ -259,19 +259,8 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	}
 
 	for deviceName, config := range podConfig {
-		// TODO(gauravkghildiyal): Interface name here will in most cases be
-		// empty which means we're mostly relying on the fallback of the kernel
-		// having to do this cleanup. That is hopefully not the worst thing
-		// which could happen, but there are easy ways to improve this
-		// behaviour, like detaching the specific network interface which has
-		// the the given PCI address (i.e. deviceName is the normalized PCI address).
-		ifName, err := np.netdb.GetNetInterfaceName(deviceName)
-		if err == nil {
-			if err := nsDetachNetdev(ns, config.Network.Interface.Name, ifName); err != nil {
-				klog.Infof("fail to return network device %s : %v", deviceName, err)
-			}
-		} else {
-			klog.V(2).Infof("Failed to identify network interface for device %s: %v; expecting kernel to do the cleanup", deviceName, err)
+		if err := nsDetachNetdev(ns, config.Network.Interface.Name, config.OriginalInterfaceName); err != nil {
+			klog.Infof("fail to return network device %s : %v", deviceName, err)
 		}
 
 		if !np.rdmaSharedMode && config.RDMADevice.LinkDev != "" {
