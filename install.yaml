@@ -150,6 +150,10 @@ spec:
         - name: bpf-programs
           mountPath: /sys/fs/bpf
           mountPropagation: HostToContainer
+        - name: pci-ids-hwdata
+          mountPath: /usr/share/hwdata/
+        - name: pci-ids-misc
+          mountPath: /usr/share/misc/
       volumes:
       - name: device-plugin
         hostPath:
@@ -172,4 +176,12 @@ spec:
       - name: bpf-programs
         hostPath:
           path: /sys/fs/bpf
+# TODO(gauravkghildiyal): Try to use embedded PCI DB as an input to https://github.com/jaypipes/ghw
+# library to remove dependency on the PCI DB being available in the OS.
+      - name: pci-ids-hwdata
+        hostPath:
+          path: /usr/share/hwdata/
+      - name: pci-ids-misc
+        hostPath:
+          path: /usr/share/misc/
 ---
