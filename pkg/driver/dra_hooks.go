@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/dranet/pkg/apis"
 	"github.com/google/dranet/pkg/filter"
-	"github.com/google/dranet/pkg/names"
 
 	"github.com/Mellanox/rdmamap"
 	"github.com/vishvananda/netlink"
@@ -165,11 +164,26 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			},
 			Network: netconf,
 		}
-		ifName := names.GetOriginalName(result.Device)
+		// TODO(gauravkghildiyal): There's a (self-resolving) race condition
+		// here which is triggered when a pod claiming a device is rapidly
+		// deleted and recreated. When the pod is deleted,
+		// UnprepareResourceClaim deletes the claim and does not wait for the
+		// network device to be freed up. Deletion of the claim indicates to the
+		// kube-scheduler that the device is available for future use so it can
+		// assign the same device to the newly created pod. But it's possible
+		// that the old pod's sandbox still exists (and is in the process of
+		// being deleted) so the network interface is still in the old pod's
+		// network namespace. Although the problem self resolves when kubelet
+		// retries PrepareResourceClaims for the new pod, but it should be
+		// possible to instrument a better lifecycle.
+		ifName, err := np.netdb.GetNetInterfaceName(result.Device)
+		if err != nil {
+			errorList = append(errorList, fmt.Errorf("failed to get network interface name for device %s: %v", ifName, err))
+		}
 		// Get Network configuration and merge it
 		link, err := nlHandle.LinkByName(ifName)
 		if err != nil {
-			errorList = append(errorList, fmt.Errorf("fail to get network interface %s", ifName))
+			errorList = append(errorList, fmt.Errorf("failed to get netlink to interface %s: %v", ifName, err))
 			continue
 		}
 
@@ -298,15 +312,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			}
 		}
 
-		device := kubeletplugin.Device{
-			Requests:   []string{result.Request},
-			PoolName:   result.Pool,
-			DeviceName: result.Device,
-		}
 		// TODO: support for multiple pods sharing the same device
 		// we'll create the subinterface here
 		for _, uid := range podUIDs {
-			np.podConfigStore.Set(uid, device.DeviceName, podCfg)
+			np.podConfigStore.Set(uid, result.Device, podCfg)
 		}
 		klog.V(4).Infof("Claim Resources for pods %v : %#v", podUIDs, podCfg)
 	}
