@@ -57,9 +57,9 @@ type DB struct {
 	instance *cloudprovider.CloudInstance
 
 	mu sync.RWMutex
-	// netNsForPod gives the network namespace for a pod, indexed by the pods
+	// podNetNsStore gives the network namespace for a pod, indexed by the pods
 	// "namespaced/name".
-	netNsForPod map[string]string
+	podNetNsStore map[string]string
 	// deviceStore is an in-memory cache of the available devices on the node.
 	// It is keyed by the normalized PCI address of the device. The value is a
 	// resourceapi.Device object that contains the device's attributes.
@@ -73,7 +73,7 @@ type DB struct {
 
 func New() *DB {
 	return &DB{
-		netNsForPod:   map[string]string{},
+		podNetNsStore: map[string]string{},
 		deviceStore:   map[string]resourceapi.Device{},
 		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
 		notifications: make(chan []resourceapi.Device),
@@ -85,24 +85,24 @@ func (db *DB) AddPodNetNs(pod string, netNsPath string) {
 	defer db.mu.Unlock()
 	ns, err := netns.GetFromPath(netNsPath)
 	if err != nil {
-		klog.Infof("Failed to get pod %s network namespace %s handle: %v", pod, netNsPath, err)
+		klog.Errorf("Failed to get pod %s network namespace %s handle: %v", pod, netNsPath, err)
 		return
 	}
 	defer ns.Close()
-	db.netNsForPod[pod] = netNsPath
+	db.podNetNsStore[pod] = netNsPath
 }
 
 func (db *DB) RemovePodNetNs(pod string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	delete(db.netNsForPod, pod)
+	delete(db.podNetNsStore, pod)
 }
 
 // GetPodNamespace allows to get the Pod network namespace
 func (db *DB) GetPodNetNs(pod string) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	return db.netNsForPod[pod]
+	return db.podNetNsStore[pod]
 }
 
 func (db *DB) Run(ctx context.Context) error {
@@ -214,6 +214,14 @@ func (db *DB) discoverPCIDevices() []resourceapi.Device {
 	return devices
 }
 
+// discoveryNetworkInterfaces updates the devices based on information retried
+// from network interfaces. For each network interface, the two possible
+// outcomes are:
+//   - If the network interface is associated with some parent PCI device, the
+//     existing PCI device is modified with additional attributes related to the
+//     network interface.
+//   - For Network interfaces which are not associated with a PCI Device (like
+//     virtual interfaces), they are added as their own device.
 func (db *DB) discoverNetworkInterfaces(pciDevices []resourceapi.Device) []resourceapi.Device {
 	links, err := netlink.LinkList()
 	if err != nil {
