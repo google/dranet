@@ -164,21 +164,9 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			},
 			Network: netconf,
 		}
-		// TODO(gauravkghildiyal): There's a (self-resolving) race condition
-		// here which is triggered when a pod claiming a device is rapidly
-		// deleted and recreated. When the pod is deleted,
-		// UnprepareResourceClaim deletes the claim and does not wait for the
-		// network device to be freed up. Deletion of the claim indicates to the
-		// kube-scheduler that the device is available for future use so it can
-		// assign the same device to the newly created pod. But it's possible
-		// that the old pod's sandbox still exists (and is in the process of
-		// being deleted) so the network interface is still in the old pod's
-		// network namespace. Although the problem self resolves when kubelet
-		// retries PrepareResourceClaims for the new pod, but it should be
-		// possible to instrument a better lifecycle.
 		ifName, err := np.netdb.GetNetInterfaceName(result.Device)
 		if err != nil {
-			errorList = append(errorList, fmt.Errorf("failed to get network interface name for device %s: %v", ifName, err))
+			errorList = append(errorList, fmt.Errorf("failed to get network interface name for device %s: %v", result.Device, err))
 		}
 		// Get Network configuration and merge it
 		link, err := nlHandle.LinkByName(ifName)
@@ -186,8 +174,11 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			errorList = append(errorList, fmt.Errorf("failed to get netlink to interface %s: %v", ifName, err))
 			continue
 		}
+		podCfg.OriginalInterfaceName = ifName
 
 		if podCfg.Network.Interface.Name == "" {
+			// If the interface name was not explicitly overridden, use the same
+			// interface name within the pod's network namespace.
 			podCfg.Network.Interface.Name = ifName
 		}
 

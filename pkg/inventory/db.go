@@ -386,7 +386,7 @@ func (db *DB) GetNetInterfaceName(deviceName string) (string, error) {
 		return "", fmt.Errorf("device %s not found in store", deviceName)
 	}
 	if device.Attributes[apis.AttrInterfaceName].StringValue == nil {
-		return "", fmt.Errorf("device %s has no interface name", deviceName)
+		return "", fmt.Errorf("device %s has no interface name in local store", deviceName)
 	}
 	return *device.Attributes[apis.AttrInterfaceName].StringValue, nil
 }
