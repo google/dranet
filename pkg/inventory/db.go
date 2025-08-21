@@ -255,7 +255,7 @@ func (db *DB) discoverNetworkInterfaces(pciDevices []resourceapi.Device) []resou
 
 			normalizedAddress := names.NormalizePCIAddress(pciAddr.String())
 			var exists bool
-			device, exists = pciDeviceMap[normalizedAddress]
+			device, exists := pciDeviceMap[normalizedAddress]
 			if !exists {
 				// We don't expect this to happen.
 				klog.Errorf("Network interface %s has PCI address %q, but it was not found in initial PCI scan.", ifName, pciAddr)
@@ -276,10 +276,9 @@ func (db *DB) discoverNetworkInterfaces(pciDevices []resourceapi.Device) []resou
 				Name:       names.NormalizeInterfaceName(ifName),
 				Attributes: make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute),
 			}
-			otherDevices = append(otherDevices, newDevice)
-			device = &otherDevices[len(otherDevices)-1]
+			addLinkAttributes(newDevice, link)
+			otherDevices = append(otherDevices, *newDevice)
 		}
-		addLinkAttributes(device, link)
 	}
 
 	return append(pciDevices, otherDevices...)
