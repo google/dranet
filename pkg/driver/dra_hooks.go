@@ -162,7 +162,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				Namespace: claim.Namespace,
 				Name:      claim.Name,
 			},
-			Network: netconf,
+			NetworkInterfaceConfigInPod: netconf,
 		}
 		ifName, err := np.netdb.GetNetInterfaceName(result.Device)
 		if err != nil {
@@ -174,17 +174,17 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			errorList = append(errorList, fmt.Errorf("failed to get netlink to interface %s: %v", ifName, err))
 			continue
 		}
-		podCfg.OriginalInterfaceName = ifName
+		podCfg.NetworkInterfaceConfigInHost.Interface.Name = ifName
 
-		if podCfg.Network.Interface.Name == "" {
+		if podCfg.NetworkInterfaceConfigInPod.Interface.Name == "" {
 			// If the interface name was not explicitly overridden, use the same
 			// interface name within the pod's network namespace.
-			podCfg.Network.Interface.Name = ifName
+			podCfg.NetworkInterfaceConfigInPod.Interface.Name = ifName
 		}
 
 		// If DHCP is requested, do a DHCP request to gather the network parameters (IPs and Routes)
 		// ... but we DO NOT apply them in the root namespace
-		if podCfg.Network.Interface.DHCP != nil && *podCfg.Network.Interface.DHCP {
+		if podCfg.NetworkInterfaceConfigInPod.Interface.DHCP != nil && *podCfg.NetworkInterfaceConfigInPod.Interface.DHCP {
 			klog.V(2).Infof("trying to get network configuration via DHCP")
 			contextCancel, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
@@ -192,10 +192,10 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			if err != nil {
 				errorList = append(errorList, fmt.Errorf("fail to get configuration via DHCP for %s: %w", ifName, err))
 			} else {
-				podCfg.Network.Interface.Addresses = []string{ip}
-				podCfg.Network.Routes = append(podCfg.Network.Routes, routes...)
+				podCfg.NetworkInterfaceConfigInPod.Interface.Addresses = []string{ip}
+				podCfg.NetworkInterfaceConfigInPod.Routes = append(podCfg.NetworkInterfaceConfigInPod.Routes, routes...)
 			}
-		} else if len(podCfg.Network.Interface.Addresses) == 0 {
+		} else if len(podCfg.NetworkInterfaceConfigInPod.Interface.Addresses) == 0 {
 			// If there is no custom addresses and no DHCP, then use the existing ones
 			// get the existing IP addresses
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
@@ -209,13 +209,13 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					if address.Scope != unix.RT_SCOPE_UNIVERSE {
 						continue
 					}
-					podCfg.Network.Interface.Addresses = append(podCfg.Network.Interface.Addresses, address.IPNet.String())
+					podCfg.NetworkInterfaceConfigInPod.Interface.Addresses = append(podCfg.NetworkInterfaceConfigInPod.Interface.Addresses, address.IPNet.String())
 				}
 			}
 		}
 
 		// Obtain the existing supported ethtool features and validate the config
-		if podCfg.Network.Ethtool != nil {
+		if podCfg.NetworkInterfaceConfigInPod.Ethtool != nil {
 			client, err := newEthtoolClient(0)
 			if err != nil {
 				errorList = append(errorList, fmt.Errorf("fail to create ethtool client %v", err))
@@ -231,7 +231,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 
 			// translate features to the actual kernel names
 			ethtoolFeatures := map[string]bool{}
-			for feature, value := range podCfg.Network.Ethtool.Features {
+			for feature, value := range podCfg.NetworkInterfaceConfigInPod.Ethtool.Features {
 				aliases := ifFeatures.Get(feature)
 				if len(aliases) == 0 {
 					errorList = append(errorList, fmt.Errorf("feature %s not supported by interface", feature))
@@ -241,7 +241,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 					ethtoolFeatures[alias] = value
 				}
 			}
-			podCfg.Network.Ethtool.Features = ethtoolFeatures
+			podCfg.NetworkInterfaceConfigInPod.Ethtool.Features = ethtoolFeatures
 		}
 
 		// Obtain the routes associated to the interface
@@ -272,7 +272,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 				routeCfg.Source = route.Src.String()
 			}
 			routeCfg.Scope = uint8(route.Scope)
-			podCfg.Network.Routes = append(podCfg.Network.Routes, routeCfg)
+			podCfg.NetworkInterfaceConfigInPod.Routes = append(podCfg.NetworkInterfaceConfigInPod.Routes, routeCfg)
 		}
 
 		// Get RDMA configuration: link and char devices
@@ -295,8 +295,8 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		// Remove the pinned programs before the NRI hooks since it
 		// has to walk the entire bpf virtual filesystem and is slow
 		// TODO: check if there is some other way to do this
-		if podCfg.Network.Interface.DisableEBPFPrograms != nil &&
-			*podCfg.Network.Interface.DisableEBPFPrograms {
+		if podCfg.NetworkInterfaceConfigInPod.Interface.DisableEBPFPrograms != nil &&
+			*podCfg.NetworkInterfaceConfigInPod.Interface.DisableEBPFPrograms {
 			err := unpinBPFPrograms(ifName)
 			if err != nil {
 				klog.Infof("error unpinning ebpf programs for %s : %v", ifName, err)
