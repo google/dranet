@@ -173,7 +173,9 @@ func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
 func (db *DB) discoverPCIDevices() []resourceapi.Device {
 	devices := []resourceapi.Device{}
 
-	pci, err := ghw.PCI()
+	pci, err := ghw.PCI(
+		ghw.WithDisableTools(),
+	)
 	if err != nil {
 		klog.Errorf("Could not get PCI devices: %v", err)
 		return devices
