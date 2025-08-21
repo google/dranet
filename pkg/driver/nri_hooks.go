@@ -124,18 +124,12 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			WithDriver(np.driverName).
 			WithPool(np.nodeName)
 
-		ifName, err := np.netdb.GetNetInterfaceName(deviceName)
-		if err != nil {
-			// Tip: We desired, tweak the code here to simply log
-			// this without returning and continue exeuction for cases where the
-			// device has no associated network interface.
-			return fmt.Errorf("failed to get network interface %s", ifName)
-		}
+		ifName := config.NetworkInterfaceConfigInHost.Interface.Name
 
 		klog.V(2).Infof("RunPodSandbox processing Network device: %s", ifName)
 		// TODO config options to rename the device and pass parameters
 		// use https://github.com/opencontainers/runtime-spec/pull/1271
-		networkData, err := nsAttachNetdev(ifName, ns, config.Network.Interface)
+		networkData, err := nsAttachNetdev(ifName, ns, config.NetworkInterfaceConfigInPod.Interface)
 		if err != nil {
 			klog.Infof("RunPodSandbox error moving device %s to namespace %s: %v", deviceName, ns, err)
 			return fmt.Errorf("error moving network device %s to namespace %s: %v", deviceName, ns, err)
@@ -157,8 +151,8 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		ifNameInNs := networkData.InterfaceName
 
 		// Apply Ethtool configurations
-		if config.Network.Ethtool != nil {
-			err = applyEthtoolConfig(ns, ifNameInNs, config.Network.Ethtool)
+		if config.NetworkInterfaceConfigInPod.Ethtool != nil {
+			err = applyEthtoolConfig(ns, ifNameInNs, config.NetworkInterfaceConfigInPod.Ethtool)
 			if err != nil {
 				klog.Infof("RunPodSandbox error applying ethtool config for %s in ns %s: %v", ifNameInNs, ns, err)
 				return fmt.Errorf("error applying ethtool config for %s in ns %s: %v", ifNameInNs, ns, err)
@@ -166,8 +160,8 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		}
 
 		// Check if the ebpf programs should be disabled
-		if config.Network.Interface.DisableEBPFPrograms != nil &&
-			*config.Network.Interface.DisableEBPFPrograms {
+		if config.NetworkInterfaceConfigInPod.Interface.DisableEBPFPrograms != nil &&
+			*config.NetworkInterfaceConfigInPod.Interface.DisableEBPFPrograms {
 			err := detachEBPFPrograms(ns, ifNameInNs)
 			if err != nil {
 				klog.Infof("error disabling ebpf programs for %s in ns %s: %v", ifNameInNs, ns, err)
@@ -176,7 +170,7 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 		}
 
 		// Configure routes
-		err = applyRoutingConfig(ns, ifNameInNs, config.Network.Routes)
+		err = applyRoutingConfig(ns, ifNameInNs, config.NetworkInterfaceConfigInPod.Routes)
 		if err != nil {
 			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
 			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
@@ -259,7 +253,7 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	}
 
 	for deviceName, config := range podConfig {
-		if err := nsDetachNetdev(ns, config.Network.Interface.Name, config.OriginalInterfaceName); err != nil {
+		if err := nsDetachNetdev(ns, config.NetworkInterfaceConfigInPod.Interface.Name, config.NetworkInterfaceConfigInHost.Interface.Name); err != nil {
 			klog.Infof("fail to return network device %s : %v", deviceName, err)
 		}
 

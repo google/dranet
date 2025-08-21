@@ -41,7 +41,7 @@ func TestPodConfigStore_SetAndGet(t *testing.T) {
 	podUID := types.UID("test-pod-uid-1")
 	deviceName := "eth0"
 	config := PodConfig{
-		Network: apis.NetworkConfig{
+		NetworkInterfaceConfigInPod: apis.NetworkConfig{
 			Interface: apis.InterfaceConfig{Name: "eth0-pod"},
 			Routes: []apis.RouteConfig{
 				{Destination: "0.0.0.0/0", Gateway: "192.168.1.1"},
@@ -83,7 +83,7 @@ func TestPodConfigStore_SetAndGet(t *testing.T) {
 
 	// Test overwriting
 	newConfig := PodConfig{
-		Network: apis.NetworkConfig{
+		NetworkInterfaceConfigInPod: apis.NetworkConfig{
 			Interface: apis.InterfaceConfig{Name: "eth0-new"},
 			Ethtool:   &apis.EthtoolConfig{PrivateFlags: map[string]bool{"custom-flag": false}},
 		},
@@ -104,9 +104,9 @@ func TestPodConfigStore_DeletePod(t *testing.T) {
 	podUID2 := types.UID("test-pod-uid-2")
 	dev1 := "eth0"
 	dev2 := "eth1"
-	config1 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth0"}}}
-	config2 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth1"}}}
-	config3 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2eth0"}}}
+	config1 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth0"}}}
+	config2 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth1"}}}
+	config3 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2eth0"}}}
 
 	store.Set(podUID1, dev1, config1)
 	store.Set(podUID1, dev2, config2)
@@ -141,9 +141,9 @@ func TestPodConfigStore_GetPodConfigs(t *testing.T) {
 	podUID2 := types.UID("test-pod-uid-2")
 	dev1 := "eth0"
 	dev2 := "eth1"
-	config1 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth0"}}}
-	config2 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth1"}}}
-	config3 := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2eth0"}}}
+	config1 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth0"}}}
+	config2 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1eth1"}}}
+	config3 := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2eth0"}}}
 
 	store.Set(podUID1, dev1, config1)
 	store.Set(podUID1, dev2, config2)
@@ -187,7 +187,7 @@ func TestPodConfigStore_ThreadSafety(t *testing.T) {
 			defer wg.Done()
 			podUID := types.UID(fmt.Sprintf("pod-%d", i))
 			deviceName := fmt.Sprintf("eth%d", i%2)
-			config := PodConfig{Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: fmt.Sprintf("dev-%d", i)}}}
+			config := PodConfig{NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: fmt.Sprintf("dev-%d", i)}}}
 			store.Set(podUID, deviceName, config)
 			retrieved, _ := store.Get(podUID, deviceName)
 			if !reflect.DeepEqual(retrieved, config) {
@@ -216,10 +216,10 @@ func TestPodConfigStore_DeleteClaim(t *testing.T) {
 	dev1 := "eth0"
 	dev2 := "eth1"
 
-	config1_1 := PodConfig{Claim: claim1, Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1d1c1"}}} // Pod1, Dev1, Claim1
-	config1_2 := PodConfig{Claim: claim1, Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1d2c1"}}} // Pod1, Dev2, Claim1
-	config2_1 := PodConfig{Claim: claim1, Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2d1c1"}}} // Pod2, Dev1, Claim1
-	config3_1 := PodConfig{Claim: claim2, Network: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p3d1c2"}}} // Pod3, Dev1, Claim2
+	config1_1 := PodConfig{Claim: claim1, NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1d1c1"}}} // Pod1, Dev1, Claim1
+	config1_2 := PodConfig{Claim: claim1, NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p1d2c1"}}} // Pod1, Dev2, Claim1
+	config2_1 := PodConfig{Claim: claim1, NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p2d1c1"}}} // Pod2, Dev1, Claim1
+	config3_1 := PodConfig{Claim: claim2, NetworkInterfaceConfigInPod: apis.NetworkConfig{Interface: apis.InterfaceConfig{Name: "p3d1c2"}}} // Pod3, Dev1, Claim2
 
 	tests := []struct {
 		name                string
@@ -298,7 +298,7 @@ func TestPodConfigStore_NoDuplicateDevices(t *testing.T) {
 	podUID := types.UID("test-pod-uid-1")
 	deviceName1 := "eth0"
 	config1 := PodConfig{
-		Network: apis.NetworkConfig{
+		NetworkInterfaceConfigInPod: apis.NetworkConfig{
 			Interface: apis.InterfaceConfig{Name: "eth0-pod"},
 		},
 		RDMADevice: RDMAConfig{
@@ -312,7 +312,7 @@ func TestPodConfigStore_NoDuplicateDevices(t *testing.T) {
 	}
 	deviceName2 := "eth1"
 	config2 := PodConfig{
-		Network: apis.NetworkConfig{
+		NetworkInterfaceConfigInPod: apis.NetworkConfig{
 			Interface: apis.InterfaceConfig{Name: "eth2-pod"},
 		},
 		RDMADevice: RDMAConfig{

@@ -29,17 +29,15 @@ import (
 type PodConfig struct {
 	Claim types.NamespacedName
 
-	// OriginalInterfaceName is the name of the network interface as seen in the
-	// host's network namespace.
-	//
-	// TODO(improvement): Instead of OriginalInterfaceName being a stirng, we
-	// can instead have an OriginalInterfaceConfig of type apis.NetworkConfig
-	// which can retain information beyond the interface's name.
-	OriginalInterfaceName string
+	// NetworkInterfaceConfigInHost is the config of the network interface as
+	// seen in the host's network namespace BEFORE it was moved to the pod's
+	// network namespace.
+	NetworkInterfaceConfigInHost apis.NetworkConfig
 
-	// Network contains all network-related configurations (interface, routes,
-	// ethtool, sysctl) to be applied for this device in the Pod's namespace.
-	Network apis.NetworkConfig
+	// NetworkInterfaceConfigInPod contains all network-related configurations
+	// (interface, routes, ethtool, sysctl) to be applied for this device in the
+	// Pod's namespace.
+	NetworkInterfaceConfigInPod apis.NetworkConfig
 
 	// RDMADevice holds RDMA-specific configurations if the network device
 	// has associated RDMA capabilities.
