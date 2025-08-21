@@ -17,6 +17,10 @@ limitations under the License.
 package apis
 
 const (
+	// TODO: Reconsider the domain being used when project becomes owned by some
+	// SIG. The issue with "dra.net" is that http://dra.net is an actual
+	// domain that is totally unrelated to this project and it can be a source
+	// of confusion and problems.
 	AttrPrefix = "dra.net"
 
 	// TODO: Document meaning of these attributes and re-evaluate if all are needed.
