@@ -167,6 +167,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		ifName, err := np.netdb.GetNetInterfaceName(result.Device)
 		if err != nil {
 			errorList = append(errorList, fmt.Errorf("failed to get network interface name for device %s: %v", result.Device, err))
+			continue
 		}
 		// Get Network configuration and merge it
 		link, err := nlHandle.LinkByName(ifName)
