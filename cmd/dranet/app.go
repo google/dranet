@@ -31,6 +31,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
+	"github.com/google/dranet/pkg/pcidb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	resourcev1 "k8s.io/api/resource/v1"
@@ -89,6 +90,10 @@ func main() {
 	go func() {
 		_ = http.ListenAndServe(bindAddress, mux)
 	}()
+
+	if err := pcidb.Setup(); err != nil {
+		klog.Fatalf("Failed to setup PCI DB: %v", err)
+	}
 
 	var config *rest.Config
 	var err error
