@@ -326,7 +326,9 @@ func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 }
 
 func setPciRootAttr(device *resourceapi.Device, address *pciAddress) error {
-	pcieRootAttr, err := deviceattribute.GetPCIeRootAttributeByPCIBusID(address.bus)
+	// TODO(#199): Investigate ways to test correctness of PCI attributes
+	// discovery e2e (like standard PCI root attribute)
+	pcieRootAttr, err := deviceattribute.GetPCIeRootAttributeByPCIBusID(address.String())
 	if err != nil {
 		return err
 	}

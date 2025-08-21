@@ -124,6 +124,13 @@ type pciAddress struct {
 	function string
 }
 
+func (a pciAddress) String() string {
+	if a.domain == "" {
+		return fmt.Sprintf("%s:%s.%s", a.bus, a.device, a.function)
+	}
+	return fmt.Sprintf("%s:%s:%s.%s", a.domain, a.bus, a.device, a.function)
+}
+
 // The PCI root is the root PCI device, derived from the
 // pciAddress of a device. Spec is defined from the DRA KEP.
 // https://github.com/kubernetes/enhancements/pull/5316
