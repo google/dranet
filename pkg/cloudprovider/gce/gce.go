@@ -113,29 +113,47 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 	return instance, nil
 }
 
-// GetGCEAttributes fetches all attributes related to the provided GCP network.
-func GetGCEAttributes(network, topology string) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+// GetGCEAttributes fetches all attributes related to the provided device,
+// identified by it's MAC.
+func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
-	var projectNumber int64
-	var name string
-	// Use custom parsing because the network path is
-	// different from the format expected by k8s-cloud-provider
-	_, err := fmt.Sscanf(network, "projects/%d/networks/%s", &projectNumber, &name)
-	if err != nil {
-		klog.Warningf("Error parsing network %q : %v", network, err)
-		return nil
-	}
-	topologyParts := strings.SplitN(strings.TrimPrefix(topology, "/"), "/", 3)
+
+	topologyParts := strings.SplitN(strings.TrimPrefix(instance.Topology, "/"), "/", 3)
 	// topology may not be always available
 	if len(topologyParts) == 3 {
 		attributes["gce.dra.net/block"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[0]}
 		attributes["gce.dra.net/subblock"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[1]}
 		attributes["gce.dra.net/host"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[2]}
 	} else {
-		klog.Warningf("Error parsing host topology, may be unsupported on VM %q : %v", topology, err)
+		klog.Warningf("Error parsing host topology %q; it may be unsupported for the VM", instance.Topology)
 	}
-	attributes["gce.dra.net/networkName"] = resourceapi.DeviceAttribute{StringValue: &name}
-	attributes["gce.dra.net/networkProjectNumber"] = resourceapi.DeviceAttribute{IntValue: &projectNumber}
-	klog.Info(attributes)
+
+	// Determine properties specific to the device identified by this mac
+
+	interfaceForMacFound := false
+	var interfaceForMac cloudprovider.NetworkInterface
+	for _, cloudInterface := range instance.Interfaces {
+		if cloudInterface.Mac == mac {
+			interfaceForMacFound = true
+			interfaceForMac = cloudInterface
+			break
+		}
+	}
+	if interfaceForMacFound {
+		var projectNumber int64
+		var name string
+		// Use custom parsing because the network path is
+		// different from the format expected by k8s-cloud-provider
+		_, err := fmt.Sscanf(interfaceForMac.Network, "projects/%d/networks/%s", &projectNumber, &name)
+		if err != nil {
+			klog.Warningf("Error parsing network %q : %v", interfaceForMac.Network, err)
+			return nil
+		}
+		attributes["gce.dra.net/networkName"] = resourceapi.DeviceAttribute{StringValue: &name}
+		attributes["gce.dra.net/networkProjectNumber"] = resourceapi.DeviceAttribute{IntValue: &projectNumber}
+	} else {
+		klog.V(4).Infof("No cloud metadata found for device with mac %q; it is possible this device has no associated cloud provider metadata", mac)
+	}
+
 	return attributes
 }

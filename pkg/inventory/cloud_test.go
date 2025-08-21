@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/dranet/pkg/cloudprovider"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/utils/ptr"
 )
@@ -48,7 +49,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "MAC not found in instance interfaces",
+			name: "MAC not found in instance interfaces, no topology",
 			mac:  "00:11:22:33:44:FF", // MAC that won't be found
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
@@ -57,6 +58,22 @@ func TestGetProviderAttributes(t *testing.T) {
 				},
 			},
 			want: nil,
+		},
+		{
+			name: "MAC not found in instance interfaces, has topology",
+			mac:  "00:11:22:33:44:FF", // MAC that won't be found
+			instance: &cloudprovider.CloudInstance{
+				Provider: cloudprovider.CloudProviderGCE,
+				Interfaces: []cloudprovider.NetworkInterface{
+					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
+				},
+				Topology: "/block/subblock/host",
+			},
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"gce.dra.net/block":    {StringValue: ptr.To("block")},
+				"gce.dra.net/subblock": {StringValue: ptr.To("subblock")},
+				"gce.dra.net/host":     {StringValue: ptr.To("host")},
+			},
 		},
 		{
 			name: "GCE provider, MAC found, valid network",
@@ -120,8 +137,8 @@ func TestGetProviderAttributes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := getProviderAttributes(tt.mac, tt.instance)
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("getProviderAttributes() got = %v, want %v", got, tt.want)
+			if diff := cmp.Diff(tt.want, got, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("getProviderAttributes() returned unexpected diff (-want, +got):\n%s", diff)
 			}
 		})
 	}

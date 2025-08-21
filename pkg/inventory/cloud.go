@@ -53,16 +53,12 @@ func getProviderAttributes(mac string, instance *cloudprovider.CloudInstance) ma
 		klog.Warningf("instance metadata is nil, cannot get provider attributes.")
 		return nil
 	}
-	if instance.Provider != cloudprovider.CloudProviderGCE {
+	switch instance.Provider {
+	case cloudprovider.CloudProviderGCE:
+		return gce.GetGCEAttributes(mac, instance)
+	default:
 		klog.Warningf("cloud provider %q is not supported", instance.Provider)
-		return nil
 	}
-	for _, cloudInterface := range instance.Interfaces {
-		if cloudInterface.Mac == mac {
-			return gce.GetGCEAttributes(cloudInterface.Network, instance.Topology)
-		}
-	}
-	klog.Warningf("no matching cloud interface found for mac %s", mac)
 	return nil
 }
 
