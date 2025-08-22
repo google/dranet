@@ -24,7 +24,7 @@ spec:
         deviceClassName: dra.net
         selectors:
           - cel:
-              expression: device.attributes["dra.net"].ifName == "dummy0"
+              expression: has(device.attributes["dra.net"].ifName) && device.attributes["dra.net"].ifName == "dummy0"
     config:
     - opaque:
         driver: dra.net
