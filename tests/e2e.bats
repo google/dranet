@@ -31,8 +31,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
   run kubectl exec pod1 -- ip addr show eth99
   assert_success
@@ -41,8 +41,8 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.13"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
 }
 
 
@@ -50,8 +50,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add mlx5_6 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev mlx5_6"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
   run kubectl exec pod1 -- ip addr show eth99
   assert_success
@@ -60,15 +60,15 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.13"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
 }
 
 @test "dummy interface with IP addresses ResourceClaimTemplate" {
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip addr add 169.254.169.14/32 dev dummy0"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=MyApp
   POD_NAME=$(kubectl get pods -l app=MyApp -o name)
   run kubectl exec $POD_NAME -- ip addr show dummy0
@@ -79,15 +79,15 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.14"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate.yaml
 }
 
 @test "dummy interface with IP addresses ResourceClaim and routes" {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_route.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
   run kubectl exec pod3 -- ip addr show eth99
   assert_success
@@ -101,8 +101,8 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.1"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_route.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_route.yaml
 }
 
 
@@ -122,8 +122,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_advanced.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_advanced.yaml
 
   # Wait for the pod to become ready
   kubectl wait --for=condition=ready pod/pod-advanced-cfg --timeout=30s
@@ -143,8 +143,8 @@ setup_tcx_filter() {
   assert_output --partial "large-receive-offload: off"
 
   # Cleanup the resources for this test
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_advanced.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_advanced.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
 }
 
 # Test case for validating Big TCP configurations.
@@ -152,8 +152,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_bigtcp.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_bigtcp.yaml
   kubectl wait --for=condition=ready pod/pod-bigtcp-test --timeout=300s
 
   run kubectl exec pod-bigtcp-test -- ip -d link show dranet1
@@ -172,8 +172,8 @@ setup_tcx_filter() {
   assert_output --partial "large-receive-offload: off"
 
   # Cleanup the resources for this test
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_bigtcp.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_bigtcp.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
 }
 
 
@@ -234,8 +234,8 @@ setup_tcx_filter() {
 
   setup_tcx_filter
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_disable_ebpf.yaml
   kubectl wait --for=condition=ready pod/pod-ebpf --timeout=300s
 
   run kubectl exec pod-ebpf -- ash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz && chmod +x bpftool"
@@ -246,8 +246,8 @@ setup_tcx_filter() {
   refute_output --partial "tcx/ingress handle_ingress prog_id"
   refute_output --partial "dummy_bpf.o:[classifier]"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaim_disable_ebpf.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_disable_ebpf.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   # Unpin the bpf program
   docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -Rf /sys/fs/bpf/dummy_prog_tcx"
 }
@@ -262,8 +262,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy1"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy1"
 
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate_double.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate_double.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=MyApp
   POD_NAME=$(kubectl get pods -l app=MyApp -o name)
   run kubectl exec $POD_NAME -- ip addr show dummy0
@@ -277,8 +277,8 @@ setup_tcx_filter() {
   assert_output --partial "169.254.169.13"
   assert_output --partial "169.254.169.14"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/resourceclaimtemplate_double.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate_double.yaml
 }
 
 @test "reapply pod with dummy resource claim" {
@@ -287,7 +287,7 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy8"
 
   # Apply the resource claim template and deployment
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/repeatresourceclaimtemplate.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=reapplyApp
   POD_NAME=$(kubectl get pods -l app=reapplyApp -o name)
   run kubectl exec $POD_NAME -- ip addr show dummy8
@@ -307,7 +307,7 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip addr add 169.254.169.14/32 dev dummy8"
 
   # Reapply the deployment, should reclaim the device
-  kubectl apply -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/repeatresourceclaimtemplate.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=reapplyApp
   POD_NAME=$(kubectl get pods -l app=reapplyApp -o name)
   run kubectl exec $POD_NAME -- ip addr show dummy8
@@ -318,7 +318,7 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.14"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../examples/repeatresourceclaimtemplate.yaml
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/repeatresourceclaimtemplate.yaml
 }
 
 @test "driver should gracefully shutdown when terminated" {
