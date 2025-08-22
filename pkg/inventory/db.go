@@ -378,8 +378,8 @@ func (db *DB) updateDeviceStore(devices []resourceapi.Device) {
 		deviceStore[device.Name] = device
 	}
 	db.mu.Lock()
+	defer db.mu.Unlock()
 	db.deviceStore = deviceStore
-	db.mu.Unlock()
 }
 
 func (db *DB) GetDevice(deviceName string) (resourceapi.Device, bool) {
