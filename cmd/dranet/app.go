@@ -31,6 +31,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
+	"github.com/google/dranet/pkg/pcidb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	resourcev1 "k8s.io/api/resource/v1"
@@ -58,7 +59,7 @@ func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
-	flag.StringVar(&celExpression, "filter", `attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1.DeviceAttribute).")
+	flag.StringVar(&celExpression, "filter", `!("dra.net/type" in attributes) || attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1.DeviceAttribute).")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: dranet [options]\n\n")
@@ -89,6 +90,10 @@ func main() {
 	go func() {
 		_ = http.ListenAndServe(bindAddress, mux)
 	}()
+
+	if err := pcidb.Setup(); err != nil {
+		klog.Fatalf("Failed to setup PCI DB: %v", err)
+	}
 
 	var config *rest.Config
 	var err error

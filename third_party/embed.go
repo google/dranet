@@ -18,5 +18,8 @@ package third_party
 
 import _ "embed"
 
+// TODO: Use this embedded PCI DB as an input to https://github.com/jaypipes/ghw
+// library in order to remove dependency on the PCI DB beign available in the OS.
+//
 //go:embed pciids/pci.ids.gz
 var PCIDBGZ []byte
