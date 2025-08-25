@@ -1,6 +1,6 @@
 module github.com/google/dranet
 
-go 1.24.0
+go 1.24.3
 
 require (
 	cloud.google.com/go/compute v1.42.0
@@ -8,7 +8,7 @@ require (
 	cloud.google.com/go/container v1.44.0
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/cilium/ebpf v0.19.0
-	github.com/containerd/nri v0.9.0
+	github.com/containerd/nri v0.10.0
 	github.com/google/cel-go v0.26.0
 	github.com/google/go-cmp v0.7.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
@@ -107,7 +107,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/cri-api v0.34.0-rc.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	k8s.io/kubelet v0.34.0-rc.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
