@@ -3,7 +3,7 @@
 set -eu
 
 function setup_suite {
-  export BATS_TEST_TIMEOUT=120
+  export BATS_TEST_TIMEOUT=150
   # Define the name of the kind cluster
   export CLUSTER_NAME="dranet-test-cluster"
   export IMAGE_NAME="ghcr.io/google/dranet"

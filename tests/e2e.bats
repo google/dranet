@@ -3,13 +3,67 @@
 load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
 
-teardown() {
-  # Cleanup all dummy devices on worker nodes
-  docker exec "$CLUSTER_NAME"-worker bash -c "ip -br link show type dummy | awk '{print \$1}' | xargs -I {} ip link delete {}"
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip -br link show type dummy | awk '{print \$1}' | xargs -I {} ip link delete {}"
+# ---- GLOBAL CLEANUP ----
 
-  sleep 5
+teardown() {
+  if [[ -z "$BATS_TEST_COMPLETED" || "$BATS_TEST_COMPLETED" -ne 1 ]] && [[ -z "$BATS_TEST_SKIPPED" ]]; then
+    dump_debug_info_on_failure
+  fi
+  cleanup_k8s_resources
+  cleanup_dummy_interfaces
+  cleanup_bpf_programs
+  sleep 2
 }
+
+dump_debug_info_on_failure() {
+  echo "--- Test failed. Dumping debug information ---"
+
+  echo "--- DeviceClasses ---"
+  for dc in $(kubectl get deviceclass -o name); do
+    echo "--- $dc ---"
+    kubectl get "$dc" -o yaml
+  done
+
+  echo "--- ResourceSlices ---"
+  for rs in $(kubectl get resourceslice -o name); do
+    echo "--- $rs ---"
+    kubectl get "$rs" -o yaml
+  done
+
+  echo "--- ResourceClaims ---"
+  for rc in $(kubectl get resourceclaim -o name); do
+    echo "--- $rc ---"
+    kubectl get "$rc" -o yaml
+  done
+
+  echo "--- Pods Description ---"
+  for pod in $(kubectl get pods -o name); do
+    echo "--- $pod ---"
+    kubectl describe "$pod"
+  done
+
+  echo "--- End of debug information ---"
+}
+
+cleanup_k8s_resources() {
+  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests --ignore-not-found --recursive || true
+}
+
+cleanup_dummy_interfaces() {
+  for node in "$CLUSTER_NAME"-worker "$CLUSTER_NAME"-worker2; do
+    docker exec "$node" bash -c '
+      for dev in $(ip -br link show type dummy | awk "{print \$1}"); do
+        ip link delete "$dev" || echo "Failed to delete $dev"
+      done
+    '
+  done
+}
+
+cleanup_bpf_programs() {
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -rf /sys/fs/bpf/* || true"
+}
+
+# ---- SETUP HELPERS ----
 
 setup_bpf_device() {
   docker cp "$BATS_TEST_DIRNAME"/dummy_bpf.o "$CLUSTER_NAME"-worker2:/dummy_bpf.o
@@ -27,6 +81,8 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net attach tcx_ingress pinned /sys/fs/bpf/dummy_prog_tcx dev dummy0"
 }
 
+# ---- TESTS ----
+
 @test "dummy interface with IP addresses ResourceClaim" {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add dummy0 type dummy"
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link set up dev dummy0"
@@ -34,17 +90,15 @@ setup_tcx_filter() {
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
+
   run kubectl exec pod1 -- ip addr show eth99
   assert_success
   assert_output --partial "169.254.169.13"
-  run kubectl get resourceclaims dummy-interface-static-ip  -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
+
+  run kubectl get resourceclaims dummy-interface-static-ip -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
   assert_success
   assert_output --partial "169.254.169.13"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
 }
-
 
 @test "dummy interface with IP addresses ResourceClaim and normalized name" {
   docker exec "$CLUSTER_NAME"-worker bash -c "ip link add mlx5_6 type dummy"
@@ -53,15 +107,14 @@ setup_tcx_filter() {
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
+
   run kubectl exec pod1 -- ip addr show eth99
   assert_success
   assert_output --partial "169.254.169.13"
-  run kubectl get resourceclaims dummy-interface-static-ip  -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
+
+  run kubectl get resourceclaims dummy-interface-static-ip -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
   assert_success
   assert_output --partial "169.254.169.13"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
 }
 
 @test "dummy interface with IP addresses ResourceClaimTemplate" {
@@ -78,8 +131,6 @@ setup_tcx_filter() {
   run kubectl get resourceclaims -o yaml
   assert_success
   assert_output --partial "169.254.169.14"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate.yaml
 }
 
 @test "dummy interface with IP addresses ResourceClaim and routes" {
@@ -89,6 +140,7 @@ setup_tcx_filter() {
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_route.yaml
   kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
+
   run kubectl exec pod3 -- ip addr show eth99
   assert_success
   assert_output --partial "169.254.169.13"
@@ -100,11 +152,7 @@ setup_tcx_filter() {
   run kubectl get resourceclaims dummy-interface-static-ip-route -o=jsonpath='{.status.devices[0].networkData.ips[*]}'
   assert_success
   assert_output --partial "169.254.169.1"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_route.yaml
 }
-
 
 @test "test metric server is up and operating on host" {
   output=$(kubectl \
@@ -141,10 +189,6 @@ setup_tcx_filter() {
   assert_output --partial "tcp-segmentation-offload: off"
   assert_output --partial "generic-receive-offload: off"
   assert_output --partial "large-receive-offload: off"
-
-  # Cleanup the resources for this test
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_advanced.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
 }
 
 # Test case for validating Big TCP configurations.
@@ -154,7 +198,7 @@ setup_tcx_filter() {
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_bigtcp.yaml
-  kubectl wait --for=condition=ready pod/pod-bigtcp-test --timeout=300s
+  kubectl wait --for=condition=ready pod/pod-bigtcp-test --timeout=120s
 
   run kubectl exec pod-bigtcp-test -- ip -d link show dranet1
   assert_success
@@ -170,10 +214,6 @@ setup_tcx_filter() {
   assert_output --partial "tcp-segmentation-offload: on"
   assert_output --partial "generic-receive-offload: on"
   assert_output --partial "large-receive-offload: off"
-
-  # Cleanup the resources for this test
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_bigtcp.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
 }
 
 
@@ -224,9 +264,6 @@ setup_tcx_filter() {
   run kubectl get resourceslices --field-selector spec.nodeName="$CLUSTER_NAME"-worker2 -o jsonpath='{.items[0].spec.devices[?(@.name=="dummy0")].attributes.dra\.net\/tcxProgramNames.string}'
   assert_success
   assert_output "handle_ingress"
-
-  # Unpin the bpf program
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -Rf /sys/fs/bpf/dummy_prog_tcx"
 }
 
 @test "validate bpf programs are removed" {
@@ -236,7 +273,7 @@ setup_tcx_filter() {
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_disable_ebpf.yaml
-  kubectl wait --for=condition=ready pod/pod-ebpf --timeout=300s
+  kubectl wait --for=condition=ready pod/pod-ebpf --timeout=120s
 
   run kubectl exec pod-ebpf -- ash -c "curl --connect-timeout 5 --retry 3 -L https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz | tar -xz && chmod +x bpftool"
   assert_success
@@ -245,11 +282,6 @@ setup_tcx_filter() {
   assert_success
   refute_output --partial "tcx/ingress handle_ingress prog_id"
   refute_output --partial "dummy_bpf.o:[classifier]"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim_disable_ebpf.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
-  # Unpin the bpf program
-  docker exec "$CLUSTER_NAME"-worker2 bash -c "rm -Rf /sys/fs/bpf/dummy_prog_tcx"
 }
 
 # Test case for validating multiple devices allocated to the same pod.
@@ -276,9 +308,6 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.13"
   assert_output --partial "169.254.169.14"
-
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaimtemplate_double.yaml
 }
 
 @test "reapply pod with dummy resource claim" {
@@ -318,7 +347,6 @@ setup_tcx_filter() {
   assert_success
   assert_output --partial "169.254.169.14"
 
-  kubectl delete -f "$BATS_TEST_DIRNAME"/../tests/manifests/repeatresourceclaimtemplate.yaml
 }
 
 @test "driver should gracefully shutdown when terminated" {

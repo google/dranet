@@ -13,7 +13,7 @@
 # limitations under the License.
 
 apiVersion: resource.k8s.io/v1
-kind:  ResourceClaim
+kind: ResourceClaim
 metadata:
   name: dummy-interface-static-ip-route
 spec:
