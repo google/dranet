@@ -22,7 +22,7 @@ require (
 	golang.org/x/sys v0.35.0
 	golang.org/x/time v0.12.0
 	google.golang.org/api v0.248.0
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/protobuf v1.36.8
 	k8s.io/api v0.34.0-rc.0
 	k8s.io/apimachinery v0.34.0-rc.0
 	k8s.io/client-go v0.34.0-rc.0
