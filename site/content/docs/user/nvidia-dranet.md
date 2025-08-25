@@ -18,13 +18,12 @@ REGION="us-west8"
 ZONE="us-west8-c"
 GVNIC_NETWORK_PREFIX="dranet-gvnic"
 RDMA_NETWORK_PREFIX="dranet-rdma"
-VERSION="1.33"
+VERSION="1.34"
 
 gcloud container clusters create "${CLUSTER}" \
     --cluster-version="${VERSION}" \
     --enable-multi-networking \
     --enable-dataplane-v2 \
-    --enable-kubernetes-unstable-apis=resource.k8s.io/v1beta1/deviceclasses,resource.k8s.io/v1beta1/resourceclaims,resource.k8s.io/v1beta1/resourceclaimtemplates,resource.k8s.io/v1beta1/resourceslices \
     --no-enable-autorepair \
     --no-enable-autoupgrade \
     --zone="${ZONE}" \
@@ -151,7 +150,7 @@ want to specify the index for the time being. This isn't too important for this
 section but will come into relevance once we start pairing NICs to the nodes.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: 2-gpu
@@ -160,12 +159,13 @@ spec:
     devices:
       requests:
       - name: gpu
-        deviceClassName: gpu.nvidia.com
-        count: 2
-        selectors:
-        - cel:
-            expression: |
-                device.attributes["gpu.nvidia.com"].index < 2
+        exactly:
+          deviceClassName: gpu.nvidia.com
+          count: 2
+          selectors:
+          - cel:
+              expression: |
+                  device.attributes["gpu.nvidia.com"].index < 2
 ```
 
 Create a statefulset which claims these resources.
@@ -327,7 +327,7 @@ We create one more `ResourceClaimTemplate`, for the RDMA devices on the node,
 along with a `DeviceClass` for the RDMA device.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet
@@ -349,7 +349,7 @@ the GPUs requested need to be also aligned across the different servers. In this
 example, we will request GPU0 and GPU1 of each node.
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
   name: 2-gpu-nic-aligned
@@ -358,17 +358,19 @@ spec:
     devices:
       requests:
       - name: gpu
-        deviceClassName: gpu.nvidia.com
-        count: 2
-        selectors:
-        - cel:
-            expression: device.attributes["gpu.nvidia.com"].index <= 2
+        exactly:
+          deviceClassName: gpu.nvidia.com
+          count: 2
+          selectors:
+          - cel:
+              expression: device.attributes["gpu.nvidia.com"].index <= 2
       - name: nic
-        deviceClassName: dranet
-        count: 2
-        selectors:
-        - cel:
-            expression: device.attributes["dra.net"].rdma == true
+        exactly:
+          deviceClassName: dranet
+          count: 2
+          selectors:
+          - cel:
+              expression: device.attributes["dra.net"].rdma == true
       constraints:
       - matchAttribute: "resource.kubernetes.io/pcieRoot"
 ```

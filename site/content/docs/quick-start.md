@@ -64,7 +64,7 @@ kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main
 Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers using `kubectl get resourceslices -o yaml`:
 
 ```
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: ResourceSlice
 metadata:
   creationTimestamp: "2024-12-15T23:41:51Z"
@@ -128,7 +128,7 @@ Once the resources are available, users can create `DeviceClasses`, `ResourceCla
 Define a `DeviceClass` that selects all the network interfaces that are connected to a `GCP Network`
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
   name: dranet-cloud
@@ -143,7 +143,7 @@ spec:
 Now you can create a `ResourceClaim` that connects to a specific network, in this case `dra-1-vpc` and reference that claim in a `Pod`:
 
 ```yaml
-apiVersion: resource.k8s.io/v1beta1
+apiVersion: resource.k8s.io/v1
 kind:  ResourceClaim
 metadata:
   name: cloud-network-dra-net-1
@@ -151,10 +151,11 @@ spec:
   devices:
     requests:
     - name: req-cloud-net-1
-      deviceClassName: dranet-cloud
-      selectors:
-        - cel:
-            expression: device.attributes["dra.net"].cloudNetwork == "dra-1-vpc"
+      exactly:
+        deviceClassName: dranet-cloud
+        selectors:
+          - cel:
+              expression: device.attributes["dra.net"].cloudNetwork == "dra-1-vpc"
 ---
 apiVersion: v1
 kind: Pod
