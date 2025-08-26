@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,10 @@ const (
 	// https://man7.org/linux/man-pages/man5/sysfs.5.html
 	sysdevPath = "/sys/devices"
 )
+
+// pciAddressRegex is used to identify a PCI address within a string.
+// It matches patterns like "0000:00:04.0" or "00:04.0".
+var pciAddressRegex = regexp.MustCompile(`^(?:([0-9a-fA-F]{4}):)?([0-9a-fA-F]{2}):([0-9a-fA-F]{2})\.([0-9a-fA-F])$`)
 
 func realpath(ifName string, syspath string) string {
 	linkPath := filepath.Join(syspath, ifName)
@@ -141,42 +146,58 @@ type pciRoot struct {
 	bus string
 }
 
-func bdfAddress(ifName string, path string) (*pciAddress, error) {
+// parsePCIAddress takes a string and attempts to extract and parse a PCI address from it.
+func parsePCIAddress(s string) (*pciAddress, error) {
+	matches := pciAddressRegex.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("could not find PCI address in string: %s", s)
+	}
 	address := &pciAddress{}
-	// https://docs.kernel.org/PCI/sysfs-pci.html
-	// realpath /sys/class/net/ens4/device
-	// /sys/devices/pci0000:00/0000:00:04.0/virtio1
-	// The topmost element describes the PCI domain and bus number.
-	// PCI domain: 0000 Bus: 00 Device: 04 Function: 0
-	sysfsPath := realpath(ifName, path)
-	bfd := strings.Split(sysfsPath, "/")
-	if len(bfd) < 5 {
-		return nil, fmt.Errorf("could not find corresponding PCI address: %v", bfd)
+
+	// When pciAddressRegex matches, it is expected to return 5 elements. (First
+	// is the complete matched string itself, and the next 4 are the submatches
+	// corresponding to Domain:Bus:Device.Function). Examples:
+	// 	- "0000:00:04.0" -> ["0000:00:04.0" "0000" "00" "04" "0"]
+	// 	- "00:05.0" -> ["0000:00:05.0" "" "00" "05" "0"]
+	if len(matches) == 5 {
+		address.domain = matches[1]
+		address.bus = matches[2]
+		address.device = matches[3]
+		address.function = matches[4]
+	} else {
+		return nil, fmt.Errorf("invalid PCI address format: %s", s)
 	}
 
-	klog.V(4).Infof("pci address: %s", bfd[4])
-	pci := strings.Split(bfd[4], ":")
-	// Simple BDF notation
-	switch len(pci) {
-	case 2:
-		address.bus = pci[0]
-		f := strings.Split(pci[1], ".")
-		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
+	return address, nil
+}
+
+// pciAddressFromPath takes a full sysfs path and traverses it upwards to find
+// the first component that contains a valid PCI address.
+func pciAddressFromPath(path string) (*pciAddress, error) {
+	parts := strings.Split(path, "/")
+	for len(parts) > 0 {
+		current := parts[len(parts)-1]
+		addr, err := parsePCIAddress(current)
+		if err == nil {
+			return addr, nil
 		}
-		address.device = f[0]
-		address.function = f[1]
-	case 3:
-		address.domain = pci[0]
-		address.bus = pci[1]
-		f := strings.Split(pci[2], ".")
-		if len(f) != 2 {
-			return nil, fmt.Errorf("could not find corresponding PCI device and function: %v", pci)
-		}
-		address.device = f[0]
-		address.function = f[1]
-	default:
-		return nil, fmt.Errorf("could not find corresponding PCI address: %v", pci)
+		parts = parts[:len(parts)-1]
+	}
+	return nil, fmt.Errorf("could not find PCI address in path: %s", path)
+}
+
+// pciAddressForNetInterface finds the PCI address for a given network interface name.
+func pciAddressForNetInterface(ifName string) (*pciAddress, error) {
+	// First, find the absolute path of the device in the sysfs, which typically
+	// looks like:
+	// /sys/devices/pci0000:8c/0000:8c:00.0/0000:8d:00.0/0000:8e:02.0/0000:91:00.0/net/eth0
+	// Then, use pciAddressFromPath() to traverse the path upwards, checking
+	// each component to find the first one that matches the format of a PCI
+	// address.
+	sysfsPath := realpath(ifName, sysnetPath)
+	address, err := pciAddressFromPath(sysfsPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not find PCI address for interface %q: %w", ifName, err)
 	}
 	return address, nil
 }

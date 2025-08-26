@@ -295,7 +295,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 	device.Attributes["dra.net/virtual"] = resourceapi.DeviceAttribute{BoolValue: ptr.To(false)}
 
-	address, err := bdfAddress(ifName, path)
+	address, err := pciAddressForNetInterface(ifName)
 	if err != nil {
 		klog.Infof("Could not get bdf address : %v", err)
 	} else {
