@@ -19,7 +19,6 @@ package inventory
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -118,12 +117,8 @@ func (db *DB) GetPodNamespace(pod string) string {
 func (db *DB) Run(ctx context.Context) error {
 	defer close(db.notifications)
 
-	nlHandle, err := netlink.NewHandle()
-	if err != nil {
-		return fmt.Errorf("error creating netlink handle %v", err)
-	}
 	// Resources are published periodically or if there is a netlink notification
-	// indicating a new interfaces was added or changed
+	// indicating a new interfaces was added or changed.
 	nlChannel := make(chan netlink.LinkUpdate)
 	doneCh := make(chan struct{})
 	defer close(doneCh)
@@ -131,12 +126,8 @@ func (db *DB) Run(ctx context.Context) error {
 		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", maxInterval.String())
 	}
 
-	// Obtain data that will not change after the startup
+	// Obtain data that will not change after the startup.
 	db.instance = getInstanceProperties(ctx)
-	// TODO: it is not common but may happen in edge cases that the default gateway changes
-	// revisit once we have more evidence this can be a potential problem or break some use
-	// cases.
-	gwInterfaces := getDefaultGwInterfaces()
 
 	for {
 		err := db.rateLimiter.Wait(ctx)
@@ -144,48 +135,61 @@ func (db *DB) Run(ctx context.Context) error {
 			klog.Error(err, "unexpected rate limited error trying to get system interfaces")
 		}
 
-		devices := []resourceapi.Device{}
-		ifaces, err := nlHandle.LinkList()
+		// Device lookup map is used to prevent duplicated.
+		devices := make(map[string]*resourceapi.Device)
+
+		// Keep track of seen devices to not register an RDMA device twice.
+		seenRdmaDevices := sets.New[string]()
+
+		// Kernel network interfaces are first priority.
+		netlinkDevices, err := db.discoverNetlinkDevices()
 		if err != nil {
-			klog.Error(err, "unexpected error trying to get system interfaces")
+			return err
 		}
-		for _, iface := range ifaces {
-			klog.V(7).InfoS("Checking network interface", "name", iface.Attrs().Name)
-			if gwInterfaces.Has(iface.Attrs().Name) {
-				klog.V(4).Infof("iface %s is an uplink interface", iface.Attrs().Name)
+		for pciAddr, device := range netlinkDevices {
+
+			// Do not add un-named netowrk device interfaces.
+			ifName, ok := device.Basic.Attributes["dra.net/ifName"]
+			if !ok {
 				continue
 			}
 
-			if ignoredInterfaceNames.Has(iface.Attrs().Name) {
-				klog.V(4).Infof("iface %s is in the list of ignored interfaces", iface.Attrs().Name)
+			// If it has RDMA, mark as seen.
+			if rdmaName, err := rdmamap.GetRdmaDeviceForNetdevice(*ifName.StringValue); err == nil && rdmaName != "" {
+				klog.V(4).Infof("Found netdev '%s' with associated RDMA device '%s'. Merging.", *ifName.StringValue, rdmaName)
+				seenRdmaDevices.Insert(pciAddr)
+			}
+			devices[*ifName.StringValue] = device
+
+		}
+		// We only allow rdma devices that have PCI addresses.
+		for pciAddr, rdmaDevice := range db.discoverRawRdmaDevices() {
+
+			// Have we already seen it?
+			_, ok := seenRdmaDevices[pciAddr]
+			if ok {
 				continue
 			}
-
-			// skip loopback interfaces
-			if iface.Attrs().Flags&net.FlagLoopback != 0 {
-				continue
-			}
-
-			// publish this network interface
-			device, err := db.netdevToDRAdev(iface)
-			if err != nil {
-				klog.V(2).Infof("could not obtain attributes for iface %s : %v", iface.Attrs().Name, err)
-				continue
-			}
-
-			devices = append(devices, *device)
-			klog.V(4).Infof("Found following network interface %s", iface.Attrs().Name)
+			devices[rdmaDevice.Name] = rdmaDevice
 		}
 
-		klog.V(4).Infof("Found %d devices", len(devices))
-		if len(devices) > 0 || db.hasDevices {
-			db.hasDevices = len(devices) > 0
-			db.notifications <- devices
+		// Create the final list to publish.
+		finalDevices := make([]resourceapi.Device, 0, len(devices))
+		for _, device := range devices {
+			finalDevices = append(finalDevices, *device)
 		}
+
+		klog.V(4).Infof("Found %d devices", len(finalDevices))
+		if len(finalDevices) > 0 || db.hasDevices {
+			db.hasDevices = len(finalDevices) > 0
+			db.notifications <- finalDevices
+		}
+
+		// Wait for the next event or timeout.
 		select {
-		// trigger a reconcile
+		// Trigger a reconcile.
 		case <-nlChannel:
-			// drain the channel so we only sync once
+			// Drain the channel so we only sync once.
 			for len(nlChannel) > 0 {
 				<-nlChannel
 			}
@@ -208,13 +212,14 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	}
 	// Set the device name. It will be normalized only if necessary.
 	device.Name = names.SetDeviceName(ifName)
-	// expose the real interface name as an attribute in case it is normalized.
+
+  // expose the real interface name as an attribute in case it is normalized.
 	device.Attributes["dra.net/ifName"] = resourceapi.DeviceAttribute{StringValue: &ifName}
 
 	linkType := link.Type()
 	linkAttrs := link.Attrs()
 
-	// identify the namespace holding the link as the other end of a veth pair
+	// Identify the namespace holding the link as the other end of a veth pair.
 	netnsid := link.Attrs().NetNsID
 	if podName := db.GetPodName(netnsid); podName != "" {
 		device.Attributes["dra.net/pod"] = resourceapi.DeviceAttribute{StringValue: &podName}
@@ -252,7 +257,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 	device.Attributes["dra.net/alias"] = resourceapi.DeviceAttribute{StringValue: &linkAttrs.Alias}
 	device.Attributes["dra.net/type"] = resourceapi.DeviceAttribute{StringValue: &linkType}
 
-	// Get eBPF properties from the interface using the legacy tc hooks
+	// Get eBPF properties from the interface using the legacy tc hooks.
 	isEbpf := false
 	filterNames, ok := getTcFilters(link)
 	if ok {
@@ -260,7 +265,7 @@ func (db *DB) netdevToDRAdev(link netlink.Link) (*resourceapi.Device, error) {
 		device.Attributes["dra.net/tcFilterNames"] = resourceapi.DeviceAttribute{StringValue: ptr.To(strings.Join(filterNames, ","))}
 	}
 
-	// Get eBPF properties from the interface using the tcx hooks
+	// Get eBPF properties from the interface using the tcx hooks.
 	programNames, ok := getTcxFilters(link)
 	if ok {
 		isEbpf = true
@@ -300,7 +305,7 @@ func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 		klog.Infof("Could not get bdf address : %v", err)
 	} else {
 		if err := setPciRootAttr(device, address); err != nil {
-			klog.Infof("Could not get pci root attribute : %v", err)
+      klog.Infof("could not get pci root for %s: %v", ifName, err)
 		}
 	}
 
@@ -316,7 +321,7 @@ func addPCIAttributes(device *resourceapi.Device, ifName string, path string) {
 			device.Attributes["dra.net/pciSubsystem"] = resourceapi.DeviceAttribute{StringValue: &entry.Subsystem}
 		}
 	} else {
-		klog.Infof("could not get pci vendor information : %v", err)
+		klog.Infof("could not get pci vendor information for %s: %v", ifName, err)
 	}
 
 	numa, err := numaNode(ifName, path)
