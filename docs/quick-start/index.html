@@ -11,7 +11,7 @@ kind: Cluster apiVersion: kind.x-k8s.io/v1alpha4 nodes: - role: control-plane im
 In order to enable DRA you need to enable both the feature gates and the API groups.
 Kubernetes cluster with DRA KIND Install KIND.
 Create a cluster using the following configuration.
-kind: Cluster apiVersion: kind.x-k8s.io/v1alpha4 nodes: - role: control-plane image: kindest/node:v1.33.1 - role: worker image: kindest/node:v1.33.1 - role: worker image: kindest/node:v1.33.1 featureGates: # Enable the corresponding DRA feature gates DynamicResourceAllocation: true DRAResourceClaimDeviceStatus: true runtimeConfig: api/beta : true kind create cluster --config kind."><meta itemprop=datePublished content="2024-12-17T14:47:05+00:00"><meta itemprop=dateModified content="2024-12-17T14:47:05+00:00"><meta itemprop=wordCount content="570"><meta name=twitter:card content="summary"><meta name=twitter:title content="Quick Start"><meta name=twitter:description content="DraNet depends on the Kubernetes feature Dynamic Resource Allocation (DRA), that is beta (disabled by default in Kubernetes ∂v1.32).
+kind: Cluster apiVersion: kind.x-k8s.io/v1alpha4 nodes: - role: control-plane image: kindest/node:v1.33.1 - role: worker image: kindest/node:v1.33.1 - role: worker image: kindest/node:v1.33.1 featureGates: # Enable the corresponding DRA feature gates DynamicResourceAllocation: true DRAResourceClaimDeviceStatus: true runtimeConfig: api/beta : true kind create cluster --config kind."><meta itemprop=datePublished content="2024-12-17T14:47:05+00:00"><meta itemprop=dateModified content="2024-12-17T14:47:05+00:00"><meta itemprop=wordCount content="571"><meta name=twitter:card content="summary"><meta name=twitter:title content="Quick Start"><meta name=twitter:description content="DraNet depends on the Kubernetes feature Dynamic Resource Allocation (DRA), that is beta (disabled by default in Kubernetes ∂v1.32).
 In order to enable DRA you need to enable both the feature gates and the API groups.
 Kubernetes cluster with DRA KIND Install KIND.
 Create a cluster using the following configuration.
@@ -39,7 +39,7 @@ kind: Cluster apiVersion: kind.x-k8s.io/v1alpha4 nodes: - role: control-plane im
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>kubernetes_feature_enabled{name=<span style=color:#a31515>&#34;DynamicResourceAllocation&#34;</span>,stage=<span style=color:#a31515>&#34;BETA&#34;</span>} 1
 </span></span></code></pre></div><h2 id=installation>Installation</h2><p>You can install the latest stable version of <code>DraNet</code> using the provided manifest:</p><pre tabindex=0><code>kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
-</code></pre><h3 id=how-to-use-it>How to use it</h3><p>Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers using <code>kubectl get resourceslices -o yaml</code>:</p><pre tabindex=0><code>apiVersion: resource.k8s.io/v1beta1
+</code></pre><h3 id=how-to-use-it>How to use it</h3><p>Once the Kubernetes Network Driver is running you can see the list of Network Interfaces and its attributes published by the drivers using <code>kubectl get resourceslices -o yaml</code>:</p><pre tabindex=0><code>apiVersion: resource.k8s.io/v1
 kind: ResourceSlice
 metadata:
   creationTimestamp: &#34;2024-12-15T23:41:51Z&#34;
@@ -96,7 +96,7 @@ spec:
             bool: false
       name: gpu7rdma0
 ...
-</code></pre><p>Once the resources are available, users can create <code>DeviceClasses</code>, <code>ResourceClaims</code> and/or <code>ResourceClaimTemplates</code> to schedule pods.</p><p>Define a <code>DeviceClass</code> that selects all the network interfaces that are connected to a <code>GCP Network</code></p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1beta1
+</code></pre><p>Once the resources are available, users can create <code>DeviceClasses</code>, <code>ResourceClaims</code> and/or <code>ResourceClaimTemplates</code> to schedule pods.</p><p>Define a <code>DeviceClass</code> that selects all the network interfaces that are connected to a <code>GCP Network</code></p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1
 </span></span><span style=display:flex><span>kind: DeviceClass
 </span></span><span style=display:flex><span>metadata:
 </span></span><span style=display:flex><span>  name: dranet-cloud
@@ -106,7 +106,7 @@ spec:
 </span></span><span style=display:flex><span>        expression: device.driver == &#34;dra.net&#34;
 </span></span><span style=display:flex><span>    - cel:
 </span></span><span style=display:flex><span>        expression: has(device.attributes[&#34;dra.net&#34;].cloudNetwork) 
-</span></span></code></pre></div><p>Now you can create a <code>ResourceClaim</code> that connects to a specific network, in this case <code>dra-1-vpc</code> and reference that claim in a <code>Pod</code>:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1beta1
+</span></span></code></pre></div><p>Now you can create a <code>ResourceClaim</code> that connects to a specific network, in this case <code>dra-1-vpc</code> and reference that claim in a <code>Pod</code>:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=display:flex><span>apiVersion: resource.k8s.io/v1
 </span></span><span style=display:flex><span>kind:  ResourceClaim
 </span></span><span style=display:flex><span>metadata:
 </span></span><span style=display:flex><span>  name: cloud-network-dra-net-1
@@ -114,10 +114,11 @@ spec:
 </span></span><span style=display:flex><span>  devices:
 </span></span><span style=display:flex><span>    requests:
 </span></span><span style=display:flex><span>    - name: req-cloud-net-1
-</span></span><span style=display:flex><span>      deviceClassName: dranet-cloud
-</span></span><span style=display:flex><span>      selectors:
-</span></span><span style=display:flex><span>        - cel:
-</span></span><span style=display:flex><span>            expression: device.attributes[&#34;dra.net&#34;].cloudNetwork == &#34;dra-1-vpc&#34;
+</span></span><span style=display:flex><span>      exactly:
+</span></span><span style=display:flex><span>        deviceClassName: dranet-cloud
+</span></span><span style=display:flex><span>        selectors:
+</span></span><span style=display:flex><span>          - cel:
+</span></span><span style=display:flex><span>              expression: device.attributes[&#34;dra.net&#34;].cloudNetwork == &#34;dra-1-vpc&#34;
 </span></span><span style=display:flex><span>---
 </span></span><span style=display:flex><span>apiVersion: v1
 </span></span><span style=display:flex><span>kind: Pod
