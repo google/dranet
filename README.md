@@ -68,17 +68,11 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  image: kindest/node:v1.33.1
+  image: kindest/node:v1.34.0
 - role: worker
-  image: kindest/node:v1.33.1
+  image: kindest/node:v1.34.0
 - role: worker
-  image: kindest/node:v1.33.1
-featureGates:
-  # Enable the corresponding DRA feature gates
-  DynamicResourceAllocation: true
-  DRAResourceClaimDeviceStatus: true
-runtimeConfig:
-  api/beta : true
+  image: kindest/node:v1.34.0
 ```
 
 Then to create the cluster:
