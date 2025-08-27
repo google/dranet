@@ -15,7 +15,7 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  image: kindest/node:v1.33.1
+  image: kindest/node:v1.34.0
   kubeadmConfigPatches:
   # Enable the corresponding version of the resource.k8s.io API
   - |
@@ -48,9 +48,3 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         v: "5"
-featureGates:
-  # Enable the corresponding DRA feature gates
-  DynamicResourceAllocation: true
-  DRAResourceClaimDeviceStatus: true
-runtimeConfig:
-  api/beta : true
