@@ -132,6 +132,25 @@ func TestGetProviderAttributes(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "GCE provider, MAC found, with IP aliases",
+			mac:  "00:11:22:33:44:55",
+			instance: &cloudprovider.CloudInstance{
+				Provider: cloudprovider.CloudProviderGCE,
+				Interfaces: []cloudprovider.NetworkInterface{
+					{
+						Mac:       "00:11:22:33:44:55",
+						Network:   "projects/12345/networks/test-network",
+						IPAliases: []string{"10.0.0.1/24", "10.0.0.2/24"},
+					},
+				},
+			},
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				"gce.dra.net/networkName":          {StringValue: ptr.To("test-network")},
+				"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(int64(12345))},
+				"gce.dra.net/ipAliases":            {StringValue: ptr.To("10.0.0.1/24,10.0.0.2/24")},
+			},
+		},
 	}
 
 	for _, tt := range tests {

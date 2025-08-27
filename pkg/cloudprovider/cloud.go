@@ -26,11 +26,12 @@ type CloudInstance struct {
 }
 
 type NetworkInterface struct {
-	IPv4    string   `json:"ip,omitempty"`
-	IPv6    []string `json:"ipv6,omitempty"`
-	Mac     string   `json:"mac,omitempty"`
-	MTU     int      `json:"mtu,omitempty"`
-	Network string   `json:"network,omitempty"`
+	IPv4      string   `json:"ip,omitempty"`
+	IPv6      []string `json:"ipv6,omitempty"`
+	Mac       string   `json:"mac,omitempty"`
+	MTU       int      `json:"mtu,omitempty"`
+	Network   string   `json:"network,omitempty"`
+	IPAliases []string `json:"ipAliases,omitempty"`
 }
 
 // CloudProvider represents the type of cloud provider.
