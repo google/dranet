@@ -1,0 +1,50 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: periodics
+
+on:
+  schedule:
+    # Runs daily at 03:00 UTC
+    - cron: '0 3 * * *'
+
+jobs:
+  bats_tests:
+    runs-on: ubuntu-22.04
+    name: Bats e2e tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bats and bats libs
+        id: setup-bats
+        uses: bats-core/bats-action@3.0.1
+        with:
+          support-path: ${{ github.workspace }}/tests/test_helper/bats-support
+          assert-path: "${{ github.workspace }}/tests/test_helper/bats-assert"
+      - name: Bats tests
+        shell: bash
+        env:
+         BATS_LIB_PATH: ${{ steps.setup-bats.outputs.lib-path }}
+         TERM: xterm
+         USE_LATEST: true
+        run: bats -o _artifacts --print-output-on-failure tests/
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
+          path: ./_artifacts
+
