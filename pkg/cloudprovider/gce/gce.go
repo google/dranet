@@ -49,6 +49,7 @@ const (
 	AttrGCEHost                 = GCEAttrPrefix + "/" + "host"
 	AttrGCENetworkName          = GCEAttrPrefix + "/" + "networkName"
 	AttrGCENetworkProjectNumber = GCEAttrPrefix + "/" + "networkProjectNumber"
+	AttrGCEIPAliases            = GCEAttrPrefix + "/" + "ipAliases"
 )
 
 var (
@@ -150,6 +151,11 @@ func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[res
 		}
 	}
 	if interfaceForMacFound {
+		if len(interfaceForMac.IPAliases) > 0 {
+			ipAliases := strings.Join(interfaceForMac.IPAliases, ",")
+			attributes[AttrGCEIPAliases] = resourceapi.DeviceAttribute{StringValue: &ipAliases}
+		}
+
 		var projectNumber int64
 		var name string
 		// Use custom parsing because the network path is
@@ -159,8 +165,8 @@ func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[res
 			klog.Warningf("Error parsing network %q : %v", interfaceForMac.Network, err)
 			return nil
 		}
-		attributes["gce.dra.net/networkName"] = resourceapi.DeviceAttribute{StringValue: &name}
-		attributes["gce.dra.net/networkProjectNumber"] = resourceapi.DeviceAttribute{IntValue: &projectNumber}
+		attributes[AttrGCENetworkName] = resourceapi.DeviceAttribute{StringValue: &name}
+		attributes[AttrGCENetworkProjectNumber] = resourceapi.DeviceAttribute{IntValue: &projectNumber}
 	} else {
 		klog.V(4).Infof("No cloud metadata found for device with mac %q; it is possible this device has no associated cloud provider metadata", mac)
 	}
