@@ -24,12 +24,12 @@ require (
 	golang.org/x/time v0.12.0
 	google.golang.org/api v0.248.0
 	google.golang.org/protobuf v1.36.8
-	k8s.io/api v0.34.0-rc.0
-	k8s.io/apimachinery v0.34.0-rc.0
-	k8s.io/client-go v0.34.0-rc.0
+	k8s.io/api v0.34.0
+	k8s.io/apimachinery v0.34.0
+	k8s.io/client-go v0.34.0
 	k8s.io/cloud-provider-gcp v0.0.0-20250326051131-7056e3facd39
-	k8s.io/component-helpers v0.34.0-rc.0
-	k8s.io/dynamic-resource-allocation v0.34.0-rc.0
+	k8s.io/component-helpers v0.34.0
+	k8s.io/dynamic-resource-allocation v0.34.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8
@@ -113,7 +113,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
-	k8s.io/kubelet v0.34.0-rc.0 // indirect
+	k8s.io/kubelet v0.34.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect

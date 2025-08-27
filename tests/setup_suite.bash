@@ -7,22 +7,30 @@ function setup_suite {
   # Define the name of the kind cluster
   export CLUSTER_NAME="dranet-test-cluster"
   export IMAGE_NAME="ghcr.io/google/dranet"
+
   # Build the image
   docker build -t "$IMAGE_NAME":test -f Dockerfile "$BATS_TEST_DIRNAME"/.. --load
 
-  # Build the kind image, needed for newest GA APIs
-  revision=$(curl --fail --silent --show-error --location https://dl.k8s.io/ci/fast/latest-fast.txt)
-  kind_node_source="https://dl.k8s.io/ci/fast/$revision/kubernetes-server-linux-amd64.tar.gz"
-  kind build node-image --image=dra/node:latest "${kind_node_source}"
+  # Define the kind arguments in an array
+  kind_args=(
+    create cluster
+    --name "$CLUSTER_NAME"
+    -v7 --wait 1m --retain
+    --config="$BATS_TEST_DIRNAME"/../kind.yaml
+  )
+
+  if [[ "${USE_LATEST:-false}" == "true" ]]; then
+    revision=$(curl --fail --silent --show-error --location https://dl.k8s.io/ci/fast/latest-fast.txt)
+    kind_node_source="https://dl.k8s.io/ci/fast/$revision/kubernetes-server-linux-amd64.tar.gz"
+    kind build node-image --image=dra/node:latest "${kind_node_source}"
+    kind_args+=(--image dra/node:latest)
+  fi
 
   mkdir -p _artifacts
   rm -rf _artifacts/*
   # create cluster
-  kind create cluster \
-    --image dra/node:latest   \
-    --name $CLUSTER_NAME      \
-    -v7 --wait 1m --retain    \
-    --config="$BATS_TEST_DIRNAME"/../kind.yaml
+
+  kind "${kind_args[@]}"
 
   kind load docker-image "$IMAGE_NAME":test --name "$CLUSTER_NAME"
 
