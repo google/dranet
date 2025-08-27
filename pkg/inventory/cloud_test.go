@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/google/dranet/pkg/cloudprovider"
+	"github.com/google/dranet/pkg/cloudprovider/gce"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	resourceapi "k8s.io/api/resource/v1"
@@ -70,9 +71,9 @@ func TestGetProviderAttributes(t *testing.T) {
 				Topology: "/block/subblock/host",
 			},
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"gce.dra.net/block":    {StringValue: ptr.To("block")},
-				"gce.dra.net/subblock": {StringValue: ptr.To("subblock")},
-				"gce.dra.net/host":     {StringValue: ptr.To("host")},
+				gce.AttrGCEBlock:    {StringValue: ptr.To("block")},
+				gce.AttrGCESubBlock: {StringValue: ptr.To("subblock")},
+				gce.AttrGCEHost:     {StringValue: ptr.To("host")},
 			},
 		},
 		{
@@ -87,11 +88,11 @@ func TestGetProviderAttributes(t *testing.T) {
 				Topology: "/block/subblock/host",
 			},
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"gce.dra.net/networkName":          {StringValue: ptr.To("test-network")},
-				"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(int64(12345))},
-				"gce.dra.net/block":                {StringValue: ptr.To("block")},
-				"gce.dra.net/subblock":             {StringValue: ptr.To("subblock")},
-				"gce.dra.net/host":                 {StringValue: ptr.To("host")},
+				gce.AttrGCENetworkName:          {StringValue: ptr.To("test-network")},
+				gce.AttrGCENetworkProjectNumber: {IntValue: ptr.To(int64(12345))},
+				gce.AttrGCEBlock:                {StringValue: ptr.To("block")},
+				gce.AttrGCESubBlock:             {StringValue: ptr.To("subblock")},
+				gce.AttrGCEHost:                 {StringValue: ptr.To("host")},
 			},
 		},
 		{
@@ -117,8 +118,8 @@ func TestGetProviderAttributes(t *testing.T) {
 				Topology: "/block/subblock",
 			},
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"gce.dra.net/networkName":          {StringValue: ptr.To("test-network")},
-				"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(int64(12345))},
+				gce.AttrGCENetworkName:          {StringValue: ptr.To("test-network")},
+				gce.AttrGCENetworkProjectNumber: {IntValue: ptr.To(int64(12345))},
 			},
 		},
 		{
@@ -146,9 +147,9 @@ func TestGetProviderAttributes(t *testing.T) {
 				},
 			},
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"gce.dra.net/networkName":          {StringValue: ptr.To("test-network")},
-				"gce.dra.net/networkProjectNumber": {IntValue: ptr.To(int64(12345))},
-				"gce.dra.net/ipAliases":            {StringValue: ptr.To("10.0.0.1/24,10.0.0.2/24")},
+				gce.AttrGCENetworkName:          {StringValue: ptr.To("test-network")},
+				gce.AttrGCENetworkProjectNumber: {IntValue: ptr.To(int64(12345))},
+				gce.AttrGCEIPAliases:            {StringValue: ptr.To("10.0.0.1/24,10.0.0.2/24")},
 			},
 		},
 	}

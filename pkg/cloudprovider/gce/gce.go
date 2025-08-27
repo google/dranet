@@ -45,7 +45,7 @@ const (
 	GCEAttrPrefix = "gce.dra.net"
 
 	AttrGCEBlock                = GCEAttrPrefix + "/" + "block"
-	AttrGCESubblock             = GCEAttrPrefix + "/" + "subblock"
+	AttrGCESubBlock             = GCEAttrPrefix + "/" + "subBlock"
 	AttrGCEHost                 = GCEAttrPrefix + "/" + "host"
 	AttrGCENetworkName          = GCEAttrPrefix + "/" + "networkName"
 	AttrGCENetworkProjectNumber = GCEAttrPrefix + "/" + "networkProjectNumber"
@@ -132,9 +132,9 @@ func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[res
 	topologyParts := strings.SplitN(strings.TrimPrefix(instance.Topology, "/"), "/", 3)
 	// topology may not be always available
 	if len(topologyParts) == 3 {
-		attributes["gce.dra.net/block"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[0]}
-		attributes["gce.dra.net/subblock"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[1]}
-		attributes["gce.dra.net/host"] = resourceapi.DeviceAttribute{StringValue: &topologyParts[2]}
+		attributes[AttrGCEBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[0]}
+		attributes[AttrGCESubBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[1]}
+		attributes[AttrGCEHost] = resourceapi.DeviceAttribute{StringValue: &topologyParts[2]}
 	} else {
 		klog.Warningf("Error parsing host topology %q; it may be unsupported for the VM", instance.Topology)
 	}
