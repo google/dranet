@@ -33,7 +33,7 @@ nodes:
       kubeletExtraArgs:
         v: "5"
 - role: worker
-  image: kindest/node:v1.33.1
+  image: kindest/node:v1.34.0
   kubeadmConfigPatches:
   - |
     kind: JoinConfiguration
@@ -41,7 +41,7 @@ nodes:
       kubeletExtraArgs:
         v: "5"
 - role: worker
-  image: kindest/node:v1.33.1
+  image: kindest/node:v1.34.0
   kubeadmConfigPatches:
   - |
     kind: JoinConfiguration
