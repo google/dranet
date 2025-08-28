@@ -12,7 +12,13 @@ teardown() {
   cleanup_k8s_resources
   cleanup_dummy_interfaces
   cleanup_bpf_programs
-  sleep 2
+  # The driver is rate limited to updates with interval of atleast 5 seconds. So
+  # we need to sleep for an equivalent amount of time to ensure state from a
+  # previous test is cleared up and old (non-existent) devices have been removed
+  # from the ResourceSlice. This seems to only be an an issue of the test where
+  # we create "dummy" interfaces which disappear if the network namespace is
+  # deleted.
+  sleep 5
 }
 
 dump_debug_info_on_failure() {
