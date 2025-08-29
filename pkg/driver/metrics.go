@@ -22,19 +22,62 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	statusSuccess = "success"
+	statusFailed  = "failed"
+)
+
+const (
+	methodPrepareResourceClaims   = "PrepareResourceClaims"
+	methodUnprepareResourceClaims = "UnprepareResourceClaims"
+	methodRunPodSandbox           = "RunPodSandbox"
+	methodStopPodSandbox          = "StopPodSandbox"
+	methodRemovePodSandbox        = "RemovePodSandbox"
+	methodCreateContainer         = "CreateContainer"
+)
+
 var registerMetricsOnce sync.Once
 
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
-		prometheus.MustRegister(nodePrepareRequestsTotal)
+		prometheus.MustRegister(draPluginRequestsTotal)
+		prometheus.MustRegister(draPluginRequestsLatencySeconds)
+		prometheus.MustRegister(nriPluginRequestsTotal)
+		prometheus.MustRegister(nriPluginRequestsLatencySeconds)
+		prometheus.MustRegister(publishedDevicesTotal)
 	})
 }
 
 var (
-	nodePrepareRequestsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	draPluginRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "dranet",
 		Subsystem: "driver",
-		Name:      "node_prepare_requests_total",
-		Help:      "Total number of NodePrepareResources requests received.",
-	})
+		Name:      "dra_plugin_requests_total",
+		Help:      "Total number of DRA plugin requests.",
+	}, []string{"method", "status"})
+	draPluginRequestsLatencySeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "dranet",
+		Subsystem: "driver",
+		Name:      "dra_plugin_requests_latency_seconds",
+		Help:      "DRA plugin request latency in seconds.",
+	}, []string{"method"})
+	nriPluginRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "dranet",
+		Subsystem: "driver",
+		Name:      "nri_plugin_requests_total",
+		Help:      "Total number of NRI plugin requests.",
+	}, []string{"method", "status"})
+	nriPluginRequestsLatencySeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "dranet",
+		Subsystem: "driver",
+		Name:      "nri_plugin_requests_latency_seconds",
+		Help:      "NRI plugin request latency in seconds.",
+	}, []string{"method"})
+	publishedDevicesTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "dranet",
+		Subsystem: "driver",
+		Name:      "published_devices_total",
+		Help:      "Total number of published devices.",
+	}, []string{"feature"})
 )
+

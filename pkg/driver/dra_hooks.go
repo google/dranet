@@ -58,6 +58,16 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
 			klog.V(4).Infof("After filtering %d devices", len(devices))
+
+			rdmaCount := 0
+			for _, device := range devices {
+				if *device.Attributes[apis.AttrRDMA].BoolValue {
+					rdmaCount++
+				}
+			}
+			publishedDevicesTotal.WithLabelValues("rdma").Set(float64(rdmaCount))
+			publishedDevicesTotal.WithLabelValues("non_rdma").Set(float64(len(devices) - rdmaCount))
+
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
 					np.nodeName: {Slices: []resourceslice.Slice{{Devices: devices}}}},
@@ -77,17 +87,29 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 
 func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
 	klog.V(2).Infof("PrepareResourceClaims is called: number of claims: %d", len(claims))
-
-	nodePrepareRequestsTotal.Inc()
+	start := time.Now()
+	defer func() {
+		draPluginRequestsLatencySeconds.WithLabelValues(methodPrepareResourceClaims).Observe(time.Since(start).Seconds())
+	}()
 
 	if len(claims) == 0 {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusSuccess).Inc()
 		return nil, nil
 	}
 	result := make(map[types.UID]kubeletplugin.PrepareResult)
-
+	isError := false
 	for _, claim := range claims {
 		klog.V(2).Infof("NodePrepareResources: Claim Request %s/%s", claim.Namespace, claim.Name)
-		result[claim.UID] = np.prepareResourceClaim(ctx, claim)
+		res := np.prepareResourceClaim(ctx, claim)
+		result[claim.UID] = res
+		if res.Err != nil {
+			isError = true
+		}
+	}
+	if isError {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusFailed).Inc()
+	} else {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusSuccess).Inc()
 	}
 	return result, nil
 }
@@ -323,18 +345,31 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 
 func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	klog.V(2).Infof("UnprepareResourceClaims is called: number of claims: %d", len(claims))
+	start := time.Now()
+	defer func() {
+		draPluginRequestsLatencySeconds.WithLabelValues(methodUnprepareResourceClaims).Observe(time.Since(start).Seconds())
+	}()
 	if len(claims) == 0 {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusSuccess).Inc()
 		return nil, nil
 	}
 
 	result := make(map[types.UID]error)
+	isError := false
 	for _, claim := range claims {
 		err := np.unprepareResourceClaim(ctx, claim)
 		result[claim.UID] = err
 		if err != nil {
 			klog.Infof("error unpreparing ressources for claim %s/%s : %v", claim.Namespace, claim.Name, err)
+			isError = true
 		}
 	}
+	if isError {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusFailed).Inc()
+	} else {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusSuccess).Inc()
+	}
+	
 	return result, nil
 }
 
