@@ -9,7 +9,7 @@ require (
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/cilium/ebpf v0.19.0
 	github.com/containerd/nri v0.10.0
-	github.com/google/cel-go v0.26.0
+	github.com/google/cel-go v0.26.1
 	github.com/google/go-cmp v0.7.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/jaypipes/ghw v0.19.0
