@@ -18,9 +18,12 @@ package driver
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/containerd/nri/pkg/api"
+	"github.com/google/dranet/pkg/inventory"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -29,8 +32,9 @@ func TestCreateContainerNoDuplicateDevices(t *testing.T) {
 		podConfigStore: NewPodConfigStore(),
 	}
 
-	podUID := types.UID("test-pod")
-	pod := &api.PodSandbox{
+
+podUID := types.UID("test-pod")
+pod := &api.PodSandbox{
 		Uid:       string(podUID),
 		Name:      "test-pod",
 		Namespace: "test-ns",
@@ -43,7 +47,8 @@ func TestCreateContainerNoDuplicateDevices(t *testing.T) {
 	rdmaDevChars := []LinuxDevice{
 		{Path: "/dev/infiniband/uverbs0", Type: "c", Major: 231, Minor: 192},
 	}
-	podConfig := PodConfig{
+
+podConfig := PodConfig{
 		RDMADevice: RDMAConfig{
 			DevChars: rdmaDevChars,
 		},
@@ -58,5 +63,303 @@ func TestCreateContainerNoDuplicateDevices(t *testing.T) {
 
 	if len(adjust.Linux.Devices) != 1 {
 		t.Errorf("CreateContainer should not adjust the same device multiple times\n%v", adjust.Linux.Devices)
+	}
+}
+
+func TestCreateContainerMetrics(t *testing.T) {
+	testCases := []struct {
+		name           string
+		podConfigStore *PodConfigStore
+		expectSuccess  bool
+	}{
+		{
+			name:           "Success",
+			podConfigStore: NewPodConfigStore(),
+			expectSuccess:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nriPluginRequestsTotal.Reset()
+			nriPluginRequestsLatencySeconds.Reset()
+			np := &NetworkDriver{
+				podConfigStore: tc.podConfigStore,
+			}
+		
+podUID := types.UID("test-pod")
+pod := &api.PodSandbox{
+				Uid:       string(podUID),
+				Name:      "test-pod",
+				Namespace: "test-ns",
+			}
+			ctr := &api.Container{
+				Name: "test-container",
+			}
+
+			np.CreateContainer(context.Background(), pod, ctr)
+			expected := `
+						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
+						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="+Inf"} 1
+						`
+			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
+				t.Fatalf("CollectAndCompare failed: %v", err)
+			}
+			if tc.expectSuccess {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusSuccess)); got != float64(1) {
+					t.Errorf("Expected 1 success, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusFailed)); got != float64(0) {
+					t.Errorf("Expected 0 failures, got %f", got)
+				}
+			} else {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusSuccess)); got != float64(0) {
+					t.Errorf("Expected 0 successes, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusFailed)); got != float64(1) {
+					t.Errorf("Expected 1 failure, got %f", got)
+				}
+			}
+		})
+	}
+}
+
+func TestRunPodSandboxMetrics(t *testing.T) {
+	podUID := types.UID("test-pod")
+	podUIDHostNetwork := types.UID("test-pod-host-network")
+
+	testCases := []struct {
+		name           string
+		podConfigStore *PodConfigStore
+		pod            *api.PodSandbox
+		expectSuccess  bool
+	}{
+		{
+			name:           "Success",
+			podConfigStore: NewPodConfigStore(),
+			pod: &api.PodSandbox{
+				Uid:       string(podUID),
+				Name:      "test-pod",
+				Namespace: "test-ns",
+				Linux: &api.LinuxPodSandbox{
+					Namespaces: []*api.LinuxNamespace{
+						{
+							Type: "network",
+							Path: "/var/run/netns/test",
+						},
+					},
+				},
+			},
+			expectSuccess: true,
+		},
+		{
+			name:           "Failure - Host Network",
+			podConfigStore: NewPodConfigStore(),
+			pod: &api.PodSandbox{
+				Uid:       string(podUIDHostNetwork),
+				Name:      "test-pod-host-network",
+				Namespace: "test-ns",
+				Linux:     &api.LinuxPodSandbox{}, // No network namespace
+			},
+			expectSuccess: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nriPluginRequestsTotal.Reset()
+			nriPluginRequestsLatencySeconds.Reset()
+			np := &NetworkDriver{
+				podConfigStore: tc.podConfigStore,
+				netdb:          inventory.New(),
+			}
+
+			// For the failure case, a pod config must exist.
+			if !tc.expectSuccess {
+				tc.podConfigStore.Set(podUIDHostNetwork, "eth0", PodConfig{})
+			}
+
+			np.RunPodSandbox(context.Background(), tc.pod)
+			expected := `
+						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
+						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="+Inf"} 1
+						`
+			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
+				t.Fatalf("CollectAndCompare failed: %v", err)
+			}
+			if tc.expectSuccess {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusSuccess)); got != float64(1) {
+					t.Errorf("Expected 1 success, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusFailed)); got != float64(0) {
+					t.Errorf("Expected 0 failures, got %f", got)
+				}
+			} else {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusSuccess)); got != float64(0) {
+					t.Errorf("Expected 0 successes, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusFailed)); got != float64(1) {
+					t.Errorf("Expected 1 failure, got %f", got)
+				}
+			}
+		})
+	}
+}
+
+func TestStopPodSandboxMetrics(t *testing.T) {
+	testCases := []struct {
+		name           string
+		podConfigStore *PodConfigStore
+		expectSuccess  bool
+	}{
+		{
+			name:           "Success",
+			podConfigStore: NewPodConfigStore(),
+			expectSuccess:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nriPluginRequestsTotal.Reset()
+			nriPluginRequestsLatencySeconds.Reset()
+			np := &NetworkDriver{
+				podConfigStore: tc.podConfigStore,
+				netdb:          inventory.New(),
+			}
+			podUID := types.UID("test-pod")
+			pod := &api.PodSandbox{
+				Uid:       string(podUID),
+				Name:      "test-pod",
+				Namespace: "test-ns",
+			}
+
+			np.StopPodSandbox(context.Background(), pod)
+			expected := `
+						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
+						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="+Inf"} 1
+						`
+			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
+				t.Fatalf("CollectAndCompare failed: %v", err)
+			}
+			if tc.expectSuccess {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusSuccess)); got != float64(1) {
+					t.Errorf("Expected 1 success, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusFailed)); got != float64(0) {
+					t.Errorf("Expected 0 failures, got %f", got)
+				}
+			} else {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusSuccess)); got != float64(0) {
+					t.Errorf("Expected 0 successes, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusFailed)); got != float64(1) {
+					t.Errorf("Expected 1 failure, got %f", got)
+				}
+			}
+		})
+	}
+}
+
+func TestRemovePodSandboxMetrics(t *testing.T) {
+	testCases := []struct {
+		name           string
+		podConfigStore *PodConfigStore
+		expectSuccess  bool
+	}{
+		{
+			name:           "Success",
+			podConfigStore: NewPodConfigStore(),
+			expectSuccess:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nriPluginRequestsTotal.Reset()
+			nriPluginRequestsLatencySeconds.Reset()
+			np := &NetworkDriver{
+				podConfigStore: tc.podConfigStore,
+				netdb:          inventory.New(),
+			}
+			podUID := types.UID("test-pod")
+			pod := &api.PodSandbox{
+				Uid:       string(podUID),
+				Name:      "test-pod",
+				Namespace: "test-ns",
+			}
+
+			np.RemovePodSandbox(context.Background(), pod)
+			expected := `
+						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
+						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="+Inf"} 1
+						`
+			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
+				t.Fatalf("CollectAndCompare failed: %v", err)
+			}
+			if tc.expectSuccess {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusSuccess)); got != float64(1) {
+					t.Errorf("Expected 1 success, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusFailed)); got != float64(0) {
+					t.Errorf("Expected 0 failures, got %f", got)
+				}
+			} else {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusSuccess)); got != float64(0) {
+					t.Errorf("Expected 0 successes, got %f", got)
+				}
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusFailed)); got != float64(1) {
+					t.Errorf("Expected 1 failure, got %f", got)
+				}
+			}
+		})
 	}
 }

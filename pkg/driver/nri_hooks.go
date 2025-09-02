@@ -58,8 +58,24 @@ func (np *NetworkDriver) Synchronize(_ context.Context, pods []*api.PodSandbox, 
 }
 
 // CreateContainer handles container creation requests.
-func (np *NetworkDriver) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+func (np *NetworkDriver) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	klog.V(2).Infof("CreateContainer Pod %s/%s UID %s Container %s", pod.Namespace, pod.Name, pod.Uid, ctr.Name)
+	start := time.Now()
+	defer func() {
+		nriPluginRequestsLatencySeconds.WithLabelValues(methodCreateContainer).Observe(time.Since(start).Seconds())
+	}()
+
+	adjust, update, err := np.createContainer(ctx, pod, ctr)
+
+	if err != nil {
+		nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusFailed).Inc()
+	} else {
+		nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusSuccess).Inc()
+	}
+	return adjust, update, err
+}
+
+func (np *NetworkDriver) createContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
 	if !ok {
 		return nil, nil, nil
@@ -91,7 +107,18 @@ func (np *NetworkDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox)
 	start := time.Now()
 	defer func() {
 		klog.V(2).Infof("RunPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
+		nriPluginRequestsLatencySeconds.WithLabelValues(methodRunPodSandbox).Observe(time.Since(start).Seconds())
 	}()
+	err := np.runPodSandbox(ctx, pod)
+	if err != nil {
+		nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusFailed).Inc()
+	} else {
+		nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusSuccess).Inc()
+	}
+	return err
+}
+
+func (np *NetworkDriver) runPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	// get the devices associated to this Pod
 	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
 	if !ok {
@@ -230,10 +257,22 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 	klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
 	start := time.Now()
 	defer func() {
-		np.netdb.RemovePodNetNs(podKey(pod))
 		klog.V(2).Infof("StopPodSandbox Pod %s/%s UID %s took %v", pod.Namespace, pod.Name, pod.Uid, time.Since(start))
+		nriPluginRequestsLatencySeconds.WithLabelValues(methodStopPodSandbox).Observe(time.Since(start).Seconds())
 	}()
+	err := np.stopPodSandbox(ctx, pod)
+	if err != nil {
+		nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusFailed).Inc()
+	} else {
+		nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusSuccess).Inc()
+	}
+	return err
+}
 
+func (np *NetworkDriver) stopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	defer func() {
+		np.netdb.RemovePodNetNs(podKey(pod))
+	}()
 	// get the devices associated to this Pod
 	podConfig, ok := np.podConfigStore.GetPodConfigs(types.UID(pod.GetUid()))
 	if !ok {
@@ -251,7 +290,6 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 			return nil
 		}
 	}
-
 	for deviceName, config := range podConfig {
 		if err := nsDetachNetdev(ns, config.NetworkInterfaceConfigInPod.Interface.Name, config.NetworkInterfaceConfigInHost.Interface.Name); err != nil {
 			klog.Infof("fail to return network device %s : %v", deviceName, err)
@@ -268,7 +306,13 @@ func (np *NetworkDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox
 
 func (np *NetworkDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	klog.V(2).Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+	start := time.Now()
+	defer func() {
+		nriPluginRequestsLatencySeconds.WithLabelValues(methodRemovePodSandbox).Observe(time.Since(start).Seconds())
+	}()
+
 	np.netdb.RemovePodNetNs(podKey(pod))
+	nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusSuccess).Inc()
 	return nil
 }
 

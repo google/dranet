@@ -58,6 +58,9 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			klog.V(4).Infof("Received %d devices", len(devices))
 			devices = filter.FilterDevices(np.celProgram, devices)
 			klog.V(4).Infof("After filtering %d devices", len(devices))
+
+			np.publishResourcesPrometheusMetrics(devices)
+
 			resources := resourceslice.DriverResources{
 				Pools: map[string]resourceslice.Pool{
 					np.nodeName: {Slices: []resourceslice.Slice{{Devices: devices}}}},
@@ -75,11 +78,45 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	}
 }
 
+func (np *NetworkDriver) publishResourcesPrometheusMetrics(devices []resourceapi.Device) {
+	rdmaCount := 0
+	for _, device := range devices {
+		if attr, ok := device.Attributes[apis.AttrRDMA]; ok && attr.BoolValue != nil && *attr.BoolValue {
+			rdmaCount++
+		}
+	}
+	publishedDevicesTotal.WithLabelValues("rdma").Set(float64(rdmaCount))
+	publishedDevicesTotal.WithLabelValues("total").Set(float64(len(devices)))
+}
+
 func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
 	klog.V(2).Infof("PrepareResourceClaims is called: number of claims: %d", len(claims))
+	start := time.Now()
+	defer func() {
+		draPluginRequestsLatencySeconds.WithLabelValues(methodPrepareResourceClaims).Observe(time.Since(start).Seconds())
+	}()
+	result, err := np.prepareResourceClaims(ctx, claims)
+	if err != nil {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusFailed).Inc()
+		return result, err
+	}
+	// identify errors and log metrics
+	isError := false
+	for _, res := range result {
+		if res.Err != nil {
+			isError = true
+			break
+		}
+	}
+	if isError {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusFailed).Inc()
+	} else {
+		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusSuccess).Inc()
+	}
+	return result, err
+}
 
-	nodePrepareRequestsTotal.Inc()
-
+func (np *NetworkDriver) prepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
 	if len(claims) == 0 {
 		return nil, nil
 	}
@@ -323,6 +360,32 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 
 func (np *NetworkDriver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	klog.V(2).Infof("UnprepareResourceClaims is called: number of claims: %d", len(claims))
+	start := time.Now()
+	defer func() {
+		draPluginRequestsLatencySeconds.WithLabelValues(methodUnprepareResourceClaims).Observe(time.Since(start).Seconds())
+	}()
+	result, err := np.unprepareResourceClaims(ctx, claims)
+	if err != nil {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusFailed).Inc()
+		return result, err
+	}
+	// identify errors and log metrics
+	isError := false
+	for _, res := range result {
+		if res != nil {
+			isError = true
+			break
+		}
+	}
+	if isError {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusFailed).Inc()
+	} else {
+		draPluginRequestsTotal.WithLabelValues(methodUnprepareResourceClaims, statusSuccess).Inc()
+	}
+	return result, err
+}
+
+func (np *NetworkDriver) unprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	if len(claims) == 0 {
 		return nil, nil
 	}
