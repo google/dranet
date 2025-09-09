@@ -123,7 +123,13 @@ spec:
         args:
         - /dranet
         - --v=4
+        - --hostname-override=$(NODE_NAME)
         image: ghcr.io/google/dranet:stable
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         resources:
           requests:
             cpu: "100m"
