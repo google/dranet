@@ -21,7 +21,7 @@ require (
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/sys v0.36.0
-	golang.org/x/time v0.12.0
+	golang.org/x/time v0.13.0
 	google.golang.org/api v0.248.0
 	google.golang.org/protobuf v1.36.8
 	k8s.io/api v0.34.0
