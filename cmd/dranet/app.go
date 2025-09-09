@@ -47,18 +47,18 @@ const (
 )
 
 var (
-	hostnameOverride string
-	kubeconfig       string
-	bindAddress      string
-	celExpression    string
+	nodeNameFlag  string
+	kubeconfig    string
+	bindAddress   string
+	celExpression string
 
 	ready atomic.Bool
 )
 
 func init() {
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	flag.StringVar(&kubeconfig, "kubeconfig", "", "Absolute path to the kubeconfig file. If not specified, the in-cluster config will be used.")
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
-	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
+	flag.StringVar(&nodeNameFlag, "node-name", "", "The name of the node that dranet is running on. If unset, the node name is assumed to be the same as the hostname.")
 	flag.StringVar(&celExpression, "filter", `!("dra.net/type" in attributes) || attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1.DeviceAttribute).")
 
 	flag.Usage = func() {
@@ -118,9 +118,14 @@ func main() {
 		klog.Fatalf("can not create client-go client: %v", err)
 	}
 
-	nodeName, err := nodeutil.GetHostname(hostnameOverride)
-	if err != nil {
-		klog.Fatalf("can not obtain the node name, use the hostname-override flag if you want to set it to a specific value: %v", err)
+	nodeName := nodeNameFlag
+	if nodeName == "" {
+		klog.Info("node-name is not set, using hostname as node name")
+		var err error
+		nodeName, err = nodeutil.GetHostname("")
+		if err != nil {
+			klog.Fatalf("Defaulted to using the hostname as the node name but could not determine the hostname: %v", err)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

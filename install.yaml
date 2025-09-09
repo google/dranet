@@ -123,7 +123,13 @@ spec:
         args:
         - /dranet
         - --v=4
+        - --node-name=$(MY_NODE_NAME)
         image: ghcr.io/google/dranet:stable
+        env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         resources:
           requests:
             cpu: "100m"
