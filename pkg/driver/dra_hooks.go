@@ -68,6 +68,8 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			err := np.draPlugin.PublishResources(ctx, resources)
 			if err != nil {
 				klog.Error(err, "unexpected error trying to publish resources")
+			} else {
+				lastPublishedTime.SetToCurrentTime()
 			}
 		case <-ctx.Done():
 			klog.Error(ctx.Err(), "context canceled")

@@ -45,6 +45,7 @@ func registerMetrics() {
 		prometheus.MustRegister(nriPluginRequestsTotal)
 		prometheus.MustRegister(nriPluginRequestsLatencySeconds)
 		prometheus.MustRegister(publishedDevicesTotal)
+		prometheus.MustRegister(lastPublishedTime)
 	})
 }
 
@@ -79,5 +80,10 @@ var (
 		Name:      "published_devices_total",
 		Help:      "Total number of published devices.",
 	}, []string{"feature"})
+	lastPublishedTime = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "dranet",
+		Subsystem: "driver",
+		Name:      "last_published_time_seconds",
+		Help:      "The timestamp of the last successful resource publication.",
+	})
 )
-
