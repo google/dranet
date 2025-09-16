@@ -344,7 +344,7 @@ same pcie root, avoiding the penalty of suboptimal topologies.
 It is important to indicate that each Pod will obtain a `ResourceClaim` from the
 `ResourceClaimTemplate`, and since your servers may be connected in a [rail
 optimized
-architecture](https://docs.nvidia.com/networking/display/ibclusterbringupprocedure/setting+the+infiniband+cluster+topology),
+architecture](https://docs.nvidia.com/networking/display/infinibandclusterbringupprocedure/setting+the+infiniband+cluster+topology),
 the GPUs requested need to be also aligned across the different servers. In this
 example, we will request GPU0 and GPU1 of each node.
 
