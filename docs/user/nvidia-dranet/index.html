@@ -265,7 +265,7 @@ along with a <code>DeviceClass</code> for the RDMA device.</p><div class=highlig
 </span></span></code></pre></div><p>The <code>ResourceClaimTemplate</code> allows to specify multiple devices, in this case 2
 GPUs and 2 NICs and also apply a constraint so the NICs and the GPUs share the
 same pcie root, avoiding the penalty of suboptimal topologies.</p><p>It is important to indicate that each Pod will obtain a <code>ResourceClaim</code> from the
-<code>ResourceClaimTemplate</code>, and since your servers may be connected in a <a href=https://docs.nvidia.com/networking/display/ibclusterbringupprocedure/setting+the+infiniband+cluster+topology>rail
+<code>ResourceClaimTemplate</code>, and since your servers may be connected in a <a href=https://docs.nvidia.com/networking/display/infinibandclusterbringupprocedure/setting+the+infiniband+cluster+topology>rail
 optimized
 architecture</a>,
 the GPUs requested need to be also aligned across the different servers. In this
