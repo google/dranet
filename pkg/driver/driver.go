@@ -30,10 +30,13 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/vishvananda/netlink"
 
+	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
+	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
+	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
 const (
@@ -46,6 +49,23 @@ const (
 	maxAttempts = 5
 )
 
+// This interface is our internal contract for the behavior we need from a *kubeletplugin.Helper, created specifically so we can fake it in tests.
+type pluginHelper interface {
+	PublishResources(context.Context, resourceslice.DriverResources) error
+	Stop()
+	RegistrationStatus() *registerapi.RegistrationStatus
+}
+
+// This interface is our internal contract for the behavior we need from a *inventory.DB, created specifically so we can fake it in tests.
+type inventoryDB interface {
+	Run(context.Context) error
+	GetResources(context.Context) <-chan []resourceapi.Device
+	GetNetInterfaceName(string) (string, error)
+	AddPodNetNs(podKey string, netNs string)
+	RemovePodNetNs(podKey string)
+	GetPodNetNs(podKey string) (netNs string)
+}
+
 // WithFilter
 func WithFilter(filter cel.Program) Option {
 	return func(o *NetworkDriver) {
@@ -57,11 +77,11 @@ type NetworkDriver struct {
 	driverName string
 	nodeName   string
 	kubeClient kubernetes.Interface
-	draPlugin  *kubeletplugin.Helper
+	draPlugin  pluginHelper
 	nriPlugin  stub.Stub
 
 	// contains the host interfaces
-	netdb      *inventory.DB
+	netdb      inventoryDB
 	celProgram cel.Program
 
 	// Cache the rdma shared mode state

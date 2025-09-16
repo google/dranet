@@ -18,16 +18,17 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/google/dranet/pkg/apis"
-	"github.com/google/dranet/pkg/inventory"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	resourcev1 "k8s.io/api/resource/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
+
 )
 
 func TestPublishResourcesPrometheusMetrics(t *testing.T) {
@@ -142,7 +143,7 @@ func TestPrepareResourceClaimsMetrics(t *testing.T) {
 		draPluginRequestsLatencySeconds.Reset()
 
 		np := &NetworkDriver{
-			netdb:      inventory.New(),
+			netdb:      newFakeInventoryDB(),
 			driverName: "test.driver",
 		}
 
@@ -239,3 +240,41 @@ func TestUnprepareResourceClaimsMetrics(t *testing.T) {
 		}
 	})
 }
+
+func TestPublishResourcesMetrics(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	fakeDraPlugin := newFakePluginHelper()
+	fakeNetDB := newFakeInventoryDB()
+
+	np := &NetworkDriver{
+		draPlugin: fakeDraPlugin,
+		netdb:     fakeNetDB,
+		nodeName:  "test-node",
+	}
+
+	go np.PublishResources(ctx)
+
+	t.Run("Success", func(t *testing.T) {
+		lastPublishedTime.Set(0)
+		fakeNetDB.resources <- []resourcev1.Device{}
+		<-fakeDraPlugin.publishCalled
+
+		if testutil.ToFloat64(lastPublishedTime) == 0 {
+			t.Errorf("lastPublishedTime should have been updated, but it is 0")
+		}
+	})
+
+	t.Run("Failure", func(t *testing.T) {
+		lastPublishedTime.Set(0)
+		fakeDraPlugin.publishErr = fmt.Errorf("mock publish error")
+		fakeNetDB.resources <- []resourcev1.Device{}
+		<-fakeDraPlugin.publishCalled
+
+		if testutil.ToFloat64(lastPublishedTime) != 0 {
+			t.Errorf("lastPublishedTime should not have been updated, but it is %f", testutil.ToFloat64(lastPublishedTime))
+		}
+	})
+}
+
