@@ -45,35 +45,43 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider:   cloudprovider.CloudProviderGCE,
+				Type:       "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{},
 			},
-			want: nil,
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				gce.AttrGCEMachineType: {StringValue: ptr.To("machine-type-a")},
+			},
 		},
 		{
 			name: "MAC not found in instance interfaces, no topology",
 			mac:  "00:11:22:33:44:FF", // MAC that won't be found
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
 				},
 			},
-			want: nil,
+			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+				gce.AttrGCEMachineType: {StringValue: ptr.To("machine-type-a")},
+			},
 		},
 		{
 			name: "MAC not found in instance interfaces, has topology",
 			mac:  "00:11:22:33:44:FF", // MAC that won't be found
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
 				},
 				Topology: "/block/subblock/host",
 			},
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				gce.AttrGCEBlock:    {StringValue: ptr.To("block")},
-				gce.AttrGCESubBlock: {StringValue: ptr.To("subblock")},
-				gce.AttrGCEHost:     {StringValue: ptr.To("host")},
+				gce.AttrGCEBlock:       {StringValue: ptr.To("block")},
+				gce.AttrGCESubBlock:    {StringValue: ptr.To("subblock")},
+				gce.AttrGCEHost:        {StringValue: ptr.To("host")},
+				gce.AttrGCEMachineType: {StringValue: ptr.To("machine-type-a")},
 			},
 		},
 		{
@@ -81,6 +89,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
 					{Mac: "AA:BB:CC:DD:EE:FF", Network: "projects/67890/networks/other-network"},
@@ -93,6 +102,7 @@ func TestGetProviderAttributes(t *testing.T) {
 				gce.AttrGCEBlock:                {StringValue: ptr.To("block")},
 				gce.AttrGCESubBlock:             {StringValue: ptr.To("subblock")},
 				gce.AttrGCEHost:                 {StringValue: ptr.To("host")},
+				gce.AttrGCEMachineType:          {StringValue: ptr.To("machine-type-a")},
 			},
 		},
 		{
@@ -100,6 +110,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "invalid-gce-network-string"},
 				},
@@ -111,6 +122,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "projects/12345/networks/test-network"},
 					{Mac: "AA:BB:CC:DD:EE:FF", Network: "projects/67890/networks/other-network"},
@@ -120,6 +132,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			want: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				gce.AttrGCENetworkName:          {StringValue: ptr.To("test-network")},
 				gce.AttrGCENetworkProjectNumber: {IntValue: ptr.To(int64(12345))},
+				gce.AttrGCEMachineType:          {StringValue: ptr.To("machine-type-a")},
 			},
 		},
 		{
@@ -127,6 +140,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderAWS, // Unsupported provider
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{Mac: "00:11:22:33:44:55", Network: "aws-network-info"},
 				},
@@ -138,6 +152,7 @@ func TestGetProviderAttributes(t *testing.T) {
 			mac:  "00:11:22:33:44:55",
 			instance: &cloudprovider.CloudInstance{
 				Provider: cloudprovider.CloudProviderGCE,
+				Type:     "machine-type-a",
 				Interfaces: []cloudprovider.NetworkInterface{
 					{
 						Mac:       "00:11:22:33:44:55",
@@ -150,6 +165,7 @@ func TestGetProviderAttributes(t *testing.T) {
 				gce.AttrGCENetworkName:          {StringValue: ptr.To("test-network")},
 				gce.AttrGCENetworkProjectNumber: {IntValue: ptr.To(int64(12345))},
 				gce.AttrGCEIPAliases:            {StringValue: ptr.To("10.0.0.1/24,10.0.0.2/24")},
+				gce.AttrGCEMachineType:          {StringValue: ptr.To("machine-type-a")},
 			},
 		},
 	}
