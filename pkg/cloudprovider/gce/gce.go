@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -50,6 +51,7 @@ const (
 	AttrGCENetworkName          = GCEAttrPrefix + "/" + "networkName"
 	AttrGCENetworkProjectNumber = GCEAttrPrefix + "/" + "networkProjectNumber"
 	AttrGCEIPAliases            = GCEAttrPrefix + "/" + "ipAliases"
+	AttrGCEMachineType          = GCEAttrPrefix + "/" + "machineType"
 )
 
 var (
@@ -87,6 +89,10 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 			klog.Infof("could not get instance type on VM %s GCE ... retrying: %v", instanceName, err)
 			return false, nil
 		}
+		// Metadata server returns instanceType in the format
+		// "projects/{PROJECT_NUMBER}/machineTypes/{MACHINE_TYPE}". We only care
+		// about the specific name.
+		instanceType = path.Base(instanceType)
 
 		//  curl "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/?recursive=true" -H "Metadata-Flavor: Google"
 		// [{"accessConfigs":[{"externalIp":"35.225.164.134","type":"ONE_TO_ONE_NAT"}],"dnsServers":["169.254.169.254"],"forwardedIps":[],"gateway":"10.128.0.1","ip":"10.128.0.70","ipAliases":["10.24.3.0/24"],"mac":"42:01:0a:80:00:46","mtu":1460,"network":"projects/628944397724/networks/default","subnetmask":"255.255.240.0","targetInstanceIps":[]},{"accessConfigs":[{"externalIp":"","type":"ONE_TO_ONE_NAT"}],"dnsServers":["169.254.169.254"],"forwardedIps":[],"gateway":"192.168.1.1","ip":"192.168.1.2","ipAliases":[],"mac":"42:01:c0:a8:01:02","mtu":8244,"network":"projects/628944397724/networks/aojea-dra-net-1","subnetmask":"255.255.255.0","targetInstanceIps":[]},{"accessConfigs":[{"externalIp":"","type":"ONE_TO_ONE_NAT"}],"dnsServers":["169.254.169.254"],"forwardedIps":[],"gateway":"192.168.2.1","ip":"192.168.2.2","ipAliases":[],"mac":"42:01:c0:a8:02:02","mtu":8244,"network":"projects/628944397724/networks/aojea-dra-net-2","subnetmask":"255.255.255.0","targetInstanceIps":[]},{"accessConfigs":[{"externalIp":"","type":"ONE_TO_ONE_NAT"}],"dnsServers":["169.254.169.254"],"forwardedIps":[],"gateway":"192.168.3.1","ip":"192.168.3.2","ipAliases":[],"mac":"42:01:c0:a8:03:02","mtu":8244,"network":"projects/628944397724/networks/aojea-dra-net-3","subnetmask":"255.255.255.0","targetInstanceIps":[]},{"accessConfigs":[{"externalIp":"","type":"ONE_TO_ONE_NAT"}],"dnsServers":["169.254.169.254"],"forwardedIps":[],"gateway":"192.168.4.1","ip":"192.168.4.2","ipAliases":[],"mac":"42:01:c0:a8:04:02","mtu":8244,"network":"projects/628944397724/networks/aojea-dra-net-4","subnetmask":"255.255.255.0","targetInstanceIps":[]}]
@@ -128,6 +134,7 @@ func GetInstance(ctx context.Context) (*cloudprovider.CloudInstance, error) {
 // identified by it's MAC.
 func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
+	attributes[AttrGCEMachineType] = resourceapi.DeviceAttribute{StringValue: &instance.Type}
 
 	topologyParts := strings.SplitN(strings.TrimPrefix(instance.Topology, "/"), "/", 3)
 	// topology may not be always available
