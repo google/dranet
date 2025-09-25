@@ -87,3 +87,47 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 	}
 	return errors.Join(errorList...)
 }
+
+func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []apis.NeighborConfig) error {
+	containerNs, err := netns.GetFromPath(containerNsPAth)
+	if err != nil {
+		return fmt.Errorf("could not get network namespace from path %s: %w", containerNsPAth, err)
+	}
+	defer containerNs.Close()
+
+	nhNs, err := netlink.NewHandleAt(containerNs)
+	if err != nil {
+		return fmt.Errorf("can not get netlink handle: %v", err)
+	}
+	defer nhNs.Close()
+
+	nsLink, err := nhNs.LinkByName(ifName)
+	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+		return fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
+	}
+
+	var errorList []error
+	for _, neigh := range neighConfig {
+		ip := net.ParseIP(neigh.Destination)
+		if ip == nil {
+			errorList = append(errorList, fmt.Errorf("invalid ip address: %s", neigh.Destination))
+			continue
+		}
+		mac, err := net.ParseMAC(neigh.HardwareAddr)
+		if err != nil {
+			errorList = append(errorList, fmt.Errorf("invalid mac address: %s", neigh.HardwareAddr))
+			continue
+		}
+		n := netlink.Neigh{
+			LinkIndex:    nsLink.Attrs().Index,
+			State:        neigh.State,
+			Family:       neigh.Family,
+			IP:           ip,
+			HardwareAddr: mac,
+		}
+		if err := nhNs.NeighAdd(&n); err != nil && !errors.Is(err, syscall.EEXIST) {
+			errorList = append(errorList, fmt.Errorf("failed to add permanent neighbor entry %s (%s) for interface %s: %w", neigh.Destination, neigh.HardwareAddr, ifName, err))
+		}
+	}
+	return errors.Join(errorList...)
+}

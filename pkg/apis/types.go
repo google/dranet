@@ -26,6 +26,9 @@ type NetworkConfig struct {
 	// Routes defines static routes to be configured for this interface.
 	Routes []RouteConfig `json:"routes,omitempty"`
 
+	// Neighbors defines neighbor (ARP/NDP) entries to be configured for this interface.
+	Neighbors []NeighborConfig `json:"neighbors,omitempty"`
+
 	// Ethtool defines hardware offload features and other settings managed by `ethtool`.
 	Ethtool *EthtoolConfig `json:"ethtool,omitempty"`
 }
@@ -83,6 +86,19 @@ type RouteConfig struct {
 	// Scope is the scope of the route (e.g., link, host, global).
 	// Refers to Linux route scopes (e.g., 0 for RT_SCOPE_UNIVERSE, 253 for RT_SCOPE_LINK).
 	Scope uint8 `json:"scope,omitempty"`
+}
+
+// NeighborConfig represents a neighbor (ARP/NDP) entry.
+type NeighborConfig struct {
+	// Destination is the target IP address.
+	Destination string `json:"destination,omitempty"`
+	// HardwareAddr is the MAC address of the neighbor.
+	HardwareAddr string `json:"hardwareAddr,omitempty"`
+	// State is the state of the neighbor entry (e.g., permanent, reachable).
+	// Refers to Linux neighbor states (e.g., 0x02 for NUD_REACHABLE, 0x80 for NUD_PERMANENT).
+	State int `json:"state,omitempty"`
+	// Family is the address family of the neighbor entry (e.g., AF_INET, AF_INET6).
+	Family int `json:"family,omitempty"`
 }
 
 // EthtoolConfig defines ethtool-based optimizations for a network interface.

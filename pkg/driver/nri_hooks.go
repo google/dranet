@@ -202,6 +202,14 @@ func (np *NetworkDriver) runPodSandbox(ctx context.Context, pod *api.PodSandbox)
 			klog.Infof("RunPodSandbox error configuring device %s namespace %s routing: %v", deviceName, ns, err)
 			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
 		}
+
+		// Configure neighbors
+		err = applyNeighborConfig(ns, ifNameInNs, config.NetworkInterfaceConfigInPod.Neighbors)
+		if err != nil {
+			klog.Infof("RunPodSandbox for pod %s/%s (UID %s) failed to apply neighbor configuration for interface %s in namespace %s: %v", pod.Namespace, pod.Name, pod.Uid, ifNameInNs, ns, err)
+			return fmt.Errorf("failed to apply neighbor configuration for interface %s in namespace %s: %w", ifNameInNs, ns, err)
+		}
+
 		resourceClaimStatusDevice.WithConditions(
 			metav1apply.Condition().
 				WithType("NetworkReady").
