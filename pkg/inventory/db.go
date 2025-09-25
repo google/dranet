@@ -305,9 +305,9 @@ func addLinkAttributes(device *resourceapi.Device, link netlink.Link) {
 			}
 
 			if address.IP.To4() == nil && address.IP.To16() != nil {
-				v6.Insert(address.IP.String())
+				v6.Insert(address.IPNet.String())
 			} else if address.IP.To4() != nil {
-				v4.Insert(address.IP.String())
+				v4.Insert(address.IPNet.String())
 			}
 		}
 		if v4.Len() > 0 {
