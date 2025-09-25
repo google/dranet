@@ -315,6 +315,27 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			podCfg.NetworkInterfaceConfigInPod.Routes = append(podCfg.NetworkInterfaceConfigInPod.Routes, routeCfg)
 		}
 
+		// Obtain the neighbors associated to the interface
+		neighs, err := nlHandle.NeighList(link.Attrs().Index, netlink.FAMILY_ALL)
+		if err != nil {
+			klog.Infof("failed to get neighbors for interface %s: %v", ifName, err)
+		}
+		for _, neigh := range neighs {
+			if neigh.HardwareAddr == nil {
+				continue
+			}
+			if neigh.State != netlink.NUD_PERMANENT {
+				continue
+			}
+			neighCfg := apis.NeighborConfig{
+				Destination:  neigh.IP.String(),
+				HardwareAddr: neigh.HardwareAddr.String(),
+				State:        neigh.State,
+				Family:       neigh.Family,
+			}
+			podCfg.NetworkInterfaceConfigInPod.Neighbors = append(podCfg.NetworkInterfaceConfigInPod.Neighbors, neighCfg)
+		}
+
 		// Get RDMA configuration: link and char devices
 		if rdmaDev, _ := rdmamap.GetRdmaDeviceForNetdevice(ifName); rdmaDev != "" {
 			klog.V(2).Infof("RunPodSandbox processing RDMA device: %s", rdmaDev)

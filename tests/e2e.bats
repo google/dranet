@@ -402,3 +402,31 @@ EOF
 )
   kubectl rollout status ds/dranet --namespace=kube-system
 }
+
+@test "permanent neighbor entry is copied to pod namespace" {
+  local NODE_NAME="$CLUSTER_NAME"-worker
+  local DUMMY_IFACE="dummy-neigh"
+  local NEIGH_IP="192.168.1.1"
+  local NEIGH_MAC="00:11:22:33:44:55"
+
+  # Create a dummy interface on the worker node
+  docker exec "$NODE_NAME" bash -c "ip link add $DUMMY_IFACE type dummy"
+  docker exec "$NODE_NAME" bash -c "ip link set up dev $DUMMY_IFACE"
+  docker exec "$NODE_NAME" bash -c "ip addr add 169.254.169.15/32 dev $DUMMY_IFACE"
+
+  # Add a permanent neighbor entry on the worker node
+  docker exec "$NODE_NAME" bash -c "ip neigh add $NEIGH_IP lladdr $NEIGH_MAC dev $DUMMY_IFACE nud permanent"
+
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
+  kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
+
+  # Get the pod name
+  POD_NAME=$(kubectl get pods -l app=pod -o name)
+
+  # Verify the neighbor entry inside the pod's network namespace
+  run kubectl exec "$POD_NAME" -- ip neigh show
+  assert_success
+  assert_output --partial "$NEIGH_IP dev eth99 lladdr $NEIGH_MAC PERM"
+}
+
