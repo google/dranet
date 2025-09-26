@@ -408,6 +408,8 @@ EOF
   local DUMMY_IFACE="dummy-neigh"
   local NEIGH_IP="192.168.1.1"
   local NEIGH_MAC="00:11:22:33:44:55"
+  local NEIGH_IPV6="2001:db8::1"
+  local NEIGH_MAC_IPV6="00:aa:bb:cc:dd:ee"
 
   # Create a dummy interface on the worker node
   docker exec "$NODE_NAME" bash -c "ip link add $DUMMY_IFACE type dummy"
@@ -416,6 +418,7 @@ EOF
 
   # Add a permanent neighbor entry on the worker node
   docker exec "$NODE_NAME" bash -c "ip neigh add $NEIGH_IP lladdr $NEIGH_MAC dev $DUMMY_IFACE nud permanent"
+  docker exec "$NODE_NAME" bash -c "ip -6 neigh add $NEIGH_IPV6 lladdr $NEIGH_MAC_IPV6 dev $DUMMY_IFACE nud permanent"
 
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
   kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
@@ -428,5 +431,6 @@ EOF
   run kubectl exec "$POD_NAME" -- ip neigh show
   assert_success
   assert_output --partial "$NEIGH_IP dev eth99 lladdr $NEIGH_MAC PERM"
+  assert_output --partial "$NEIGH_IPV6 dev eth99 lladdr $NEIGH_MAC_IPV6 PERM"
 }
 

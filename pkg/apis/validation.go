@@ -72,6 +72,11 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, []error) {
 		allErrors = append(allErrors, validateEthtoolConfig(config.Ethtool, "ethtool")...)
 	}
 
+	// Validate Neighbors
+	if len(config.Neighbors) > 0 {
+		allErrors = append(allErrors, validateNeighborConfig(config.Neighbors, "neighbors")...)
+	}
+
 	if len(allErrors) > 0 {
 		return &config, allErrors // Return partially parsed config with errors
 	}
@@ -205,5 +210,25 @@ func validateRoutes(routes []RouteConfig, fieldPath string) (allErrors []error) 
 
 // validateEthtoolConfig validates the EthtoolConfig part of the NetworkConfig.
 func validateEthtoolConfig(cfg *EthtoolConfig, fieldPath string) (allErrors []error) {
+	return allErrors
+}
+
+// validateNeighborConfig validates a slice of NeighborConfig.
+func validateNeighborConfig(neighbors []NeighborConfig, fieldPath string) (allErrors []error) {
+	for i, neighbor := range neighbors {
+		currentFieldPath := fmt.Sprintf("%s[%d]", fieldPath, i)
+
+		if neighbor.Destination == "" {
+			allErrors = append(allErrors, fmt.Errorf("%s.destination: cannot be empty", currentFieldPath))
+		} else if net.ParseIP(neighbor.Destination) == nil {
+			allErrors = append(allErrors, fmt.Errorf("%s.destination: invalid IP address format '%s'", currentFieldPath, neighbor.Destination))
+		}
+
+		if neighbor.HardwareAddr == "" {
+			allErrors = append(allErrors, fmt.Errorf("%s.hardwareAddress: cannot be empty", currentFieldPath))
+		} else if _, err := net.ParseMAC(neighbor.HardwareAddr); err != nil {
+			allErrors = append(allErrors, fmt.Errorf("%s.hardwareAddress: invalid Hardware Address format '%s': %w", currentFieldPath, neighbor.HardwareAddr, err))
+		}
+	}
 	return allErrors
 }

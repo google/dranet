@@ -120,8 +120,7 @@ func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []ap
 		}
 		n := netlink.Neigh{
 			LinkIndex:    nsLink.Attrs().Index,
-			State:        neigh.State,
-			Family:       neigh.Family,
+			State:        netlink.NUD_PERMANENT,
 			IP:           ip,
 			HardwareAddr: mac,
 		}

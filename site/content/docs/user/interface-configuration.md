@@ -18,6 +18,9 @@ type NetworkConfig struct {
 	// Routes defines static routes to be configured for this interface.
 	Routes []RouteConfig `json:"routes,omitempty"`
 
+	// Neighbors defines permanent neighbor (ARP/NDP) entries to be added for this interface.
+	Neighbors []NeighborConfig `json:"neighbors,omitempty"`
+
 	// Ethtool defines hardware offload features and other settings managed by `ethtool`.
 	Ethtool *EthtoolConfig `json:"ethtool,omitempty"`
 }
@@ -90,6 +93,22 @@ type RouteConfig struct {
   * Link (253): Routes directly to a device without a gateway (e.g., for directly connected subnets).  
   * Universe (0): Routes to a network via a gateway.
  
+#### Neighbor Configuration (NeighborConfig)
+
+The NeighborConfig structure defines permanent neighbor entries (ARP for IPv4, NDP for IPv6) to be added to the Pod's network namespace.
+
+```go
+type NeighborConfig struct {
+	// Destination is the target IP address.
+	Destination string `json:"destination,omitempty"`
+	// HardwareAddr is the MAC address of the neighbor.
+	HardwareAddr string `json:"hardwareAddr,omitempty"`
+}
+```
+
+* **ipAddress** (string, required): The IP address of the neighbor (e.g., "192.168.1.1", "2001:db8::1").
+* **hardwareAddr** (string, required): The MAC address of the neighbor (e.g., "00:11:22:33:44:55").
+
 #### Ethtool Configuration (EthtoolConfig)
 
 The EthtoolConfig structure allows for the configuration of hardware offload features and other settings managed by ethtool.
@@ -113,7 +132,7 @@ type EthtoolConfig struct {
 
 ### Example: Customizing a Network Interface and Routes
 
-Below is an example of a ResourceClaim that allocates a dummy interface, renames it to "dranet0", assigns a static IP address, and configures two routes: one to a subnet via a gateway and another link-scoped route. It also disables several ethtool features.
+Below is an example of a ResourceClaim that allocates a dummy interface, renames it to "dranet0", assigns a static IP address, configures two routes (one to a subnet via a gateway and another link-scoped route), and adds a permanent IPv4 neighbor entry. It also disables several ethtool features.
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -144,6 +163,9 @@ spec:
             gateway: "169.254.169.1"
           - destination: "169.254.169.1/32"
             scope: 253
+          neighbors:
+          - ipAddress: "192.168.1.1"
+            hardwareAddr: "00:11:22:33:44:55"
           ethtool:
             features:
               tcp-segmentation-offload: false
