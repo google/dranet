@@ -32,9 +32,8 @@ func TestCreateContainerNoDuplicateDevices(t *testing.T) {
 		podConfigStore: NewPodConfigStore(),
 	}
 
-
-podUID := types.UID("test-pod")
-pod := &api.PodSandbox{
+	podUID := types.UID("test-pod")
+	pod := &api.PodSandbox{
 		Uid:       string(podUID),
 		Name:      "test-pod",
 		Namespace: "test-ns",
@@ -48,7 +47,7 @@ pod := &api.PodSandbox{
 		{Path: "/dev/infiniband/uverbs0", Type: "c", Major: 231, Minor: 192},
 	}
 
-podConfig := PodConfig{
+	podConfig := PodConfig{
 		RDMADevice: RDMAConfig{
 			DevChars: rdmaDevChars,
 		},
@@ -85,10 +84,11 @@ func TestCreateContainerMetrics(t *testing.T) {
 			nriPluginRequestsLatencySeconds.Reset()
 			np := &NetworkDriver{
 				podConfigStore: tc.podConfigStore,
+				netdb:          inventory.New(),
 			}
-		
-podUID := types.UID("test-pod")
-pod := &api.PodSandbox{
+
+			podUID := types.UID("test-pod")
+			pod := &api.PodSandbox{
 				Uid:       string(podUID),
 				Name:      "test-pod",
 				Namespace: "test-ns",
@@ -101,24 +101,24 @@ pod := &api.PodSandbox{
 			expected := `
 						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
 						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.005"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.01"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.025"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.05"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.25"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="0.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="2.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="10"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",le="+Inf"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="CreateContainer",status="noop",le="+Inf"} 1
 						`
 			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
 				t.Fatalf("CollectAndCompare failed: %v", err)
 			}
 			if tc.expectSuccess {
-				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusSuccess)); got != float64(1) {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusNoop)); got != float64(1) {
 					t.Errorf("Expected 1 success, got %f", got)
 				}
 				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodCreateContainer, statusFailed)); got != float64(0) {
@@ -192,6 +192,10 @@ func TestRunPodSandboxMetrics(t *testing.T) {
 			}
 
 			np.RunPodSandbox(context.Background(), tc.pod)
+			status := statusSuccess
+			if !tc.expectSuccess {
+				status = statusFailed
+			}
 			expected := `
 						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
 						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
@@ -208,11 +212,12 @@ func TestRunPodSandboxMetrics(t *testing.T) {
 						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="10"} 1
 						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RunPodSandbox",le="+Inf"} 1
 						`
+			expected = strings.Replace(expected, `method="RunPodSandbox"`, `method="RunPodSandbox",status="`+status+`"`, -1)
 			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
 				t.Fatalf("CollectAndCompare failed: %v", err)
 			}
 			if tc.expectSuccess {
-				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusSuccess)); got != float64(1) {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusNoop)); got != float64(1) {
 					t.Errorf("Expected 1 success, got %f", got)
 				}
 				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRunPodSandbox, statusFailed)); got != float64(0) {
@@ -262,24 +267,24 @@ func TestStopPodSandboxMetrics(t *testing.T) {
 			expected := `
 						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
 						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.005"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.01"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.025"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.05"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.25"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="0.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="2.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="10"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",le="+Inf"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="StopPodSandbox",status="success",le="+Inf"} 1
 						`
 			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
 				t.Fatalf("CollectAndCompare failed: %v", err)
 			}
 			if tc.expectSuccess {
-				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusSuccess)); got != float64(1) {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusNoop)); got != float64(1) {
 					t.Errorf("Expected 1 success, got %f", got)
 				}
 				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodStopPodSandbox, statusFailed)); got != float64(0) {
@@ -329,24 +334,24 @@ func TestRemovePodSandboxMetrics(t *testing.T) {
 			expected := `
 						# HELP dranet_driver_nri_plugin_requests_latency_seconds NRI plugin request latency in seconds.
 						# TYPE dranet_driver_nri_plugin_requests_latency_seconds histogram
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.005"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.01"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.025"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.05"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.25"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="0.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="1"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="2.5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="5"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="10"} 1
-						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",le="+Inf"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.005"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.01"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.025"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.05"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.25"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="0.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="1"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="2.5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="5"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="10"} 1
+						dranet_driver_nri_plugin_requests_latency_seconds_bucket{method="RemovePodSandbox",status="success",le="+Inf"} 1
 						`
 			if err := testutil.CollectAndCompare(nriPluginRequestsLatencySeconds, strings.NewReader(expected), "dranet_driver_nri_plugin_requests_latency_seconds_bucket"); err != nil {
 				t.Fatalf("CollectAndCompare failed: %v", err)
 			}
 			if tc.expectSuccess {
-				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusSuccess)); got != float64(1) {
+				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusNoop)); got != float64(1) {
 					t.Errorf("Expected 1 success, got %f", got)
 				}
 				if got := testutil.ToFloat64(nriPluginRequestsTotal.WithLabelValues(methodRemovePodSandbox, statusFailed)); got != float64(0) {
