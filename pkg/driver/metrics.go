@@ -25,6 +25,7 @@ import (
 const (
 	statusSuccess = "success"
 	statusFailed  = "failed"
+	statusNoop    = "noop"
 )
 
 const (
@@ -73,7 +74,7 @@ var (
 		Subsystem: "driver",
 		Name:      "nri_plugin_requests_latency_seconds",
 		Help:      "NRI plugin request latency in seconds.",
-	}, []string{"method"})
+	}, []string{"method", "status"})
 	publishedDevicesTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "dranet",
 		Subsystem: "driver",
