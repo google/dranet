@@ -321,17 +321,16 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			klog.Infof("failed to get neighbors for interface %s: %v", ifName, err)
 		}
 		for _, neigh := range neighs {
-			if neigh.HardwareAddr == nil {
+			if neigh.IP == nil || neigh.HardwareAddr == nil {
 				continue
 			}
+			// We are only interested in permanent neighbor entries
 			if neigh.State != netlink.NUD_PERMANENT {
 				continue
 			}
 			neighCfg := apis.NeighborConfig{
 				Destination:  neigh.IP.String(),
 				HardwareAddr: neigh.HardwareAddr.String(),
-				State:        neigh.State,
-				Family:       neigh.Family,
 			}
 			podCfg.NetworkInterfaceConfigInPod.Neighbors = append(podCfg.NetworkInterfaceConfigInPod.Neighbors, neighCfg)
 		}

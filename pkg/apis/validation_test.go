@@ -386,3 +386,60 @@ func TestValidateRoutes(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateNeighborConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		neighbors []NeighborConfig
+		expectErr bool
+		errCount  int
+	}{
+		{
+			name:      "valid neighbor",
+			neighbors: []NeighborConfig{{Destination: "192.168.1.1", HardwareAddr: "00:1A:2B:3C:4D:5E"}},
+			expectErr: false,
+		},
+		{
+			name:      "empty destination",
+			neighbors: []NeighborConfig{{HardwareAddr: "00:1A:2B:3C:4D:5E"}},
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid destination IP",
+			neighbors: []NeighborConfig{{Destination: "invalid-ip", HardwareAddr: "00:1A:2B:3C:4D:5E"}},
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "empty hardware address",
+			neighbors: []NeighborConfig{{Destination: "192.168.1.1"}},
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid hardware address",
+			neighbors: []NeighborConfig{{Destination: "192.168.1.1", HardwareAddr: "invalid-mac"}},
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "multiple errors",
+			neighbors: []NeighborConfig{{Destination: "bad-ip", HardwareAddr: "bad-mac"}},
+			expectErr: true,
+			errCount:  2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateNeighborConfig(tt.neighbors, "neighbors")
+			if (len(errs) > 0) != tt.expectErr {
+				t.Errorf("validateNeighborConfig() got errors: %v, want %v", errs, tt.expectErr)
+			}
+			if tt.expectErr && len(errs) != tt.errCount {
+				t.Errorf("validateNeighborConfig() got %d errors (%v), want %d", len(errs), errs, tt.errCount)
+			}
+		})
+	}
+}
