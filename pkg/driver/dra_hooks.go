@@ -75,8 +75,6 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 			klog.Error(ctx.Err(), "context canceled")
 			return
 		}
-		// poor man rate limit
-		time.Sleep(3 * time.Second)
 	}
 }
 
