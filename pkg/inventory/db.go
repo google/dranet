@@ -42,9 +42,15 @@ import (
 )
 
 const (
-	// database poll period
-	minInterval = 5 * time.Second
-	maxInterval = 1 * time.Minute
+	// defaultMinPollInterval is the default minimum interval between two
+	// consecutive polls of the inventory.
+	defaultMinPollInterval = 2 * time.Second
+	// defaultMaxPollInterval is the default maximum interval between two
+	// consecutive polls of the inventory.
+	defaultMaxPollInterval = 1 * time.Minute
+	// defaultPollBurst is the default number of polls that can be run in a
+	// burst.
+	defaultPollBurst = 5
 )
 
 var (
@@ -66,18 +72,38 @@ type DB struct {
 	// The deviceStore is periodically updated by the Run method.
 	deviceStore map[string]resourceapi.Device
 
-	rateLimiter   *rate.Limiter
-	notifications chan []resourceapi.Device
-	hasDevices    bool
+	rateLimiter     *rate.Limiter
+	maxPollInterval time.Duration
+	notifications   chan []resourceapi.Device
+	hasDevices      bool
 }
 
-func New() *DB {
-	return &DB{
-		podNetNsStore: map[string]string{},
-		deviceStore:   map[string]resourceapi.Device{},
-		rateLimiter:   rate.NewLimiter(rate.Every(minInterval), 1),
-		notifications: make(chan []resourceapi.Device),
+type Option func(*DB)
+
+func WithRateLimiter(limiter *rate.Limiter) Option {
+	return func(db *DB) {
+		db.rateLimiter = limiter
 	}
+}
+
+func WithMaxPollInterval(d time.Duration) Option {
+	return func(db *DB) {
+		db.maxPollInterval = d
+	}
+}
+
+func New(opts ...Option) *DB {
+	db := &DB{
+		podNetNsStore:   map[string]string{},
+		deviceStore:     map[string]resourceapi.Device{},
+		rateLimiter:     rate.NewLimiter(rate.Every(defaultMinPollInterval), defaultPollBurst),
+		notifications:   make(chan []resourceapi.Device),
+		maxPollInterval: defaultMaxPollInterval,
+	}
+	for _, o := range opts {
+		o(db)
+	}
+	return db
 }
 
 func (db *DB) AddPodNetNs(pod string, netNsPath string) {
@@ -114,7 +140,7 @@ func (db *DB) Run(ctx context.Context) error {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 	if err := netlink.LinkSubscribe(nlChannel, doneCh); err != nil {
-		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", maxInterval.String())
+		klog.Error(err, "error subscribing to netlink interfaces, only syncing periodically", "interval", db.maxPollInterval.String())
 	}
 
 	// Obtain data that will not change after the startup
@@ -159,7 +185,7 @@ func (db *DB) Run(ctx context.Context) error {
 			for len(nlChannel) > 0 {
 				<-nlChannel
 			}
-		case <-time.After(maxInterval):
+		case <-time.After(db.maxPollInterval):
 		case <-ctx.Done():
 			return ctx.Err()
 		}

@@ -73,6 +73,13 @@ func WithFilter(filter cel.Program) Option {
 	}
 }
 
+// WithInventory sets the inventory database for the driver.
+func WithInventory(db inventoryDB) Option {
+	return func(o *NetworkDriver) {
+		o.netdb = db
+	}
+}
+
 type NetworkDriver struct {
 	driverName string
 	nodeName   string
@@ -174,7 +181,9 @@ func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interfa
 	}()
 
 	// register the host network interfaces
-	plugin.netdb = inventory.New()
+	if plugin.netdb == nil {
+		plugin.netdb = inventory.New()
+	}
 	go func() {
 		for i := 0; i < maxAttempts; i++ {
 			err = plugin.netdb.Run(ctx)

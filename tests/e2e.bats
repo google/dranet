@@ -85,6 +85,12 @@ setup_tcx_filter() {
   docker exec "$CLUSTER_NAME"-worker2 bash -c "chmod +x bpftool"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool prog load dummy_bpf_tcx.o /sys/fs/bpf/dummy_prog_tcx"
   docker exec "$CLUSTER_NAME"-worker2 bash -c "./bpftool net attach tcx_ingress pinned /sys/fs/bpf/dummy_prog_tcx dev dummy0"
+  # We update the interface to trigger a DRANET driver notification, which
+  # speeds up the test. Otherwise, DRANET would need to wait for a full resync
+  # (1 minute) to detect changes to attached BPF programs, as netlink
+  # notifications don't cover them.
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set down dev dummy0"
+  docker exec "$CLUSTER_NAME"-worker2 bash -c "ip link set up dev dummy0"
 }
 
 # ---- TESTS ----
