@@ -27,12 +27,15 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
+	"github.com/google/dranet/pkg/inventory"
 	"github.com/google/dranet/pkg/pcidb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/time/rate"
 
 	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/client-go/kubernetes"
@@ -51,6 +54,9 @@ var (
 	kubeconfig       string
 	bindAddress      string
 	celExpression    string
+	minPollInterval  time.Duration
+	maxPollInterval  time.Duration
+	pollBurst        int
 
 	ready atomic.Bool
 )
@@ -60,6 +66,9 @@ func init() {
 	flag.StringVar(&bindAddress, "bind-address", ":9177", "The IP address and port for the metrics and healthz server to serve on")
 	flag.StringVar(&hostnameOverride, "hostname-override", "", "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
 	flag.StringVar(&celExpression, "filter", `!("dra.net/type" in attributes) || attributes["dra.net/type"].StringValue  != "veth"`, "CEL expression to filter network interface attributes (v1.DeviceAttribute).")
+	flag.DurationVar(&minPollInterval, "inventory-min-poll-interval", 2*time.Second, "The minimum interval between two consecutive polls of the inventory.")
+	flag.DurationVar(&maxPollInterval, "inventory-max-poll-interval", 1*time.Minute, "The maximum interval between two consecutive polls of the inventory.")
+	flag.IntVar(&pollBurst, "inventory-poll-burst", 5, "The number of polls that can be run in a burst.")
 
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, "Usage: dranet [options]\n\n")
@@ -150,6 +159,11 @@ func main() {
 		}
 		opts = append(opts, driver.WithFilter(prg))
 	}
+	db := inventory.New(
+		inventory.WithRateLimiter(rate.NewLimiter(rate.Every(minPollInterval), pollBurst)),
+		inventory.WithMaxPollInterval(maxPollInterval),
+	)
+	opts = append(opts, driver.WithInventory(db))
 	dranet, err := driver.Start(ctx, driverName, clientset, nodeName, opts...)
 	if err != nil {
 		klog.Fatalf("driver failed to start: %v", err)
