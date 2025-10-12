@@ -61,6 +61,10 @@ var (
 
 type DB struct {
 	instance *cloudprovider.CloudInstance
+	// TODO: it is not common but may happen in edge cases that the default
+	// gateway changes revisit once we have more evidence this can be a
+	// potential problem or break some use cases.
+	gwInterfaces sets.Set[string]
 
 	mu sync.RWMutex
 	// podNetNsStore gives the network namespace for a pod, indexed by the pods
@@ -145,10 +149,7 @@ func (db *DB) Run(ctx context.Context) error {
 
 	// Obtain data that will not change after the startup
 	db.instance = getInstanceProperties(ctx)
-	// TODO: it is not common but may happen in edge cases that the default gateway changes
-	// revisit once we have more evidence this can be a potential problem or break some use
-	// cases.
-	gwInterfaces := getDefaultGwInterfaces()
+	db.gwInterfaces = getDefaultGwInterfaces()
 
 	for {
 		err := db.rateLimiter.Wait(ctx)
@@ -156,28 +157,12 @@ func (db *DB) Run(ctx context.Context) error {
 			klog.Error(err, "unexpected rate limited error trying to get system interfaces")
 		}
 
-		devices := db.discoverPCIDevices()
-		devices = db.discoverNetworkInterfaces(devices)
-		devices = db.discoverRDMADevices(devices)
-		devices = db.addCloudAttributes(devices)
-
-		// Remove default interface.
-		filteredDevices := []resourceapi.Device{}
-		for _, device := range devices {
-			ifName := device.Attributes[apis.AttrInterfaceName].StringValue
-			if ifName != nil && gwInterfaces.Has(string(*ifName)) {
-				klog.V(4).Infof("Ignoring interface %s from discovery since it is an uplink interface", *ifName)
-				continue
-			}
-			filteredDevices = append(filteredDevices, device)
-		}
-
-		klog.V(4).Infof("Found %d devices", len(filteredDevices))
+		filteredDevices := db.scan()
 		if len(filteredDevices) > 0 || db.hasDevices {
 			db.hasDevices = len(filteredDevices) > 0
-			db.updateDeviceStore(filteredDevices)
 			db.notifications <- filteredDevices
 		}
+
 		select {
 		// trigger a reconcile
 		case <-nlChannel:
@@ -190,6 +175,31 @@ func (db *DB) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+// scan discovers the available devices on the node.
+// It discovers PCI, network, and RDMA devices, adds cloud attributes,
+// filters out default interfaces, and updates the device store.
+func (db *DB) scan() []resourceapi.Device {
+	devices := db.discoverPCIDevices()
+	devices = db.discoverNetworkInterfaces(devices)
+	devices = db.discoverRDMADevices(devices)
+	devices = db.addCloudAttributes(devices)
+
+	// Remove default interface.
+	filteredDevices := []resourceapi.Device{}
+	for _, device := range devices {
+		ifName := device.Attributes[apis.AttrInterfaceName].StringValue
+		if ifName != nil && db.gwInterfaces.Has(string(*ifName)) {
+			klog.V(4).Infof("Ignoring interface %s from discovery since it is an uplink interface", *ifName)
+			continue
+		}
+		filteredDevices = append(filteredDevices, device)
+	}
+
+	klog.V(4).Infof("Found %d devices", len(filteredDevices))
+	db.updateDeviceStore(filteredDevices)
+	return filteredDevices
 }
 
 func (db *DB) GetResources(ctx context.Context) <-chan []resourceapi.Device {
@@ -415,7 +425,27 @@ func (db *DB) GetDevice(deviceName string) (resourceapi.Device, bool) {
 	return device, exists
 }
 
+// GetNetInterfaceName returns the network interface name for a given device. It
+// first attempts to retrieve the name from the local device store. If the
+// device is not found, it triggers a rescan of the system's devices and retries
+// the lookup. This can happen when a device was recently released by a previous
+// pod and a scan had not happened yet. This ensures that the function can find
+// newly added devices that were not present in the store at the time of the
+// initial call.
 func (db *DB) GetNetInterfaceName(deviceName string) (string, error) {
+	name, err := db.getNetInterfaceNameWithoutRescan(deviceName)
+	if err != nil {
+		klog.V(3).Infof("Device %q not found in local store, rescanning.", deviceName)
+		db.scan()
+		name, err = db.getNetInterfaceNameWithoutRescan(deviceName)
+	}
+	return name, err
+}
+
+// getNetInterfaceNameWithoutRescan returns the network interface name for a
+// given device from the local device store without triggering a rescan if the
+// device is not found.
+func (db *DB) getNetInterfaceNameWithoutRescan(deviceName string) (string, error) {
 	device, exists := db.GetDevice(deviceName)
 	if !exists {
 		return "", fmt.Errorf("device %s not found in store", deviceName)
