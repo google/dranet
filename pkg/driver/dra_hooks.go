@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
@@ -97,11 +98,31 @@ func (np *NetworkDriver) PrepareResourceClaims(ctx context.Context, claims []*re
 	defer func() {
 		draPluginRequestsLatencySeconds.WithLabelValues(methodPrepareResourceClaims).Observe(time.Since(start).Seconds())
 	}()
-	result, err := np.prepareResourceClaims(ctx, claims)
+
+	// See ExampleBackoff_Step() for an example of the period this generates.
+	backoff := wait.Backoff{
+		Duration: 1 * time.Second,
+		Factor:   1.2,
+		Steps:    5, // When used with ExponentialBackoffWithContext, this also controls the maximum number of retries
+		Cap:      5 * time.Second,
+	}
+	var result map[types.UID]kubeletplugin.PrepareResult
+	var err error
+	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		var preparationErr error
+		result, preparationErr = np.prepareResourceClaims(ctx, claims)
+		if preparationErr != nil {
+			klog.Warningf("failed to prepare resource claims, will retry: %v", preparationErr)
+			return false, nil
+		}
+		return true, nil
+	})
 	if err != nil {
+		klog.Errorf("failed to prepare resources for claims: %v", err)
 		draPluginRequestsTotal.WithLabelValues(methodPrepareResourceClaims, statusFailed).Inc()
 		return result, err
 	}
+
 	// identify errors and log metrics
 	isError := false
 	for _, res := range result {

@@ -21,14 +21,15 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/dranet/pkg/apis"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	resourcev1 "k8s.io/api/resource/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
-
 )
 
 func TestPublishResourcesPrometheusMetrics(t *testing.T) {
@@ -278,3 +279,20 @@ func TestPublishResourcesMetrics(t *testing.T) {
 	})
 }
 
+func ExampleBackoff_Step() {
+	backoff := wait.Backoff{
+		Duration: 1 * time.Second,
+		Factor:   1.2,
+		Steps:    5,
+		Cap:      5 * time.Second,
+	}
+	for i, totalSteps := 0, backoff.Steps; i < totalSteps; i++ {
+		fmt.Println(backoff.Step())
+	}
+	// Output:
+	// 1s
+	// 1.2s
+	// 1.44s
+	// 1.728s
+	// 2.0736s
+}
