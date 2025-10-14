@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/dranet/pkg/apis"
@@ -55,9 +56,9 @@ func (np *NetworkDriver) PublishResources(ctx context.Context) {
 	for {
 		select {
 		case devices := <-np.netdb.GetResources(ctx):
-			klog.V(4).Infof("Received %d devices", len(devices))
+			klog.V(3).Infof("Got %d devices from inventory: %s", len(devices), formatDeviceNames(devices, 15))
 			devices = filter.FilterDevices(np.celProgram, devices)
-			klog.V(4).Infof("After filtering %d devices", len(devices))
+			klog.V(3).Infof("After filtering, publishing %d devices in ResourceSlice(s): %s", len(devices), formatDeviceNames(devices, 15))
 
 			np.publishResourcesPrometheusMetrics(devices)
 
@@ -430,4 +431,17 @@ func (np *NetworkDriver) HandleError(ctx context.Context, err error, msg string)
 	// For now we just follow the advice documented in the DRAPlugin API docs.
 	// See: https://pkg.go.dev/k8s.io/apimachinery/pkg/util/runtime#HandleErrorWithContext
 	runtime.HandleErrorWithContext(ctx, err, msg)
+}
+
+func formatDeviceNames(devices []resourceapi.Device, max int) string {
+	deviceNames := make([]string, len(devices))
+	for i := range devices {
+		deviceNames[i] = devices[i].Name
+	}
+
+	if len(deviceNames) <= max {
+		return strings.Join(deviceNames, ", ")
+	}
+
+	return fmt.Sprintf("%s, and %d more", strings.Join(deviceNames[:max], ", "), len(deviceNames)-max)
 }
