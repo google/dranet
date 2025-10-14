@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +198,10 @@ func (db *DB) scan() []resourceapi.Device {
 		}
 		filteredDevices = append(filteredDevices, device)
 	}
+
+	sort.Slice(filteredDevices, func(i, j int) bool {
+		return filteredDevices[i].Name < filteredDevices[j].Name
+	})
 
 	klog.V(4).Infof("Found %d devices", len(filteredDevices))
 	db.updateDeviceStore(filteredDevices)
