@@ -27,19 +27,47 @@ func TestNormalizeInterfaceName(t *testing.T) {
 		ifName string
 		want   string
 	}{
-		{"already compliant", "eth0", "eth0"},
-		{"already compliant with hyphen", "my-device-1", "my-device-1"},
-		{"needs normalization colons", "eth:0", NormalizedInterfacePrefix + "mv2gqorq"},
-		{"needs normalization uppercase", "ETH0", NormalizedInterfacePrefix + "ivkeqma"},
-		{"needs normalization underscore", "eth_int", NormalizedInterfacePrefix + "mv2gqx3jnz2a"},
-		{"empty string", "", ""},
+		{
+			name:   "already compliant",
+			ifName: "eth0",
+			want:   "eth0",
+		},
+		{
+			name:   "already compliant with hyphen",
+			ifName: "my-device-1",
+			want:   "my-device-1",
+		},
+		{
+			name:   "needs normalization colons",
+			ifName: "eth:0",
+			want:   NormalizedInterfacePrefix + "-mv2gqorq",
+		},
+		{
+			name:   "needs normalization uppercase",
+			ifName: "ETH0",
+			want:   NormalizedInterfacePrefix + "-ivkeqma",
+		},
+		{
+			name:   "needs normalization underscore",
+			ifName: "eth_int",
+			want:   NormalizedInterfacePrefix + "-mv2gqx3jnz2a",
+		},
+		{
+			name:   "empty string",
+			ifName: "",
+			want:   "",
+		},
 		{
 			name:   "long name needs normalization",
 			ifName: "very_long_interface_name_that_is_not_dns_compliant_at_all_and_exceeds_limits",
 			// base32 of the above is much longer, this is just to check prefixing
-			want: NormalizedInterfacePrefix + "ozsxe6k7nrxw4z27nfxhizlsmzqwgzk7nzqw2zk7orugc5c7nfzv63tporpwi3ttl5rw63lqnruwc3tul5qxix3bnrwf6ylomrpwk6ddmvswi427nruw22luom",
+			want: NormalizedInterfacePrefix + "-ozsxe6k7nrxw4z27nfxhizlsmzqwgzk7nzqw2zk7orugc5c7nfzv63tporpwi3ttl5rw63lqnruwc3tul5qxix3bnrwf6ylomrpwk6ddmvswi427nruw22luom",
 		},
-		{"already compliant max length", strings.Repeat("a", 63), strings.Repeat("a", 63)},
+		{
+			name:   "already compliant max length",
+			ifName: strings.Repeat("a", 63),
+			want:   strings.Repeat("a", 63),
+		},
 	}
 
 	for _, tt := range tests {

@@ -50,7 +50,7 @@ func NormalizeInterfaceName(ifName string) string {
 
 	klog.V(4).Infof("Interface name '%s' is not DNS-1123 compliant, normalizing.", ifName)
 	encodedPayload := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(ifName))
-	normalizedName := NormalizedInterfacePrefix + strings.ToLower(encodedPayload)
+	normalizedName := NormalizedInterfacePrefix + "-" + strings.ToLower(encodedPayload)
 
 	return normalizedName
 }
