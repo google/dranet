@@ -23,12 +23,13 @@ import (
 
 	"github.com/google/dranet/pkg/apis"
 
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/insomniacslk/dhcp/dhcpv4/nclient4"
 	"github.com/vishvananda/netlink"
 )
 
 func getDHCP(ctx context.Context, ifName string) (ip string, routes []apis.RouteConfig, err error) {
-	link, err := netlink.LinkByName(ifName)
+	link, err := nlwrap.LinkByName(ifName)
 	if err != nil {
 		return "", nil, err
 	}

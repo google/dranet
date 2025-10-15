@@ -19,6 +19,7 @@ package driver
 import (
 	"fmt"
 
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
@@ -30,7 +31,7 @@ func addMacVlan(containerNsPAth string, devName string, mode netlink.MacvlanMode
 	}
 	defer containerNs.Close()
 
-	parentLink, err := netlink.LinkByName(devName)
+	parentLink, err := nlwrap.LinkByName(devName)
 	if err != nil {
 		return fmt.Errorf("could not find parent interface %s : %w", devName, err)
 	}
@@ -58,7 +59,7 @@ func addIPVlan(containerNsPAth string, devName string, mode netlink.IPVlanMode) 
 	}
 	defer containerNs.Close()
 
-	parentLink, err := netlink.LinkByName(devName)
+	parentLink, err := nlwrap.LinkByName(devName)
 	if err != nil {
 		return fmt.Errorf("could not find parent interface %s : %w", devName, err)
 	}

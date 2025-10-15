@@ -30,6 +30,7 @@ import (
 	"github.com/google/dranet/pkg/names"
 
 	"github.com/Mellanox/rdmamap"
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/jaypipes/ghw"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -261,7 +262,7 @@ func (db *DB) discoverPCIDevices() []resourceapi.Device {
 //   - For Network interfaces which are not associated with a PCI Device (like
 //     virtual interfaces), they are added as their own device.
 func (db *DB) discoverNetworkInterfaces(pciDevices []resourceapi.Device) []resourceapi.Device {
-	links, err := netlink.LinkList()
+	links, err := nlwrap.LinkList()
 	if err != nil {
 		klog.Errorf("Could not list network interfaces: %v", err)
 		return pciDevices
@@ -334,7 +335,7 @@ func addLinkAttributes(device *resourceapi.Device, link netlink.Link) {
 
 	v4 := sets.Set[string]{}
 	v6 := sets.Set[string]{}
-	if ips, err := netlink.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
+	if ips, err := nlwrap.AddrList(link, netlink.FAMILY_ALL); err == nil && len(ips) > 0 {
 		for _, address := range ips {
 			if !address.IP.IsGlobalUnicast() {
 				continue

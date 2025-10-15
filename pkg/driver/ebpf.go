@@ -25,6 +25,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
@@ -32,8 +33,8 @@ import (
 
 // unpinBPFPrograms runs in the host namespace to delete all the pinned bpf programs
 func unpinBPFPrograms(ifName string) error {
-	device, err := netlink.LinkByName(ifName)
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	device, err := nlwrap.LinkByName(ifName)
+	if err != nil {
 		return err
 	}
 	ifIndex := uint32(device.Attrs().Index)
@@ -120,15 +121,15 @@ func detachEBPFPrograms(containerNsPAth string, ifName string) error {
 	defer netns.Set(origns) // nolint:errcheck
 
 	var errs []error
-	device, err := netlink.LinkByName(ifName)
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	device, err := nlwrap.LinkByName(ifName)
+	if err != nil {
 		return err
 	}
 
 	// Detach TC filters (legacy)
 	klog.V(2).Infof("Attempting to detach TC filters from interface %s", device.Attrs().Name)
 	for _, parent := range []uint32{netlink.HANDLE_MIN_INGRESS, netlink.HANDLE_MIN_EGRESS} {
-		filters, err := netlink.FilterList(device, parent)
+		filters, err := nlwrap.FilterList(device, parent)
 		if err != nil {
 			klog.V(4).Infof("Could not list TC filters for interface %s (parent %d): %v", device.Attrs().Name, parent, err)
 			continue
