@@ -35,8 +35,7 @@ import (
 
 func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig apis.InterfaceConfig) (*resourceapi.NetworkDeviceData, error) {
 	hostDev, err := nlwrap.LinkByName(hostIfName)
-	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	if err != nil {
 		return nil, fmt.Errorf("failed to get link for interface %s: %w", hostIfName, err)
 	}
 
@@ -134,7 +133,7 @@ func nsAttachNetdev(hostIfName string, containerNsPAth string, interfaceConfig a
 	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(ifName)
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	if err != nil {
 		return nil, fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
 	}
 
@@ -235,8 +234,7 @@ func nsDetachNetdev(containerNsPAth string, devName string, outName string) erro
 
 	// Set up the interface in case host network workloads depend on it
 	hostDev, err := nlwrap.LinkByName(ifName)
-	// recover same behavior on vishvananda/netlink@1.2.1 and do not fail when the kernel returns NLM_F_DUMP_INTR.
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	if err != nil {
 		return fmt.Errorf("failed to get link for interface %s: %w", ifName, err)
 	}
 

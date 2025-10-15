@@ -238,7 +238,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			// If there is no custom addresses and no DHCP, then use the existing ones
 			// get the existing IP addresses
 			nlAddresses, err := nlHandle.AddrList(link, netlink.FAMILY_ALL)
-			if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+			if err != nil {
 				errorList = append(errorList, fmt.Errorf("fail to get ip addresses for interface %s : %w", ifName, err))
 			} else {
 				for _, address := range nlAddresses {
