@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/google/dranet/pkg/apis"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -60,7 +61,7 @@ func Test_nhNetdev(t *testing.T) {
 	netns.Set(origns)
 
 	// Create a dummy interface in the test namespace
-	nhNs, err := netlink.NewHandleAt(testNS)
+	nhNs, err := nlwrap.NewHandleAt(testNS)
 	if err != nil {
 		t.Fatalf("fail to open netlink handle: %v", err)
 	}
@@ -86,7 +87,7 @@ func Test_nhNetdev(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		link, err := netlink.LinkByName(ifaceName)
+		link, err := nlwrap.LinkByName(ifaceName)
 		if err == nil {
 			_ = netlink.LinkDel(link)
 		}

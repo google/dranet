@@ -21,6 +21,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
@@ -55,7 +56,7 @@ func nsDetachRdmadev(containerNsPAth string, ifName string) error {
 
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
-	nhNs, err := netlink.NewHandleAt(containerNs)
+	nhNs, err := nlwrap.NewHandleAt(containerNs)
 	if err != nil {
 		return fmt.Errorf("could not get network namespace handle: %w", err)
 	}

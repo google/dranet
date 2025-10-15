@@ -19,6 +19,7 @@ package inventory
 import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -28,7 +29,7 @@ import (
 func getDefaultGwInterfaces() sets.Set[string] {
 	interfaces := sets.Set[string]{}
 	filter := &netlink.Route{}
-	routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_TABLE)
+	routes, err := nlwrap.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_TABLE)
 	if err != nil {
 		return interfaces
 	}
@@ -75,7 +76,7 @@ func getTcFilters(link netlink.Link) ([]string, bool) {
 	isTcEBPF := false
 	filterNames := sets.Set[string]{}
 	for _, parent := range []uint32{netlink.HANDLE_MIN_INGRESS, netlink.HANDLE_MIN_EGRESS} {
-		filters, err := netlink.FilterList(link, parent)
+		filters, err := nlwrap.FilterList(link, parent)
 		if err == nil {
 			for _, f := range filters {
 				if bpffFilter, ok := f.(*netlink.BpfFilter); ok {

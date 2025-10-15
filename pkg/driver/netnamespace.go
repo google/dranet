@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/dranet/pkg/apis"
 
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
@@ -38,7 +39,7 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 
 	// to avoid golang problem with goroutines we create the socket in the
 	// namespace and use it directly
-	nhNs, err := netlink.NewHandleAt(containerNs)
+	nhNs, err := nlwrap.NewHandleAt(containerNs)
 	if err != nil {
 		return fmt.Errorf("can not get netlink handle: %v", err)
 	}
@@ -95,7 +96,7 @@ func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []ap
 	}
 	defer containerNs.Close()
 
-	nhNs, err := netlink.NewHandleAt(containerNs)
+	nhNs, err := nlwrap.NewHandleAt(containerNs)
 	if err != nil {
 		return fmt.Errorf("can not get netlink handle: %v", err)
 	}

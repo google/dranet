@@ -27,6 +27,7 @@ import (
 	"github.com/google/dranet/pkg/filter"
 
 	"github.com/Mellanox/rdmamap"
+	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
@@ -152,7 +153,7 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 		return kubeletplugin.PrepareResult{}
 	}
 
-	nlHandle, err := netlink.NewHandle()
+	nlHandle, err := nlwrap.NewHandle()
 	if err != nil {
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("error creating netlink handle %v", err),
