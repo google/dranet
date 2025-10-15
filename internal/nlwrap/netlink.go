@@ -90,6 +90,17 @@ func AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
 	return addrs, discardErrDumpInterrupted(err)
 }
 
+// AddrList calls h.Handle.AddrList, retrying if necessary.
+func (h Handle) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
+	var addrs []netlink.Addr
+	var err error
+	retryOnIntr(func() error {
+		addrs, err = h.Handle.AddrList(link, family) //nolint:forbidigo
+		return err
+	})
+	return addrs, discardErrDumpInterrupted(err)
+}
+
 // LinkByName calls h.Handle.LinkByName, retrying if necessary. The netlink function
 // doesn't normally ask the kernel for a dump of links. But, on an old kernel, it
 // will do as a fallback and that dump may get inconsistent results.
