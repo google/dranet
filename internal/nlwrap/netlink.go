@@ -324,3 +324,47 @@ func (h *Handle) ConntrackDeleteFilters(table netlink.ConntrackTableType, family
 	})
 	return deleted, err
 }
+
+// RdmaLinkByName calls netlink.RdmaLinkByName, retrying if necessary.
+func RdmaLinkByName(name string) (*netlink.RdmaLink, error) {
+	var rdmaLink *netlink.RdmaLink
+	var err error
+	retryOnIntr(func() error {
+		rdmaLink, err = netlink.RdmaLinkByName(name) //nolint:forbidigo
+		return err
+	})
+	return rdmaLink, discardErrDumpInterrupted(err)
+}
+
+// RdmaLinkByName calls h.Handle.RdmaLinkByName, retrying if necessary.
+func (h *Handle) RdmaLinkByName(name string) (*netlink.RdmaLink, error) {
+	var rdmaLink *netlink.RdmaLink
+	var err error
+	retryOnIntr(func() error {
+		rdmaLink, err = h.Handle.RdmaLinkByName(name) //nolint:forbidigo
+		return err
+	})
+	return rdmaLink, discardErrDumpInterrupted(err)
+}
+
+// RdmaSystemGetNetnsMode calls netlink.RdmaSystemGetNetnsMode, retrying if necessary.
+func RdmaSystemGetNetnsMode() (string, error) {
+	var mode string
+	var err error
+	retryOnIntr(func() error {
+		mode, err = netlink.RdmaSystemGetNetnsMode() //nolint:forbidigo
+		return err
+	})
+	return mode, discardErrDumpInterrupted(err)
+}
+
+// RdmaSystemGetNetnsMode calls h.Handle.RdmaSystemGetNetnsMode, retrying if necessary.
+func (h *Handle) RdmaSystemGetNetnsMode() (string, error) {
+	var mode string
+	var err error
+	retryOnIntr(func() error {
+		mode, err = h.Handle.RdmaSystemGetNetnsMode() //nolint:forbidigo
+		return err
+	})
+	return mode, discardErrDumpInterrupted(err)
+}

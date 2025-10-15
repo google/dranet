@@ -28,7 +28,7 @@ import (
 	"github.com/google/dranet/pkg/inventory"
 
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/vishvananda/netlink"
+	"github.com/google/dranet/internal/nlwrap"
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -101,7 +101,7 @@ type Option func(*NetworkDriver)
 func Start(ctx context.Context, driverName string, kubeClient kubernetes.Interface, nodeName string, opts ...Option) (*NetworkDriver, error) {
 	registerMetrics()
 
-	rdmaNetnsMode, err := netlink.RdmaSystemGetNetnsMode()
+	rdmaNetnsMode, err := nlwrap.RdmaSystemGetNetnsMode()
 	if err != nil {
 		klog.Infof("failed to determine the RDMA subsystem's network namespace mode, assume shared mode: %v", err)
 		rdmaNetnsMode = apis.RdmaNetnsModeShared

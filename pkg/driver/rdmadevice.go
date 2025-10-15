@@ -36,7 +36,7 @@ func nsAttachRdmadev(hostIfName string, containerNsPAth string) error {
 		return fmt.Errorf("could not get network namespace from path %s for network device %s : %w", containerNsPAth, hostIfName, err)
 	}
 
-	hostDev, err := netlink.RdmaLinkByName(hostIfName)
+	hostDev, err := nlwrap.RdmaLinkByName(hostIfName)
 	if err != nil {
 		return err
 	}
