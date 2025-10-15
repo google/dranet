@@ -21,12 +21,11 @@
 package nlwrap
 
 import (
-	"log"
-
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"k8s.io/klog/v2"
 )
 
 // Arbitrary limit on max attempts at netlink calls if they are repeatedly interrupted.
@@ -64,7 +63,7 @@ func retryOnIntr(f func() error) {
 			return
 		}
 	}
-	log.Printf("netlink call interrupted after %d attempts", maxAttempts)
+	klog.Infof("netlink call interrupted after %d attempts", maxAttempts)
 }
 
 func discardErrDumpInterrupted(err error) error {
@@ -73,7 +72,7 @@ func discardErrDumpInterrupted(err error) error {
 		// error. Discard the error and return the data. This restores the behaviour of
 		// the netlink package prior to v1.2.1, in which NLM_F_DUMP_INTR was ignored in
 		// the netlink response.
-		log.Printf("discarding ErrDumpInterrupted: %+v", errors.WithStack(err))
+		klog.Infof("discarding ErrDumpInterrupted: %+v", errors.WithStack(err))
 		return nil
 	}
 	return err
