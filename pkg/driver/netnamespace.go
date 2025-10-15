@@ -46,7 +46,7 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(ifName)
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	if err != nil {
 		return fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
 	}
 
@@ -103,7 +103,7 @@ func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []ap
 	defer nhNs.Close()
 
 	nsLink, err := nhNs.LinkByName(ifName)
-	if err != nil && !errors.Is(err, netlink.ErrDumpInterrupted) {
+	if err != nil {
 		return fmt.Errorf("link not found for interface %s on namespace %s: %w", ifName, containerNsPAth, err)
 	}
 
