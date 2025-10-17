@@ -136,14 +136,16 @@ func GetGCEAttributes(mac string, instance *cloudprovider.CloudInstance) map[res
 	attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
 	attributes[AttrGCEMachineType] = resourceapi.DeviceAttribute{StringValue: &instance.Type}
 
-	topologyParts := strings.SplitN(strings.TrimPrefix(instance.Topology, "/"), "/", 3)
-	// topology may not be always available
-	if len(topologyParts) == 3 {
-		attributes[AttrGCEBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[0]}
-		attributes[AttrGCESubBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[1]}
-		attributes[AttrGCEHost] = resourceapi.DeviceAttribute{StringValue: &topologyParts[2]}
-	} else {
-		klog.Warningf("Error parsing host topology %q; it may be unsupported for the VM", instance.Topology)
+	if instance.Topology != "" {
+		topologyParts := strings.SplitN(strings.TrimPrefix(instance.Topology, "/"), "/", 3)
+		// topology may not be always available
+		if len(topologyParts) == 3 {
+			attributes[AttrGCEBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[0]}
+			attributes[AttrGCESubBlock] = resourceapi.DeviceAttribute{StringValue: &topologyParts[1]}
+			attributes[AttrGCEHost] = resourceapi.DeviceAttribute{StringValue: &topologyParts[2]}
+		} else {
+			klog.Warningf("Error parsing host topology %q; it may be unsupported for the VM", instance.Topology)
+		}
 	}
 
 	// Determine properties specific to the device identified by this mac
