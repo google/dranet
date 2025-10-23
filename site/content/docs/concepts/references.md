@@ -3,7 +3,7 @@ title: "References"
 date: 2024-12-19T11:20:46Z
 ---
 
-- [The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking](/docs/kubernetes_network_driver_model_dranet_paper.pdf) - This paper introduces the Kubernetes Network Driver model and provides a detailed performance evaluation of DraNet, demonstrating significant bandwidth improvements for AI/ML workloads.
+- [The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking](/docs/kubernetes_network_driver_model_dranet_paper.pdf) - This paper introduces the Kubernetes Network Driver model and provides a detailed performance evaluation of DRANET, demonstrating significant bandwidth improvements for AI/ML workloads.
 
 {{< embed-pdf "/docs/kubernetes_network_driver_model_dranet_paper.pdf" >}}
 

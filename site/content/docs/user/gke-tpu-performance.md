@@ -46,13 +46,13 @@ gcloud container node-pools create POOL_NAME \
     --enable-gvnic
 ```
 
-Apply the following manifest to install DraNet:
+Apply the following manifest to install DRANET:
 
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
 ```
 
-Once DraNet is running you'll be able to obtain the network resources exposed by the dranet Pods, in order to avoid noise, DraNet has a flag that allow to set client side filter to control the exposed resources, in this case, we can set the flag to ignore network devices that are `virtual`, the manifest will look like:
+Once DRANET is running you'll be able to obtain the network resources exposed by the dranet Pods, in order to avoid noise, DRANET has a flag that allow to set client side filter to control the exposed resources, in this case, we can set the flag to ignore network devices that are `virtual`, the manifest will look like:
 
 ```yaml
       containers:
@@ -63,9 +63,9 @@ Once DraNet is running you'll be able to obtain the network resources exposed by
        image: ghcr.io/google/dranet:stable
 ```
 
-First, we tell DraNet what kind of NICs we're interested in and how Pods can claim them. In order to simplify our workloads we can create a `DeviceClass` that matches only the resources exposed by DraNet.
+First, we tell DRANET what kind of NICs we're interested in and how Pods can claim them. In order to simplify our workloads we can create a `DeviceClass` that matches only the resources exposed by DRANET.
 
-**DeviceClass (dranet):** This selects NICs managed by DraNet.
+**DeviceClass (dranet):** This selects NICs managed by DRANET.
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -80,7 +80,7 @@ spec:
 
 **ResourceClaimTemplate (worker-rdma-nic-template):** This will request the two additional NICs, since we created the additiona networks with the prefix `tpu-net` we can levarage the powerful CEL expressions to match on that prefix.
 
-Another important factor is the capacity of DraNet to pass Interface configuration options that allow to tune the interfaces for maximum performance, per example, [Big TCP](https://lwn.net/Articles/884104/).
+Another important factor is the capacity of DRANET to pass Interface configuration options that allow to tune the interfaces for maximum performance, per example, [Big TCP](https://lwn.net/Articles/884104/).
 
 In addition, if you have GVNIC enabled you can use some private ethtool flags that improve the performance for TCP like [enable-max-rx-buffer-size](enable-max-rx-buffer-size).
 

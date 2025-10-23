@@ -4,7 +4,7 @@ date: 2024-12-17T14:47:05Z
 weight: 1
 ---
 
-`DraNet` depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in Kubernetes ∂v1.32).
+`DRANET` depends on the Kubernetes feature [Dynamic Resource Allocation (DRA)](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/), that is beta (disabled by default in Kubernetes ∂v1.32).
 
 In order to enable DRA you need to enable both the [feature gates and the API groups](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#enabling-dynamic-resource-allocation).
 
@@ -53,7 +53,7 @@ kubernetes_feature_enabled{name="DynamicResourceAllocation",stage="BETA"} 1
 
 ## Installation
 
-You can install the latest stable version of `DraNet` using the provided manifest:
+You can install the latest stable version of `DRANET` using the provided manifest:
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml

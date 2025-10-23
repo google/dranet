@@ -7,7 +7,7 @@ date: 2025-05-25T11:20:46Z
 
 The journey of computing has always been a quest for greater efficiency. From hypervisors carving up physical servers to containers offering even more granular control, the pattern is clear. Now, with AI/ML and High-Performance Computing (HPC) taking center stage, a new frontier in resource optimization is opening up, especially around specialized hardware like high-performance networking.
 
-This is where solutions like DraNet, a Kubernetes network driver, are making significant strides. By cleverly using Kubernetes' Dynamic Resource Allocation (DRA), DraNet offers a declarative, Kubernetes-native method to manage and assign advanced network interfaces, including those powerful RDMA-capable NICs, directly to Pods. This isn't merely about network connectivity; it's a more intelligent approach to utilizing the potent, and often costly, hardware that underpins today's distributed applications.
+This is where solutions like DRANET, a Kubernetes network driver, are making significant strides. By cleverly using Kubernetes' Dynamic Resource Allocation (DRA), DRANET offers a declarative, Kubernetes-native method to manage and assign advanced network interfaces, including those powerful RDMA-capable NICs, directly to Pods. This isn't merely about network connectivity; it's a more intelligent approach to utilizing the potent, and often costly, hardware that underpins today's distributed applications.
 
 ### Scaling Up and Its Downsides
 
@@ -15,7 +15,7 @@ For a long time, tackling demanding workloads—think large-scale AI model train
 
 ### Embracing the Scale-Out Philosophy
 
-DraNet adopts a "scale-out" method for managing specialized hardware. This approach involves dividing resources precisely, which offers several clear advantages.
+DRANET adopts a "scale-out" method for managing specialized hardware. This approach involves dividing resources precisely, which offers several clear advantages.
 
 ##### Dedicated Network Performance for Tasks
 
@@ -23,9 +23,9 @@ Different parts of a complex application, such as a calculation worker or a data
 
 ##### Smarter Hardware Allocation
 
-Consider a server equipped with 8 GPUs and 8 RDMA network interfaces. Instead of a single large job claiming all these resources, DraNet enables a more flexible assignment. For example, a distributed training task might need two workers, each using one GPU and one dedicated RDMA interface.
+Consider a server equipped with 8 GPUs and 8 RDMA network interfaces. Instead of a single large job claiming all these resources, DRANET enables a more flexible assignment. For example, a distributed training task might need two workers, each using one GPU and one dedicated RDMA interface.
 
-Our [research](/docs/kubernetes_network_driver_model_dranet_paper.pdf) validates this approach with concrete data. In tests comparing a topologically aligned setup (enabled by DraNet and DRA) against a traditional, non-aligned one, the results were conclusive:
+Our [research](/docs/kubernetes_network_driver_model_dranet_paper.pdf) validates this approach with concrete data. In tests comparing a topologically aligned setup (enabled by DRANET and DRA) against a traditional, non-aligned one, the results were conclusive:
 
 - **All-Gather Performance:** The aligned configuration achieved **46.59 GB/s** on large messages, a **59.6% increase** over the unaligned setup's 29.20 GB/s.
 - **All-Reduce Performance:** Similarly, the aligned configuration hit **46.93 GB/s**, a **58.1% improvement** over the unaligned 29.68 GB/s.
@@ -40,7 +40,7 @@ This ability to run multiple, correctly-sized jobs concurrently leads to better 
 
 ## Beyond GPU-Centric AI/ML
 
-While the advantages for AI/ML training (like leveraging NCCL over RDMA) are immediately apparent, the principle of providing dedicated, high-performance network paths via DraNet extends its benefits to a larger array of distributed workloads:
+While the advantages for AI/ML training (like leveraging NCCL over RDMA) are immediately apparent, the principle of providing dedicated, high-performance network paths via DRANET extends its benefits to a larger array of distributed workloads:
 
 * Distributed Databases: Systems needing rapid inter-node synchronization, replication, and query processing can gain significantly from dedicated RDMA links.
 * High-Performance Storage: Applications can achieve faster access to distributed file systems (think Lustre or BeeGFS with RDMA) or interact with NVMe-oF storage with performance nearing local speeds.

@@ -3,7 +3,7 @@ title: "Interface Configuration"
 date: 2025-05-25T11:30:40Z
 ---
 
-To configure network interfaces in DraNet, users can provide custom configurations through the parameters field of a ResourceClaim or ResourceClaimTemplate. This configuration adheres to the NetworkConfig structure, which defines the desired state for network interfaces and their associated routes.
+To configure network interfaces in DRANET, users can provide custom configurations through the parameters field of a ResourceClaim or ResourceClaimTemplate. This configuration adheres to the NetworkConfig structure, which defines the desired state for network interfaces and their associated routes.
 
 ### Network Configuration Overview
 
@@ -33,7 +33,7 @@ The InterfaceConfig structure allows you to specify details for a single network
 ```go
 type InterfaceConfig struct {
 	// Name is the desired logical name of the interface inside the Pod (e.g., "net0", "eth_app").
-	// If not specified, DraNet may use or derive a name from the original interface.
+	// If not specified, DRANET may use or derive a name from the original interface.
 	Name string `json:"name,omitempty"`
 
 	// Addresses is a list of IP addresses in CIDR format (e.g., "192.168.1.10/24")
@@ -64,7 +64,7 @@ type InterfaceConfig struct {
 }
 ```
 
-* **name** (string, optional): The logical name that the interface will have inside the Pod (e.g., "eth0", "enp0s3"). If not specified, DraNet will keep the original name if compliant.
+* **name** (string, optional): The logical name that the interface will have inside the Pod (e.g., "eth0", "enp0s3"). If not specified, DRANET will keep the original name if compliant.
 * **addresses** ([]string, optional): A list of IP addresses in CIDR format (e.g., "192.168.1.10/24", "2001:db8::1/64") to be assigned to the interface.
 * **mtu** (int32, optional): The Maximum Transmission Unit for the interface.
 * **hardwareAddr** (string, optional): The MAC address of the interface.

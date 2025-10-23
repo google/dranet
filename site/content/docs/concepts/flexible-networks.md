@@ -11,7 +11,7 @@ Today, in the world of Kubernetes and the cloud, we build things more like we're
 We have a big box of resources—CPU, memory, and networking and we snap them together to build what we need,
 when we need it. When we're done, we take it apart and throw the bricks back in the box for the next project.
 
-DraNet brings this flexible, "Lego-like" approach to computer networking.
+DRANET brings this flexible, "Lego-like" approach to computer networking.
 It challenges the old idea that a network card is a fixed, permanent part of a machine.
 Instead, it treats them as a flexible pool of resources you can use, return, and reuse.
 It is a way of working that’s essential for modern applications. Let’s break down why.
@@ -20,7 +20,7 @@ It is a way of working that’s essential for modern applications. Let’s break
 
 When Kubernetes runs an application in a container, it gives that container its own private "network namespace"
 to keep it isolated from everything else.
-If that app needs a real, physical network card for high performance, DraNet moves the card from the main host
+If that app needs a real, physical network card for high performance, DRANET moves the card from the main host
 machine into the container’s network namespace.
 
 Here’s the twist: when the application finishes and the container goes away, the network card is moved back to the host.
@@ -47,7 +47,7 @@ not the other way around.
 
 ## Networking for the Way We Build Today
 
-DraNet’s approach of treating network cards like flexible, interchangeable Lego bricks it's a direct response
+DRANET’s approach of treating network cards like flexible, interchangeable Lego bricks it's a direct response
 to the dynamic nature of modern software and the realities of how cloud native sysmte works. By doing so,
 it makes our systems more resilient, far more efficient, and opens the door to a future where our networks are
 as dynamic and intelligent as the applications they connect.

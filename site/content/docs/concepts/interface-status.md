@@ -5,13 +5,13 @@ date: 2025-05-25T11:30:40Z
 
 ### Understanding Interface Status Output
 
-When DraNet allocates a network interface to a Pod via a `ResourceClaim`, it publishes the status of the allocated device within the `ResourceClaim`'s `status` field. This provides crucial insights into the readiness and configuration of the network interface from a Kubernetes perspective, adhering to the standardized device status defined in [KEP-4817](https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/4817-resource-claim-device-status/README.md).
+When DRANET allocates a network interface to a Pod via a `ResourceClaim`, it publishes the status of the allocated device within the `ResourceClaim`'s `status` field. This provides crucial insights into the readiness and configuration of the network interface from a Kubernetes perspective, adhering to the standardized device status defined in [KEP-4817](https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/4817-resource-claim-device-status/README.md).
 
 After a `ResourceClaim` is processed and a network device is allocated, its status is reflected under `ResourceClaim.status.devices`. This section contains `conditions` and `networkData` for each allocated device.
 
 #### Conditions
 
-The `conditions` array provides a timeline of the device's state and indicates whether specific aspects of its configuration and readiness have been met. DraNet reports the following conditions:
+The `conditions` array provides a timeline of the device's state and indicates whether specific aspects of its configuration and readiness have been met. DRANET reports the following conditions:
 
 * **`Ready` (type `NetworkDeviceReady`)**: Indicates that the network device has been successfully moved into the Pod's network namespace and is configured.
 * **`NetworkReady`**: Signifies that the network interface within the Pod has been successfully configured with its IP addresses and routes.
