@@ -398,7 +398,7 @@ EOF
   docker exec "${node2}" test -S /var/lib/kubelet/plugins/dra.net/dra.sock
   docker exec "${node2}" test -S /var/lib/kubelet/plugins_registry/dra.net-reg.sock
 
-  # Remove affinity from DraNet DaemonSet to revert it back to original
+  # Remove affinity from DRANET DaemonSet to revert it back to original
   kubectl patch daemonset dranet -n kube-system --type='merge' --patch-file=<(cat <<EOF
 spec:
   template:

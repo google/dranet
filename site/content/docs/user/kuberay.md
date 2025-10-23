@@ -1,12 +1,12 @@
 ---
-title: "Ray on GKE using DraNet"
+title: "Ray on GKE using DRANET"
 date: 2025-07-14T10:10:40Z
 ---
 
 To get started, follow the instructions to create a [GKE cluster with DRA
-support and using DraNet](/docs/user/gke-rdma), it is important to follow the
+support and using DRANET](/docs/user/gke-rdma), it is important to follow the
 instructions, since there are multiple dependencies on the Kubernetes API
-version, the RDMA NCCL installer and the DraNet component.
+version, the RDMA NCCL installer and the DRANET component.
 
 The worker nodes in this configuration are a4-highgpu-8g instances, each equipped with eight NVIDIA B200 GPUs and eight RDMA-capable RoCE NICs.
 

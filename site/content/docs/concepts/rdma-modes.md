@@ -3,11 +3,11 @@ title: "RDMA Device Handling"
 date: 2025-05-25T11:20:46Z
 ---
 
-DraNet provides robust support for Remote Direct Memory Access (RDMA) devices, essential for high-performance computing (HPC) and AI/ML workloads that require ultra-low latency communication. DraNet's RDMA implementation intelligently handles device allocation based on the host system's RDMA network namespace mode.
+DRANET provides robust support for Remote Direct Memory Access (RDMA) devices, essential for high-performance computing (HPC) and AI/ML workloads that require ultra-low latency communication. DRANET's RDMA implementation intelligently handles device allocation based on the host system's RDMA network namespace mode.
 
-### RDMA Device Handling in DraNet
+### RDMA Device Handling in DRANET
 
-DraNet manages three primary types of RDMA-related components for Pods:
+DRANET manages three primary types of RDMA-related components for Pods:
 
 1.  **RDMA Character Devices:** These are user-space interfaces (e.g., `/dev/infiniband/uverbsN`, `/dev/infiniband/rdma_cm`) that user applications interact with to set up RDMA resources.
 
@@ -15,13 +15,13 @@ DraNet manages three primary types of RDMA-related components for Pods:
 
 3.  **RDMA Link Devices:** This is the physical hardware adapter card (Host Channel Adapter - HCA), often named like `mlx5_0`, `mlx4_0`, or `hfi1_0`, which performs the core RDMA operations.
 
-DraNet's behavior regarding the transfer of these devices to a Pod depends on the RDMA subsystem's network namespace mode on the host, which can be either "shared" or "exclusive". This mode is determined at DraNet startup.
+DRANET's behavior regarding the transfer of these devices to a Pod depends on the RDMA subsystem's network namespace mode on the host, which can be either "shared" or "exclusive". This mode is determined at DRANET startup.
 
 #### Shared Mode (`rdma-system netns shared`)
 
 In shared mode, the RDMA subsystem allows multiple network namespaces to access the same RDMA link devices.
 
-* **Device Transfer:** DraNet will move both the **RDMA Character Devices** (like `/dev/infiniband/uverbsN` and `/dev/infiniband/rdma_cm`) and the **RDMA Network Device** (the standard network interface with its IP configuration) into the Pod's namespace. However, the **RDMA Link Device** itself (e.g., `mlx5_0`) remains in the host's root network namespace and is not moved to the Pod's namespace.
+* **Device Transfer:** DRANET will move both the **RDMA Character Devices** (like `/dev/infiniband/uverbsN` and `/dev/infiniband/rdma_cm`) and the **RDMA Network Device** (the standard network interface with its IP configuration) into the Pod's namespace. However, the **RDMA Link Device** itself (e.g., `mlx5_0`) remains in the host's root network namespace and is not moved to the Pod's namespace.
 
 * **"Soft" Namespacing:** This mode provides a "soft" form of namespacing. While the Pod has its own character devices and dedicated network interface for RDMA operations, the underlying RDMA link device is still shared with the host and potentially other Pods. This means other processes or Pods on the host could theoretically still access or influence the RDMA link device.
 
@@ -29,5 +29,5 @@ In shared mode, the RDMA subsystem allows multiple network namespaces to access 
 
 In exclusive mode, the RDMA subsystem enforces stricter isolation, allowing an RDMA device to be assigned to only one network namespace at a time.
 
-* **Device Transfer:** When DraNet operates in exclusive mode, it moves all three types of components: the **RDMA Character Devices**, the **RDMA Network Device**, and the **RDMA Link Device** (e.g., `mlx5_0`) entirely into the Pod's network namespace.
+* **Device Transfer:** When DRANET operates in exclusive mode, it moves all three types of components: the **RDMA Character Devices**, the **RDMA Network Device**, and the **RDMA Link Device** (e.g., `mlx5_0`) entirely into the Pod's network namespace.
 * **"Hard" Namespacing:** This provides full, "hard" namespacing for the RDMA device. Once moved, the RDMA link is no longer directly accessible from the host's root network namespace or other Pods (unless explicitly configured). This ensures strong isolation for the Pod's RDMA workloads.

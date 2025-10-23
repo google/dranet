@@ -1,5 +1,5 @@
 ---
-title: "GKE with NVIDIA DRA and DraNet"
+title: "GKE with NVIDIA DRA and DRANET"
 date: 2025-06-20T10:10:40Z
 ---
 
@@ -93,7 +93,7 @@ directory on the VM:
 kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
 ```
 
-Install DraNet
+Install DRANET
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
 ```
@@ -111,7 +111,7 @@ implications of how fast the devices can communicate with each other.
 
 Please ensure the GPU Driver image [includes the standard attribute
 `resources.kubernetes.io/pcieRoot`](https://github.com/NVIDIA/k8s-dra-driver-gpu/pull/429)
-so both GPU DRA driver and DraNet can use it for NIC alignment.
+so both GPU DRA driver and DRANET can use it for NIC alignment.
 
 ```
 helm upgrade -i --create-namespace --namespace nvidia-dra-driver-gpu nvidia-dra-driver-gpu ./k8s-dra-driver-gpu/deployments/helm/nvidia-dra-driver-gpu --values https://raw.githubusercontent.com/google/dranet/refs/heads/main/examples/demo_nvidia_dranet/values.yaml --wait
@@ -319,9 +319,9 @@ root@nccl-gib-test-0:/diagnostic# ip a
        valid_lft forever preferred_lft forever
 ```
 
-There are no NICs to transmit the data. This is where DraNet can help!
+There are no NICs to transmit the data. This is where DRANET can help!
 
-#### Nvidia DRA + DraNet
+#### Nvidia DRA + DRANET
 
 We create one more `ResourceClaimTemplate`, for the RDMA devices on the node,
 along with a `DeviceClass` for the RDMA device.
@@ -547,13 +547,13 @@ They now connect!
 
 #### Conclusion
 
-Using both DraNet and the Nvidia DRA libraries in combination is a way to
+Using both DRANET and the Nvidia DRA libraries in combination is a way to
 quickly allocate both GPUs and RDMA devices in order to create interconnected
 workloads that can span multiple nodes. This can be used to create workloads
 that span multiple nodes and take advantage of spare resources on nodes.
 
 For instance, consider that you have 2 nodes with 8 GPUs apiece. If you ran 2
 training jobs that took 6 GPUs each then you would have 4 GPUs idle. By enabling
-DraNet you could take advantage of those remaining 4 for another training job.
+DRANET you could take advantage of those remaining 4 for another training job.
 Without providing the RDMA devices, these GPUs would only be able to communicate
 within the same node.

@@ -84,13 +84,13 @@ Apply the following DaemonSet to install the RDMA binaries and the NCCL library 
 kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/refs/heads/master/gpudirect-rdma/nccl-rdma-installer.yaml
 ```
 
-Apply the following manifest to install DraNet:
+Apply the following manifest to install DRANET:
 
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/google/dranet/refs/heads/main/install.yaml
 ```
 
-Once DraNet is running you'll be able to obtain the network resources exposed via the daemonsets, per example, this specific node has 8 RDMA nics as per the machine specification:
+Once DRANET is running you'll be able to obtain the network resources exposed via the daemonsets, per example, this specific node has 8 RDMA nics as per the machine specification:
 
 ```sh
  kubectl get resourceslices --field-selector spec.nodeName=gke-dra-1-gpu-nodes-2-e5f6f579-7je4 -o yaml | grep rdma
@@ -123,11 +123,11 @@ Once DraNet is running you'll be able to obtain the network resources exposed vi
 ```
 
 
-#### Defining Resources for DraNet
+#### Defining Resources for DRANET
 
-First, we tell DraNet what kind of NICs we're interested in and how Pods can claim them. In order to simplify our workloads we can create a `DeviceClass` that matches only the resources exposed by DraNet.
+First, we tell DRANET what kind of NICs we're interested in and how Pods can claim them. In order to simplify our workloads we can create a `DeviceClass` that matches only the resources exposed by DRANET.
 
-**DeviceClass (dranet):** This selects NICs managed by DraNet.
+**DeviceClass (dranet):** This selects NICs managed by DRANET.
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -403,7 +403,7 @@ NCCL version 2.26.6+cuda12.8
 
 #### Running a Workload with 4 Workers, 4 GPUs, and 4 NICs Each in 2 Nodes
 
-While using fewer, larger instances (e.g., 2 workers with 8 GPUs/NICs) can simplify deployment, distributed AI workloads may benefit from a more granular approach, utilizing more workers with fewer resources each. This can lead to better resource utilization, increased parallelism, and improved fault tolerance. Here, we'll configure our workload to use 4 workers, with each worker claiming 4 GPUs and 4 corresponding DraNet-managed RDMA NICs.
+While using fewer, larger instances (e.g., 2 workers with 8 GPUs/NICs) can simplify deployment, distributed AI workloads may benefit from a more granular approach, utilizing more workers with fewer resources each. This can lead to better resource utilization, increased parallelism, and improved fault tolerance. Here, we'll configure our workload to use 4 workers, with each worker claiming 4 GPUs and 4 corresponding DRANET-managed RDMA NICs.
 
 For optimal performance in distributed AI, it's crucial to ensure the network interfaces are topologically closest to their associated GPUs. We can determine the host topology using `nvidia-smi topo -m`:
 
@@ -450,7 +450,7 @@ NIC Legend:
 
 To facilitate this configuration, we define a `ResourceClaimTemplate` that requests 4 RDMA NICs per worker. GKE A4 machines follow a naming convention where RDMA NICs are named `gpuXrdma0`, with X corresponding to the associated GPU index.
 
-While a dedicated GPU DRA driver could leverage topological alignment using constraints and the standardized `resource.kubernetes.io/pcieRoot` attribute for optimal grouping (as discussed in [NVIDIA/k8s-dra-driver-gpu#213](https://github.com/NVIDIA/k8s-dra-driver-gpu/issues/213)), just for this example and to show the flexibility of DraNet, we'll assume the GPU driver will implicitly provide the correct GPU device.
+While a dedicated GPU DRA driver could leverage topological alignment using constraints and the standardized `resource.kubernetes.io/pcieRoot` attribute for optimal grouping (as discussed in [NVIDIA/k8s-dra-driver-gpu#213](https://github.com/NVIDIA/k8s-dra-driver-gpu/issues/213)), just for this example and to show the flexibility of DRANET, we'll assume the GPU driver will implicitly provide the correct GPU device.
 
 We are going to explicitly leverage the GKE naming convention to ensure each worker is allocated either the lower block of 4 NICs (gpu0-3rdma0) or the higher block of 4 NICs (gpu4-7rdma0). This selection logic is embedded directly within the selectors of our `ResourceClaimTemplate` using a CEL expression.
 
