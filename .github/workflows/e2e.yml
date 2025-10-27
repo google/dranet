@@ -52,7 +52,7 @@ jobs:
         mkdir _output
         docker save ghcr.io/google/dranet:test  > _output/dranet-image.tar
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v5
       with:
         name: test-image
         path: _output/dranet-image.tar
@@ -144,7 +144,7 @@ jobs:
 
     - name: Upload Junit Reports
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: kind-junit-${{ env.JOB_NAME }}-${{ github.run_id }}
         path: './_artifacts/*.xml'
@@ -156,7 +156,7 @@ jobs:
 
     - name: Upload logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
         path: ./_artifacts/logs
