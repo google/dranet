@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/container v1.45.0
 	github.com/Mellanox/rdmamap v1.1.0
-	github.com/cilium/ebpf v0.19.0
+	github.com/cilium/ebpf v0.20.0
 	github.com/containerd/nri v0.10.0
 	github.com/google/cel-go v0.26.1
 	github.com/google/go-cmp v0.7.0
