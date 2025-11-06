@@ -35,21 +35,21 @@ func getDHCP(ctx context.Context, ifName string) (ip string, routes []apis.Route
 	}
 	if link.Attrs().OperState != netlink.OperUp {
 		if err := netlink.LinkSetUp(link); err != nil {
-			return "", nil, fmt.Errorf("fail to set interface %s up: %v", ifName, err)
+			return "", nil, fmt.Errorf("failed to set interface %s up: %v", ifName, err)
 		}
 	}
 	dhclient, err := nclient4.New(ifName)
 	if err != nil {
-		return "", nil, fmt.Errorf("fail to create DHCP client on interface %s  up: %v", ifName, err)
+		return "", nil, fmt.Errorf("failed to create DHCP client on interface %s  up: %v", ifName, err)
 	}
 	defer dhclient.Close()
 
 	lease, err := dhclient.Request(ctx)
 	if err != nil {
-		return "", nil, fmt.Errorf("fail to obtain DHCP lease on interface %s  up: %v", ifName, err)
+		return "", nil, fmt.Errorf("failed to obtain DHCP lease on interface %s  up: %v", ifName, err)
 	}
 	if lease.ACK == nil {
-		return "", nil, fmt.Errorf("fail to obtain DHCP lease on interface %s  up: %v", ifName, err)
+		return "", nil, fmt.Errorf("failed to obtain DHCP lease on interface %s  up: %v", ifName, err)
 	}
 	ip = (&net.IPNet{
 		IP:   lease.ACK.YourIPAddr,

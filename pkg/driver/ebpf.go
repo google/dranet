@@ -115,7 +115,7 @@ func detachEBPFPrograms(containerNsPAth string, ifName string) error {
 	defer runtime.UnlockOSThread()
 	err = netns.Set(containerNs)
 	if err != nil {
-		return fmt.Errorf("failt to join network namespace %s : %v", containerNsPAth, err)
+		return fmt.Errorf("failed to join network namespace %s : %v", containerNsPAth, err)
 	}
 	// Switch back to the original namespace
 	defer netns.Set(origns) // nolint:errcheck

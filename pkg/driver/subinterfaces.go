@@ -38,7 +38,7 @@ func addMacVlan(containerNsPAth string, devName string, mode netlink.MacvlanMode
 
 	macvlan := &netlink.Macvlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:        "mavlan-" + devName,
+			Name:        "macvlan-" + devName,
 			ParentIndex: parentLink.Attrs().Index,
 			NetNsID:     int(containerNs),
 		},
@@ -66,7 +66,7 @@ func addIPVlan(containerNsPAth string, devName string, mode netlink.IPVlanMode) 
 
 	ipvlan := &netlink.IPVlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:        "ipvaln-" + devName,
+			Name:        "ipvlan-" + devName,
 			ParentIndex: parentLink.Attrs().Index,
 			NetNsID:     int(containerNs),
 		},
