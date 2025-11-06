@@ -98,7 +98,7 @@ func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []ap
 
 	nhNs, err := nlwrap.NewHandleAt(containerNs)
 	if err != nil {
-		return fmt.Errorf("can not get netlink handle: %v", err)
+		return fmt.Errorf("could not get netlink handle: %v", err)
 	}
 	defer nhNs.Close()
 
