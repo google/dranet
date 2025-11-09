@@ -152,6 +152,7 @@ func (db *DB) Run(ctx context.Context) error {
 	// Obtain data that will not change after the startup
 	db.instance = getInstanceProperties(ctx)
 	db.gwInterfaces = getDefaultGwInterfaces()
+	klog.V(2).Infof("Default gateway interfaces: %v", db.gwInterfaces.UnsortedList())
 
 	for {
 		err := db.rateLimiter.Wait(ctx)
