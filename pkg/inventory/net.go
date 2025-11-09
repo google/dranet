@@ -21,14 +21,21 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/google/dranet/internal/nlwrap"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 )
 
+// getDefaultGwInterfaces returns a set of interface names that are configured
+// as default gateways in the main routing table. It identifies these by querying
+// the main routing table for routes with an unspecified destination (0.0.0.0/0
+// for IPv4 or ::/0 for IPv6).
 func getDefaultGwInterfaces() sets.Set[string] {
 	interfaces := sets.Set[string]{}
-	filter := &netlink.Route{}
+	filter := &netlink.Route{
+		Table: unix.RT_TABLE_MAIN,
+	}
 	routes, err := nlwrap.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_TABLE)
 	if err != nil {
 		return interfaces
@@ -68,7 +75,6 @@ func getDefaultGwInterfaces() sets.Set[string] {
 			interfaces.Insert(intfLink.Attrs().Name)
 		}
 	}
-	klog.V(4).Infof("Found following interfaces for the default gateway: %v", interfaces.UnsortedList())
 	return interfaces
 }
 
