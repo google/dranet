@@ -7,7 +7,7 @@ To configure network interfaces in DRANET, users can provide custom configuratio
 
 ### Network Configuration Overview
 
-The primary structure for custom network configuration is NetworkConfig. It encompasses settings for the network interface itself and any specific routes to be applied within the Pod's network namespace.
+The primary structure for custom network configuration is NetworkConfig. It encompasses settings for the network interface itself and any specific routes and rules to be applied within the Pod's network namespace.
 
 ```go
 type NetworkConfig struct {
@@ -17,6 +17,9 @@ type NetworkConfig struct {
 
 	// Routes defines static routes to be configured for this interface.
 	Routes []RouteConfig `json:"routes,omitempty"`
+
+	// Rules defines routing rules to be configured for this interface.
+	Rules []RuleConfig `json:"rules,omitempty"`
 
 	// Neighbors defines permanent neighbor (ARP/NDP) entries to be added for this interface.
 	Neighbors []NeighborConfig `json:"neighbors,omitempty"`
@@ -83,6 +86,7 @@ type RouteConfig struct {
 	Gateway     string `json:"gateway,omitempty"`
 	Source      string `json:"source,omitempty"`
 	Scope       uint8  `json:"scope,omitempty"`
+	Table       int    `json:"table,omitempty"`
 }
 ```
 
@@ -92,7 +96,30 @@ type RouteConfig struct {
 * **scope** (uint8, optional): The scope of the route. Only Link (253) or Universe (0) are allowed.  
   * Link (253): Routes directly to a device without a gateway (e.g., for directly connected subnets).  
   * Universe (0): Routes to a network via a gateway.
- 
+* **table** (int, optional): The routing table to use for the route. Defaults to the main table (254) if not specified.
+
+#### Rule Configuration (RuleConfig)
+
+The RuleConfig structure defines individual routing rules to be added to the Pod's network namespace.
+
+```go
+type RuleConfig struct {
+	// Priority is the priority of the rule.
+	Priority int `json:"priority,omitempty"`
+	// Source is the source IP address for the rule.
+	Source string `json:"source,omitempty"`
+	// Destination is the destination IP address for the rule.
+	Destination string `json:"destination,omitempty"`
+	// Table is the routing table to use for the rule.
+	Table int `json:"table,omitempty"`
+}
+```
+
+* **priority** (int, optional): The priority of the rule. Lower values mean higher priority. Defaults to a kernel-assigned value if not specified.
+* **source** (string, optional): The source IP address or CIDR for the rule (e.g., "192.168.1.0/24").
+* **destination** (string, optional): The destination IP address or CIDR for the rule (e.g., "10.0.0.0/8").
+* **table** (int, optional): The routing table to use for the rule. Defaults to the main table (254) if not specified.
+
 #### Neighbor Configuration (NeighborConfig)
 
 The NeighborConfig structure defines permanent neighbor entries (ARP for IPv4, NDP for IPv6) to be added to the Pod's network namespace.
