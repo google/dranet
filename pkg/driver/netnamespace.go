@@ -69,6 +69,7 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 		r := netlink.Route{
 			LinkIndex: nsLink.Attrs().Index,
 			Scope:     netlink.Scope(route.Scope),
+			Table:     route.Table,
 		}
 
 		_, dst, err := net.ParseCIDR(route.Destination)
@@ -127,6 +128,49 @@ func applyNeighborConfig(containerNsPAth string, ifName string, neighConfig []ap
 		}
 		if err := nhNs.NeighAdd(&n); err != nil && !errors.Is(err, syscall.EEXIST) {
 			errorList = append(errorList, fmt.Errorf("failed to add permanent neighbor entry %s (%s) for interface %s: %w", neigh.Destination, neigh.HardwareAddr, ifName, err))
+		}
+	}
+	return errors.Join(errorList...)
+}
+
+func applyRulesConfig(containerNsPath string, rulesConfig []apis.RuleConfig) error {
+	containerNs, err := netns.GetFromPath(containerNsPath)
+	if err != nil {
+		return err
+	}
+	defer containerNs.Close()
+
+	nsHandle, err := nlwrap.NewHandleAt(containerNs)
+	if err != nil {
+		return fmt.Errorf("could not get netlink handle: %v", err)
+	}
+	defer nsHandle.Close()
+
+	errorList := []error{}
+	for _, ruleCfg := range rulesConfig {
+		rule := netlink.NewRule()
+		rule.Priority = ruleCfg.Priority
+		rule.Table = ruleCfg.Table
+
+		if ruleCfg.Source != "" {
+			_, src, err := net.ParseCIDR(ruleCfg.Source)
+			if err != nil {
+				errorList = append(errorList, err)
+				continue
+			}
+			rule.Src = src
+		}
+		if ruleCfg.Destination != "" {
+			_, dst, err := net.ParseCIDR(ruleCfg.Destination)
+			if err != nil {
+				errorList = append(errorList, err)
+				continue
+			}
+			rule.Dst = dst
+		}
+
+		if err := nsHandle.RuleAdd(rule); err != nil && !errors.Is(err, syscall.EEXIST) {
+			errorList = append(errorList, fmt.Errorf("failed to add rule %s on namespace %s: %w", rule.String(), containerNsPath, err))
 		}
 	}
 	return errors.Join(errorList...)

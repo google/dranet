@@ -134,6 +134,8 @@ func (np *NetworkDriver) prepareResourceClaims(ctx context.Context, claims []*re
 // prepareResourceClaim gets all the configuration required to be applied at runtime and passes it downs to the handlers.
 // This happens in the kubelet so it can be a "slow" operation, so we can execute fast in RunPodsandbox, that happens in the
 // container runtime and has strong expectactions to be executed fast (default hook timeout is 2 seconds).
+//
+// TODO(#290): This function has grown too large and needs to be split apart.
 func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
 	klog.V(2).Infof("PrepareResourceClaim Claim %s/%s", claim.Namespace, claim.Name)
 	start := time.Now()
@@ -158,6 +160,13 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 	if err != nil {
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("error creating netlink handle %v", err),
+		}
+	}
+
+	rulesByTable, err := getRuleInfo(nlHandle)
+	if err != nil {
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("error getting rule info: %v", err),
 		}
 	}
 
@@ -284,35 +293,21 @@ func (np *NetworkDriver) prepareResourceClaim(ctx context.Context, claim *resour
 			podCfg.NetworkInterfaceConfigInPod.Ethtool.Features = ethtoolFeatures
 		}
 
-		// Obtain the routes associated to the interface
-		// TODO: only considers outgoing traffic
-		filter := &netlink.Route{
-			LinkIndex: link.Attrs().Index,
-		}
-		routes, err := nlHandle.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_OIF)
+		// Obtain the routes and rules associated with the interface.
+		routes, tables, err := getRouteInfo(nlHandle, ifName, link)
 		if err != nil {
-			klog.Infof("fail to get ip routes for interface %s : %v", ifName, err)
+			errorList = append(errorList, err)
+			continue
 		}
-		for _, route := range routes {
-			routeCfg := apis.RouteConfig{}
-			// routes need a destination
-			if route.Dst == nil {
-				continue
-			}
-			// Discard IPv6 link-local routes, but allow IPv4 link-local.
-			if route.Dst.IP.To4() == nil && route.Dst.IP.IsLinkLocalUnicast() {
-				continue
-			}
-			routeCfg.Destination = route.Dst.String()
+		podCfg.NetworkInterfaceConfigInPod.Routes = append(podCfg.NetworkInterfaceConfigInPod.Routes, routes...)
 
-			if route.Gw != nil {
-				routeCfg.Gateway = route.Gw.String()
+		for _, table := range tables.UnsortedList() {
+			if rules, ok := rulesByTable[table]; ok {
+				klog.V(5).Infof("Adding %d rules for table %d associated with interface %s", len(rules), table, ifName)
+				podCfg.NetworkInterfaceConfigInPod.Rules = append(podCfg.NetworkInterfaceConfigInPod.Rules, rules...)
+				// Avoid adding the same rule twice
+				delete(rulesByTable, table)
 			}
-			if route.Src != nil {
-				routeCfg.Source = route.Src.String()
-			}
-			routeCfg.Scope = uint8(route.Scope)
-			podCfg.NetworkInterfaceConfigInPod.Routes = append(podCfg.NetworkInterfaceConfigInPod.Routes, routeCfg)
 		}
 
 		// Obtain the neighbors associated to the interface
@@ -445,4 +440,86 @@ func formatDeviceNames(devices []resourceapi.Device, max int) string {
 	}
 
 	return fmt.Sprintf("%s, and %d more", strings.Join(deviceNames[:max], ", "), len(deviceNames)-max)
+}
+
+// getRuleInfo lists all IP rules in the host network namespace and groups them
+// by the route table they are associated with. It returns a map where keys are
+// table IDs and values are slices of RuleConfig. Rules associated with the
+// main or local tables are ignored.
+func getRuleInfo(nlHandle nlwrap.Handle) (map[int][]apis.RuleConfig, error) {
+	rulesByTable := make(map[int][]apis.RuleConfig)
+	rules, err := nlHandle.RuleList(netlink.FAMILY_ALL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ip rules: %w", err)
+	}
+	for _, rule := range rules {
+		ruleCfg := apis.RuleConfig{
+			Priority: rule.Priority,
+			Table:    rule.Table,
+		}
+		if rule.Src != nil {
+			ruleCfg.Source = rule.Src.String()
+		}
+		if rule.Dst != nil {
+			ruleCfg.Destination = rule.Dst.String()
+		}
+		// Only care about rules with route tables associated, and exclude main and local tables.
+		if rule.Table > 0 && rule.Table != unix.RT_TABLE_MAIN && rule.Table != unix.RT_TABLE_LOCAL {
+			klog.V(5).Infof("Found rule %s for table %d", rule.String(), rule.Table)
+			rulesByTable[rule.Table] = append(rulesByTable[rule.Table], ruleCfg)
+		}
+	}
+	return rulesByTable, nil
+}
+
+// getRouteInfo retrieves all routes associated with a given network interface.
+// It filters out routes that are not suitable for pod namespaces, such as
+// routes in the local table. It returns the list of suitable routes and a set
+// of the route table IDs to which they belong.
+func getRouteInfo(nlHandle nlwrap.Handle, ifName string, link netlink.Link) ([]apis.RouteConfig, sets.Set[int], error) {
+	routes := []apis.RouteConfig{}
+	tables := sets.Set[int]{}
+	filter := &netlink.Route{
+		LinkIndex: link.Attrs().Index,
+	}
+	rl, err := nlHandle.RouteListFiltered(netlink.FAMILY_ALL, filter, netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fail to get ip routes for interface %s : %w", ifName, err)
+	}
+	for _, route := range rl {
+		routeCfg := apis.RouteConfig{}
+		// routes need a destination
+		if route.Dst == nil {
+			klog.V(5).Infof("Skipping route %s for interface %s because it has no destination", route.String(), ifName)
+			continue
+		}
+		// Do not copy routes from the local table because they are specific
+		// to the host and the kernel will manage the local routing
+		// table within the pod's network namespace.
+		if route.Table == unix.RT_TABLE_LOCAL {
+			klog.V(5).Infof("Skipping route %s for interface %s because it is in the local table", route.String(), ifName)
+			continue
+		}
+		// Discard IPv6 link-local routes, but allow IPv4 link-local.
+		if route.Dst.IP.To4() == nil && route.Dst.IP.IsLinkLocalUnicast() {
+			klog.V(5).Infof("Skipping IPv6 link-local route %s for interface %s", route.String(), ifName)
+			continue
+		}
+		routeCfg.Destination = route.Dst.String()
+		if route.Gw != nil {
+			routeCfg.Gateway = route.Gw.String()
+		}
+		if route.Src != nil {
+			routeCfg.Source = route.Src.String()
+		}
+		routeCfg.Scope = uint8(route.Scope)
+		routeCfg.Table = route.Table
+		routes = append(routes, routeCfg)
+		// Collect table IDs for rules lookup later.
+		if route.Table > 0 {
+			klog.V(5).Infof("Found route table %d for interface %s", route.Table, ifName)
+			tables.Insert(route.Table)
+		}
+	}
+	return routes, tables, nil
 }

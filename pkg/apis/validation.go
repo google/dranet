@@ -67,6 +67,11 @@ func ValidateConfig(raw *runtime.RawExtension) (*NetworkConfig, []error) {
 		allErrors = append(allErrors, validateRoutes(config.Routes, "routes")...)
 	}
 
+	// Validate Rules
+	if len(config.Rules) > 0 {
+		allErrors = append(allErrors, validateRules(config.Rules, "rules")...)
+	}
+
 	// Validate EthtoolConfig if present
 	if config.Ethtool != nil {
 		allErrors = append(allErrors, validateEthtoolConfig(config.Ethtool, "ethtool")...)
@@ -202,6 +207,38 @@ func validateRoutes(routes []RouteConfig, fieldPath string) (allErrors []error) 
 		if route.Source != "" {
 			if net.ParseIP(route.Source) == nil {
 				allErrors = append(allErrors, fmt.Errorf("%s.source: invalid IP address format '%s'", currentFieldPath, route.Source))
+			}
+		}
+
+		if route.Table < 0 {
+			allErrors = append(allErrors, fmt.Errorf("%s.table: must be a non-negative integer, got %d", currentFieldPath, route.Table))
+		}
+	}
+	return allErrors
+}
+
+// validateRules validates a slice of RuleConfig.
+func validateRules(rules []RuleConfig, fieldPath string) (allErrors []error) {
+	for i, rule := range rules {
+		currentFieldPath := fmt.Sprintf("%s[%d]", fieldPath, i)
+
+		if rule.Priority < 0 || rule.Priority > 32767 {
+			allErrors = append(allErrors, fmt.Errorf("%s.priority: must be an integer between 0 and 32767, got %d", currentFieldPath, rule.Priority))
+		}
+
+		if rule.Table < 0 {
+			allErrors = append(allErrors, fmt.Errorf("%s.table: must be a non-negative integer, got %d", currentFieldPath, rule.Table))
+		}
+
+		if rule.Source != "" {
+			if _, _, err := net.ParseCIDR(rule.Source); err != nil {
+				allErrors = append(allErrors, fmt.Errorf("%s.source: invalid CIDR format '%s'", currentFieldPath, rule.Source))
+			}
+		}
+
+		if rule.Destination != "" {
+			if _, _, err := net.ParseCIDR(rule.Destination); err != nil {
+				allErrors = append(allErrors, fmt.Errorf("%s.destination: invalid CIDR format '%s'", currentFieldPath, rule.Destination))
 			}
 		}
 	}
