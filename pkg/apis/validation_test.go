@@ -48,10 +48,14 @@ func TestValidateConfig(t *testing.T) {
 		Routes: []RouteConfig{
 			{Destination: "0.0.0.0/0", Gateway: "192.168.1.254", Scope: unix.RT_SCOPE_UNIVERSE},
 		},
+		Rules: []RuleConfig{
+			{Source: "10.0.0.0/8", Table: 100},
+		},
 		Ethtool: &EthtoolConfig{Features: map[string]bool{"tso": true}},
 	}
 	invalidInterfaceConf := NetworkConfig{Interface: InterfaceConfig{Name: "eth/0"}}
 	invalidRouteConf := NetworkConfig{Interface: InterfaceConfig{Name: "eth0"}, Routes: []RouteConfig{{Destination: "invalid-cidr"}}}
+	invalidRuleConf := NetworkConfig{Interface: InterfaceConfig{Name: "eth0"}, Rules: []RuleConfig{{Source: "invalid-cidr"}}}
 
 	tests := []struct {
 		name        string
@@ -105,6 +109,13 @@ func TestValidateConfig(t *testing.T) {
 			expectErr:   true,
 			expectedCfg: &invalidRouteConf,
 			errContains: []string{"routes[0].destination: invalid IP or CIDR format 'invalid-cidr'"},
+		},
+		{
+			name:        "config with rule validation error",
+			raw:         newRawExtension(t, invalidRuleConf),
+			expectErr:   true,
+			expectedCfg: &invalidRuleConf,
+			errContains: []string{"rules[0].source: invalid CIDR format 'invalid-cidr'"},
 		},
 	}
 
@@ -324,6 +335,19 @@ func TestValidateRoutes(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "valid route with table",
+			routes:    []RouteConfig{{Destination: "10.10.10.0/24", Gateway: "192.168.1.1", Table: 100}},
+			fieldPath: "routes",
+			expectErr: false,
+		},
+		{
+			name:      "invalid route with negative table",
+			routes:    []RouteConfig{{Destination: "10.10.10.0/24", Gateway: "192.168.1.1", Table: -1}},
+			fieldPath: "routes",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
 			name:      "empty destination",
 			routes:    []RouteConfig{{Gateway: "192.168.1.1"}},
 			fieldPath: "routes",
@@ -382,6 +406,89 @@ func TestValidateRoutes(t *testing.T) {
 			}
 			if tt.expectErr && len(errs) != tt.errCount {
 				t.Errorf("validateRoutes() expected %d errors, got %d: %v", tt.errCount, len(errs), errs)
+			}
+		})
+	}
+}
+
+func TestValidateRules(t *testing.T) {
+	tests := []struct {
+		name      string
+		rules     []RuleConfig
+		fieldPath string
+		expectErr bool
+		errCount  int
+	}{
+		{
+			name:      "valid rule",
+			rules:     []RuleConfig{{Source: "10.0.0.0/8", Table: 100, Priority: 10}},
+			fieldPath: "rules",
+			expectErr: false,
+		},
+		{
+			name:      "valid rule - priority at min",
+			rules:     []RuleConfig{{Priority: 0, Table: 100}},
+			fieldPath: "rules",
+			expectErr: false,
+		},
+		{
+			name:      "valid rule - priority at max",
+			rules:     []RuleConfig{{Priority: 32767, Table: 100}},
+			fieldPath: "rules",
+			expectErr: false,
+		},
+		{
+			name:      "invalid priority - too high",
+			rules:     []RuleConfig{{Priority: 32768}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid priority - negative",
+			rules:     []RuleConfig{{Priority: -1}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid table",
+			rules:     []RuleConfig{{Table: -1}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid source CIDR",
+			rules:     []RuleConfig{{Source: "invalid-cidr"}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "invalid destination CIDR",
+			rules:     []RuleConfig{{Destination: "invalid-cidr"}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  1,
+		},
+		{
+			name:      "multiple errors",
+			rules:     []RuleConfig{{Priority: -1, Table: -1, Source: "invalid", Destination: "invalid"}},
+			fieldPath: "rules",
+			expectErr: true,
+			errCount:  4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateRules(tt.rules, tt.fieldPath)
+			if (len(errs) > 0) != tt.expectErr {
+				t.Errorf("validateRules() expectErr %v, got errors: %v", tt.expectErr, errs)
+			}
+			if tt.expectErr && len(errs) != tt.errCount {
+				t.Errorf("validateRules() expected %d errors, got %d: %v", tt.errCount, len(errs), errs)
 			}
 		})
 	}
