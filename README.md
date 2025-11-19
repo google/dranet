@@ -117,7 +117,7 @@ requests](https://docs.github.com/articles/about-pull-requests).
 
 For detailed development instructions, including local development with KIND and
 troubleshooting tips, see our [Developer
-Guide](https://google.github.io/dranet/docs/contributing/developer-guide.md).
+Guide](https://google.github.io/dranet/docs/contributing/developer-guide).
 
 ## Further Reading
 
