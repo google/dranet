@@ -102,7 +102,7 @@ attributes published by the drivers. Users can then create `DeviceClasses`,
 `ResourceClaims`, and/or `ResourceClaimTemplates` to schedule pods and allocate
 network devices.
 
-For examples of how to use DRANET with `DeviceClas`s and `ResourceClaim` to
+For examples of how to use DRANET with `DeviceClass` and `ResourceClaim` to
 attach network interfaces to pods, please refer to the [Quick Start
 guide](https://google.github.io/dranet/docs/quick-start).
 
