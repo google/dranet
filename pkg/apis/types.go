@@ -26,6 +26,9 @@ type NetworkConfig struct {
 	// Routes defines static routes to be configured for this interface.
 	Routes []RouteConfig `json:"routes,omitempty"`
 
+	// Rules defines routing rules to be configured for this interface.
+	Rules []RuleConfig `json:"rules,omitempty"`
+
 	// Neighbors defines permanent neighbor (ARP/NDP) entries to be added for this interface.
 	Neighbors []NeighborConfig `json:"neighbors,omitempty"`
 
@@ -86,6 +89,20 @@ type RouteConfig struct {
 	// Scope is the scope of the route (e.g., link, host, global).
 	// Refers to Linux route scopes (e.g., 0 for RT_SCOPE_UNIVERSE, 253 for RT_SCOPE_LINK).
 	Scope uint8 `json:"scope,omitempty"`
+	// Table is the routing table to use for the route.
+	Table int `json:"table,omitempty"`
+}
+
+// RuleConfig represents a network rule configuration.
+type RuleConfig struct {
+	// Priority is the priority of the rule.
+	Priority int `json:"priority,omitempty"`
+	// Source is the source IP address for the rule.
+	Source string `json:"source,omitempty"`
+	// Destination is the destination IP address for the rule.
+	Destination string `json:"destination,omitempty"`
+	// Table is the routing table to use for the rule.
+	Table int `json:"table,omitempty"`
 }
 
 // NeighborConfig represents a neighbor (ARP/NDP) entry.

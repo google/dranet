@@ -205,6 +205,13 @@ func (np *NetworkDriver) runPodSandbox(_ context.Context, pod *api.PodSandbox, p
 			return fmt.Errorf("error configuring device %s routes on namespace %s: %v", deviceName, ns, err)
 		}
 
+		// Configure rules
+		err = applyRulesConfig(ns, config.NetworkInterfaceConfigInPod.Rules)
+		if err != nil {
+			klog.Infof("RunPodSandbox error configuring device %s namespace %s rules: %v", deviceName, ns, err)
+			return fmt.Errorf("error configuring device %s rules on namespace %s: %v", deviceName, ns, err)
+		}
+
 		// Configure neighbors
 		err = applyNeighborConfig(ns, ifNameInNs, config.NetworkInterfaceConfigInPod.Neighbors)
 		if err != nil {

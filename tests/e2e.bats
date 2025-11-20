@@ -440,3 +440,41 @@ EOF
   assert_output --partial "$NEIGH_IPV6 dev eth99 lladdr $NEIGH_MAC_IPV6 PERM"
 }
 
+@test "route rules and routes with non-default table are copied to pod namespace" {
+  local NODE_NAME="$CLUSTER_NAME"-worker
+  local DUMMY_IFACE="dummy-rules"
+  local ROUTE_DST="10.10.10.0/24"
+  local ROUTE_GW="169.254.169.1"
+  local TABLE_ID="100"
+  local RULE_PRIORITY="500"
+  local RULE_SRC="10.20.30.0/24"
+
+  # Create a dummy interface on the worker node
+  docker exec "$NODE_NAME" bash -c "ip link add $DUMMY_IFACE type dummy"
+  docker exec "$NODE_NAME" bash -c "ip link set up dev $DUMMY_IFACE"
+  docker exec "$NODE_NAME" bash -c "ip addr add 169.254.169.13/24 dev $DUMMY_IFACE"
+
+  # Add a route with a non-default table
+  docker exec "$NODE_NAME" bash -c "ip route add $ROUTE_DST via $ROUTE_GW dev $DUMMY_IFACE table $TABLE_ID"
+
+  # Add a rule
+  docker exec "$NODE_NAME" bash -c "ip rule add from $RULE_SRC table $TABLE_ID priority $RULE_PRIORITY"
+
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/deviceclass.yaml
+  kubectl apply -f "$BATS_TEST_DIRNAME"/../tests/manifests/resourceclaim.yaml
+  kubectl wait --timeout=30s --for=condition=ready pods -l app=pod
+
+  # Get the pod name
+  POD_NAME=$(kubectl get pods -l app=pod -o name)
+
+  # Verify the route entry inside the pod's network namespace
+  run kubectl exec "$POD_NAME" -- ip route show table $TABLE_ID
+  assert_success
+  assert_output --partial "$ROUTE_DST via $ROUTE_GW dev eth99"
+
+  # Verify the rule entry inside the pod's network namespace
+  run kubectl exec "$POD_NAME" -- ip rule show
+  assert_success
+  assert_output --regexp "$RULE_PRIORITY:[[:space:]]+from $RULE_SRC lookup $TABLE_ID"
+}
+
