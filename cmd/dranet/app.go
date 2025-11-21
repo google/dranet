@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	nrilog "github.com/containerd/nri/pkg/log"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 	"github.com/google/dranet/pkg/driver"
@@ -79,6 +80,7 @@ func init() {
 func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
+	nrilog.Set(&nriLogger{logger: klog.Background().WithName("nri")})
 
 	printVersion()
 	flag.VisitAll(func(f *flag.Flag) {
@@ -197,4 +199,27 @@ func printVersion() {
 		}
 	}
 	klog.Infof("dranet go %s build: %s time: %s", info.GoVersion, vcsRevision, vcsTime)
+}
+
+// nriLogger is a klog-based implementation of the NRI logger interface, which
+// allows the NRI library to log messages with the same structured format as the
+// rest of the application.
+type nriLogger struct {
+	logger klog.Logger
+}
+
+func (l *nriLogger) Debugf(ctx context.Context, format string, args ...interface{}) {
+	l.logger.V(5).Info(fmt.Sprintf(format, args...))
+}
+
+func (l *nriLogger) Infof(ctx context.Context, format string, args ...interface{}) {
+	l.logger.Info(fmt.Sprintf(format, args...))
+}
+
+func (l *nriLogger) Warnf(ctx context.Context, format string, args ...interface{}) {
+	l.logger.Error(fmt.Errorf(format, args...), "NRI warning")
+}
+
+func (l *nriLogger) Errorf(ctx context.Context, format string, args ...interface{}) {
+	l.logger.Error(fmt.Errorf(format, args...), "NRI error")
 }
