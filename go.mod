@@ -25,14 +25,14 @@ require (
 	golang.org/x/time v0.14.0
 	google.golang.org/api v0.255.0
 	google.golang.org/protobuf v1.36.10
-	k8s.io/api v0.34.1
-	k8s.io/apimachinery v0.34.1
-	k8s.io/client-go v0.34.1
+	k8s.io/api v0.34.2
+	k8s.io/apimachinery v0.34.2
+	k8s.io/client-go v0.34.2
 	k8s.io/cloud-provider-gcp v0.0.0-20250326051131-7056e3facd39
 	k8s.io/component-helpers v0.34.1
 	k8s.io/dynamic-resource-allocation v0.34.1
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubelet v0.34.1
+	k8s.io/kubelet v0.34.2
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8
 )
