@@ -82,10 +82,34 @@ func applyRoutingConfig(containerNsPAth string, ifName string, routeConfig []api
 		if route.Source != "" {
 			r.Src = net.ParseIP(route.Source)
 		}
+
+		// List existing routes to check for duplicates.
+		existingRoutes, err := nhNs.RouteList(nsLink, netlink.FAMILY_ALL)
+		if err != nil {
+			errorList = append(errorList, fmt.Errorf("failed to list routes for interface %s: %w", ifName, err))
+			continue
+		}
+
+		// Check if the route already exists.
+		alreadyExists := false
+		for _, existingRoute := range existingRoutes {
+			if existingRoute.Dst != nil && r.Dst != nil &&
+				existingRoute.Dst.String() == r.Dst.String() &&
+				existingRoute.Gw.Equal(r.Gw) &&
+				existingRoute.Src.Equal(r.Src) &&
+				existingRoute.Scope == r.Scope {
+				alreadyExists = true
+				break
+			}
+		}
+
+		if alreadyExists {
+			continue
+		}
+
 		if err := nhNs.RouteAdd(&r); err != nil && !errors.Is(err, syscall.EEXIST) {
 			errorList = append(errorList, fmt.Errorf("fail to add route %s for interface %s on namespace %s: %w", r.String(), ifName, containerNsPAth, err))
 		}
-
 	}
 	return errors.Join(errorList...)
 }
